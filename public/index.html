@@ -748,110 +748,56 @@ function calcTroco(){
   else el.innerHTML=`Troco: <strong>${fmt(troco)}</strong>`;
 }
 async function completeSale() {
-  if (!cart.length) {
-    showToast('Adicione produtos ao carrinho', 'warning');
-    return;
-  }
-  if (!selectedPayment) {
-    showToast('Selecione a forma de pagamento', 'warning');
-    return;
-  }
-  
-  const total = cart.reduce((sum, item) => sum + (item.price * item.qty), 0);
-  let valorPago = total;
-  let troco = 0;
-  
+  if (!cart.length) return showToast('Adicione produtos', 'warning');
+  if (!selectedPayment) return showToast('Selecione pagamento', 'warning');
+
+  const total = cart.reduce((s, i) => s + i.price * i.qty, 0);
+  let valorPago = total, troco = 0;
   if (selectedPayment === 'dinheiro') {
     valorPago = parseFloat(document.getElementById('troco-input').value) || total;
     troco = Math.max(0, valorPago - total);
-    if (valorPago < total) {
-      showToast('Valor recebido menor que o total', 'danger');
-      return;
-    }
+    if (valorPago < total) return showToast('Valor insuficiente', 'danger');
   }
-  
+
   showLoading('Registrando venda...');
-  
   try {
     const now = new Date();
-    const ym = ymFromDate(now);
-    
-    // --- Refatoração: atualiza o estoque de forma segura ---
-    for (const item of cart) {
-      const product = currentCompany.products.find(p => p.id === item.id);
-      if (product) {
-        // Subtrai a quantidade vendida, nunca abaixo de zero
-        product.stock = Math.max(0, product.stock - item.qty);
+    // Atualização do estoque – sem risco de erro de sintaxe
+    for (let i = 0; i < cart.length; i++) {
+      const item = cart[i];
+      const produto = currentCompany.products.find(p => p.id === item.id);
+      if (produto) {
+        produto.stock = Math.max(0, produto.stock - item.qty);
       }
     }
-    
-    // Salva as alterações no Firestore
-    await db.collection('companies').doc(currentCompanyId).update({
-      products: currentCompany.products
-    });
-    
-    // Registra a venda
+    await db.collection('companies').doc(currentCompanyId).update({ products: currentCompany.products });
     await db.collection('sales').add({
-      companyId: currentCompanyId,
-      items: [...cart],
-      total,
-      paymentMethod: selectedPayment,
-      valorPago,
-      troco,
-      date: now.toISOString(),
-      yearMonth: ym
+      companyId: currentCompanyId, items: [...cart], total,
+      paymentMethod: selectedPayment, valorPago, troco,
+      date: now.toISOString(), yearMonth: ymFromDate(now)
     });
-    
-    // Cria o pedido no formato OS-...
-    const datePart = `${String(now.getDate()).padStart(2, '0')}/${String(now.getMonth() + 1).padStart(2, '0')}/${now.getFullYear()}`;
-    const randomPart = String(Math.floor(Math.random() * 10000)).padStart(4, '0');
+    const datePart = `${String(now.getDate()).padStart(2,'0')}/${String(now.getMonth()+1).padStart(2,'0')}/${now.getFullYear()}`;
+    const randomPart = String(Math.floor(Math.random()*10000)).padStart(4,'0');
     const orderId = `OS-${datePart}-${randomPart}`;
-    
     await db.collection('orders').doc(orderId).set({
-      id: orderId,
-      companyId: currentCompanyId,
-      customerName: 'Venda no PDV',
-      address: 'Venda presencial',
-      houseNumber: '-',
-      phone: '',
-      items: [...cart],
-      total,
-      paymentMethod: selectedPayment,
-      valorPago,
-      troco,
-      status: 'delivered',
-      date: firebase.firestore.FieldValue.serverTimestamp(),
-      notes: 'Venda no caixa',
-      isPDV: true
+      id: orderId, companyId: currentCompanyId, customerName: 'Venda no PDV',
+      address: 'Venda presencial', houseNumber: '-', phone: '',
+      items: [...cart], total, paymentMethod: selectedPayment, valorPago, troco,
+      status: 'delivered', date: firebase.firestore.FieldValue.serverTimestamp(),
+      notes: 'Venda no caixa', isPDV: true
     });
-    
     hideLoading();
     playNotificationSound();
-    
-    showModal(
-      'Venda Registrada',
-      `<div class="text-center">
-         <div style="font-size:48px">✅</div>
-         <div>Total: ${fmt(total)}</div>
-         <div>OS: ${orderId}</div>
-         ${troco > 0 ? `<div>Troco: ${fmt(troco)}</div>` : ''}
-       </div>`,
+    showModal('Venda Registrada',
+      `<div class="text-center"><div style="font-size:48px">✅</div><div>Total: ${fmt(total)}</div><div>OS: ${orderId}</div>${troco>0?`<div>Troco: ${fmt(troco)}</div>`:''}</div>`,
       '<button class="btn btn-primary" onclick="closeModal()">OK</button>'
     );
-    
-    // Limpa o carrinho
-    cart = [];
-    selectedPayment = null;
-    document.querySelectorAll('.pay-btn').forEach(btn => btn.classList.remove('selected'));
+    cart = []; selectedPayment = null;
+    document.querySelectorAll('.pay-btn').forEach(b => b.classList.remove('selected'));
     document.getElementById('troco-box').style.display = 'none';
-    renderCart();
-    renderPDVGrid();
-    
-  } catch (error) {
-    hideLoading();
-    showToast('Erro ao registrar venda: ' + error.message, 'danger');
-  }
-}
+    renderCart(); renderPDVGrid();
+  } catch(e) { hideLoading(); showToast('Erro: '+e.message, 'danger'); }
+}}
 
 // ============================================================
 // ESTOQUE (com excluir)
