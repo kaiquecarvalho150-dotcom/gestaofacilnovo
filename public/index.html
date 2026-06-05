@@ -1340,6 +1340,25 @@ async function completeSale() {
     await db.collection('companies').doc(currentCompanyId).update({ products: c.products });
     const sale = { companyId:currentCompanyId, items:[...cart], total, paymentMethod:selectedPayment, valorPago, troco, date:now.toISOString(), yearMonth:ym };
     await db.collection('sales').add(sale);
+    // Registra também em 'orders' para aparecer na seção Pedidos em tempo real
+    await db.collection('orders').add({
+      companyId: currentCompanyId,
+      customerId: null,
+      customerName: 'Balcão (Caixa)',
+      customerEmail: '',
+      address: '',
+      houseNumber: '',
+      phone: '',
+      items: [...cart],
+      total: total,
+      paymentMethod: selectedPayment,
+      valorPago: valorPago,
+      troco: troco,
+      status: 'pending',
+      date: now.toISOString(),
+      notes: '',
+      source: 'pdv'
+    });
     hideLoading();
     const payNames = {dinheiro:'Dinheiro',cartao:'Cartão',pix:'Pix'};
     showModal('<i class="fa-solid fa-check-circle" style="color:var(--success)"></i> Venda Registrada!',
@@ -1573,8 +1592,11 @@ function renderOrdersFromData(orders) {
         <div>
           <div class="order-id">${o.id}</div>
           <div style="font-size:12px;color:var(--gray);margin-top:2px"><i class="fa-solid fa-clock"></i> ${new Date(o.date).toLocaleString('pt-BR')}</div>
-          <div style="margin-top:6px;font-size:13px;color:var(--dark3)"><i class="fa-solid fa-user"></i> <strong>${o.customerName}</strong> · <i class="fa-solid fa-location-dot"></i> ${o.address}, nº ${o.houseNumber}</div>
-          ${o.phone?`<div style="font-size:12px;color:var(--gray)"><i class="fa-solid fa-phone"></i> ${o.phone}</div>`:''}
+          <div style="margin-top:6px;font-size:13px;color:var(--dark3)">
+            <i class="fa-solid fa-user"></i> <strong>${o.customerName}</strong>
+            ${o.source==='pdv'?'<span class="badge badge-info" style="margin-left:6px">PDV Caixa</span>':(o.address?` · <i class="fa-solid fa-location-dot"></i> ${o.address}, nº ${o.houseNumber}`:'')}
+          </div>
+          ${(!o.source||o.source!=='pdv')&&o.phone?`<div style="font-size:12px;color:var(--gray)"><i class="fa-solid fa-phone"></i> ${o.phone}</div>`:''}
         </div>
         <span class="badge badge-${sColor[o.status]}">${sLabel[o.status]}</span>
       </div>
@@ -1607,7 +1629,8 @@ async function updateOrderStatus(oid, status) {
     await db.collection('orders').doc(oid).update({ status, updatedAt: new Date().toISOString() });
     if (status==='delivered') {
       const o = allCompanyOrders.find(x=>x.id===oid);
-      if (o) {
+      // Só cria venda se não veio do PDV (PDV já salvou em 'sales' ao finalizar)
+      if (o && o.source !== 'pdv') {
         const now = new Date();
         await db.collection('sales').add({ companyId:currentCompanyId, items:o.items, total:o.total, paymentMethod:o.paymentMethod, valorPago:o.valorPago||o.total, troco:o.troco||0, date:now.toISOString(), yearMonth:ymFromDate(now), fromOrder:oid });
       }
