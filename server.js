@@ -2,8 +2,6 @@ const express = require('express');
 const cors = require('cors');
 const admin = require('firebase-admin');
 const fs = require('fs');
-const path = require('path');
-
 const app = express();
 const PORT = process.env.PORT || 3000;
 
@@ -11,23 +9,13 @@ app.use(cors());
 app.use(express.json({ limit: '10mb' }));
 app.use(express.static('public'));
 
-// ========== CONFIGURAÇÃO DO FIREBASE ==========
-// Tenta carregar credenciais de um arquivo (via Secret File) ou usa variáveis de ambiente
+// Carrega credenciais do Firebase
 let serviceAccount = null;
-
-// 1. Verifica se existe o arquivo de credenciais no caminho padrão do Secret File (Render)
-const secretFilePath = '/etc/secrets/firebase.json';
-if (fs.existsSync(secretFilePath)) {
-    try {
-        serviceAccount = JSON.parse(fs.readFileSync(secretFilePath, 'utf8'));
-        console.log('✅ Credenciais carregadas do Secret File:', secretFilePath);
-    } catch (err) {
-        console.error('❌ Erro ao ler o Secret File:', err);
-    }
-}
-
-// 2. Se não, tenta usar variáveis de ambiente (útil para desenvolvimento local)
-if (!serviceAccount && process.env.FIREBASE_PRIVATE_KEY) {
+const secretPath = '/etc/secrets/firebase.json';
+if (fs.existsSync(secretPath)) {
+    serviceAccount = JSON.parse(fs.readFileSync(secretPath, 'utf8'));
+    console.log('✅ Credenciais carregadas do Secret File.');
+} else if (process.env.FIREBASE_PRIVATE_KEY) {
     serviceAccount = {
         type: process.env.FIREBASE_TYPE,
         project_id: process.env.FIREBASE_PROJECT_ID,
@@ -41,82 +29,50 @@ if (!serviceAccount && process.env.FIREBASE_PRIVATE_KEY) {
         client_x509_cert_url: process.env.FIREBASE_CLIENT_X509_CERT_URL
     };
     console.log('✅ Credenciais carregadas de variáveis de ambiente.');
+} else {
+    console.warn('⚠️ Nenhuma credencial do Firebase encontrada. O servidor rodará sem banco de dados (apenas para teste).');
 }
 
-if (!serviceAccount) {
-    console.error('❌ Nenhuma credencial do Firebase encontrada. Encerrando.');
-    process.exit(1);
+if (serviceAccount) {
+    admin.initializeApp({
+        credential: admin.credential.cert(serviceAccount),
+        databaseURL: `https://${serviceAccount.project_id}-default-rtdb.firebaseio.com`
+    });
+    console.log('✅ Firebase inicializado.');
+} else {
+    console.log('⚠️ Firebase não inicializado. As rotas que dependem do banco retornarão erro.');
 }
 
-// Inicializa o Firebase Admin
-admin.initializeApp({
-    credential: admin.credential.cert(serviceAccount),
-    databaseURL: `https://${serviceAccount.project_id}-default-rtdb.firebaseio.com`
-});
-const db = admin.database();
+const db = serviceAccount ? admin.database() : null;
 
-// ========== FUNÇÕES DE BANCO ==========
+// Funções auxiliares (simplificadas para teste)
 async function readCompanies() {
+    if (!db) return [];
     const snapshot = await db.ref('companies').once('value');
     const val = snapshot.val();
     return val ? Object.values(val) : [];
 }
 async function getCompany(id) {
+    if (!db) return null;
     const snapshot = await db.ref(`companies/${id}`).once('value');
     return snapshot.val();
 }
 async function saveCompany(company) {
+    if (!db) return;
     await db.ref(`companies/${company.id}`).set(company);
 }
 async function getAdmin() {
+    if (!db) return null;
     const snapshot = await db.ref('admin').once('value');
     return snapshot.val();
 }
 
-async function initData() {
-    const companies = await readCompanies();
-    if (companies.length === 0) {
-        console.log('⚙️ Criando dados iniciais...');
-        const demoCompany = {
-            id: 'demo001',
-            companyName: 'Restaurante Demo',
-            ownerName: 'João Silva',
-            cnpj: '12.345.678/0001-90',
-            phone: '(11) 99999-8888',
-            address: 'Rua das Flores, 123 — São Paulo/SP',
-            email: 'demo@gestaofacil.com',
-            password: 'demo123',
-            plan: 'mensal',
-            planPrice: 30,
-            accessDays: 30,
-            startDate: new Date().toISOString(),
-            createdAt: new Date().toISOString(),
-            blocked: false,
-            products: [
-                { id: 'p1', name: 'Hambúrguer Clássico', price: 28, cost: 12, category: 'Lanches', stock: 50, minStock: 10, description: 'Pão, carne, queijo e alface', image: '' },
-                { id: 'p2', name: 'Refrigerante 350ml', price: 6, cost: 2, category: 'Bebidas', stock: 100, minStock: 20, description: 'Gelado', image: '' },
-                { id: 'p3', name: 'Batata Frita', price: 16, cost: 5, category: 'Acompanhamentos', stock: 40, minStock: 10, description: 'Crocante', image: '' }
-            ],
-            menuItems: [
-                { id: 'm1', name: 'Hambúrguer Clássico', price: 28, category: 'Lanches', description: 'Pão artesanal, carne 150g, queijo cheddar, alface e tomate', image: '' },
-                { id: 'm2', name: 'Refrigerante Lata', price: 6, category: 'Bebidas', description: 'Coca, Guaraná ou Sprite', image: '' },
-                { id: 'm3', name: 'Batata Frita Média', price: 16, category: 'Acompanhamentos', description: 'Com tempero especial', image: '' }
-            ],
-            orders: [],
-            sales: [],
-            employees: [
-                { id: 'e1', name: 'Maria Santos', role: 'Atendente', phone: '(11) 98765-4321', salary: 1800, address: 'Rua Alameda, 45', startDate: '2023-03-01' }
-            ]
-        };
-        const adminData = { email: 'admin@gestaofacil.com', password: '1234' };
-        await db.ref('companies').set({ [demoCompany.id]: demoCompany });
-        await db.ref('admin').set(adminData);
-        console.log('✅ Dados iniciais criados.');
-    }
-}
-initData();
+// Rota de teste
+app.get('/api/test', (req, res) => {
+    res.json({ message: 'API funcionando!' });
+});
 
-// ========== ROTAS PÚBLICAS ==========
+// Rota pública do cardápio
 app.get('/api/public/menu/:companyId', async (req, res) => {
     const company = await getCompany(req.params.companyId);
     if (!company) return res.status(404).json({ error: 'Empresa não encontrada' });
@@ -136,7 +92,6 @@ app.post('/api/public/order/:companyId', async (req, res) => {
     res.json({ success: true, orderId: order.id });
 });
 
-// ========== AUTENTICAÇÃO EMPRESA ==========
 app.post('/api/login', async (req, res) => {
     const { email, password } = req.body;
     const companies = await readCompanies();
@@ -148,7 +103,6 @@ app.post('/api/login', async (req, res) => {
     res.json({ companyId: company.id });
 });
 
-// ========== ROTAS DA EMPRESA ==========
 app.get('/api/company/:id', async (req, res) => {
     const company = await getCompany(req.params.id);
     if (!company) return res.status(404).json({ error: 'Empresa não encontrada' });
@@ -160,11 +114,10 @@ app.put('/api/company/:id', async (req, res) => {
     res.json({ success: true });
 });
 
-// ========== ADMIN ==========
 app.post('/api/admin/login', async (req, res) => {
     const { email, password } = req.body;
     const adminData = await getAdmin();
-    if (email === adminData.email && password === adminData.password) {
+    if (adminData && email === adminData.email && password === adminData.password) {
         res.json({ success: true });
     } else {
         res.status(401).json({ error: 'Credenciais inválidas' });
@@ -196,11 +149,11 @@ app.put('/api/admin/companies/:id', async (req, res) => {
 });
 
 app.delete('/api/admin/companies/:id', async (req, res) => {
+    if (!db) return res.status(500).json({ error: 'Banco não disponível' });
     await db.ref(`companies/${req.params.id}`).remove();
     res.json({ success: true });
 });
 
-// ========== INICIAR SERVIDOR ==========
 app.listen(PORT, () => {
     console.log(`🚀 Servidor rodando em http://localhost:${PORT}`);
 });
