@@ -10,7 +10,7 @@
 <link href="https://fonts.googleapis.com/css2?family=Inter:wght@300;400;500;600;700;800;900&display=swap" rel="stylesheet">
 <link rel="stylesheet" href="https://cdnjs.cloudflare.com/ajax/libs/font-awesome/6.5.0/css/all.min.css">
 <style>
-/* ===== ESTILOS COMPLETOS (mantidos originais) ===== */
+/* ===== ESTILOS COMPLETOS (mesmos do backup original, sem alterações) ===== */
 *{margin:0;padding:0;box-sizing:border-box}
 :root{--primary:#2563eb;--primary-dark:#1d4ed8;--primary-light:#dbeafe;--secondary:#7c3aed;--success:#16a34a;--danger:#dc2626;--warning:#d97706;--info:#0891b2;--dark:#0f172a;--dark2:#1e293b;--dark3:#334155;--gray:#64748b;--gray-light:#94a3b8;--light:#f8fafc;--border:#e2e8f0;--sidebar-w:262px}
 body{font-family:'Inter',sans-serif;background:var(--light);color:var(--dark);font-size:14px;line-height:1.5}
@@ -747,57 +747,45 @@ function calcTroco(){
   if(troco<0) el.innerHTML=`<span style="color:var(--danger)">Faltam ${fmt(Math.abs(troco))}</span>`;
   else el.innerHTML=`Troco: <strong>${fmt(troco)}</strong>`;
 }
-async function completeSale() {
-  if (!cart.length) return showToast('Adicione produtos', 'warning');
-  if (!selectedPayment) return showToast('Selecione pagamento', 'warning');
-
-  const total = cart.reduce((s, i) => s + i.price * i.qty, 0);
-  let valorPago = total, troco = 0;
-  if (selectedPayment === 'dinheiro') {
-    valorPago = parseFloat(document.getElementById('troco-input').value) || total;
-    troco = Math.max(0, valorPago - total);
-    if (valorPago < total) return showToast('Valor insuficiente', 'danger');
+async function completeSale(){
+  if(!cart.length){showToast('Adicione produtos','warning');return;}
+  if(!selectedPayment){showToast('Selecione pagamento','warning');return;}
+  const total=cart.reduce((s,i)=>s+i.price*i.qty,0);
+  let valorPago=total, troco=0;
+  if(selectedPayment==='dinheiro'){
+    valorPago=parseFloat(document.getElementById('troco-input').value)||total;
+    troco=Math.max(0,valorPago-total);
+    if(valorPago<total){showToast('Valor insuficiente','danger');return;}
   }
-
   showLoading('Registrando venda...');
-  try {
-    const now = new Date();
-    // Atualização do estoque – sem risco de erro de sintaxe
-    for (let i = 0; i < cart.length; i++) {
-      const item = cart[i];
-      const produto = currentCompany.products.find(p => p.id === item.id);
-      if (produto) {
-        produto.stock = Math.max(0, produto.stock - item.qty);
+  try{
+    const now=new Date();
+    const ym=ymFromDate(now);
+    // CORREÇÃO: subtração correta
+    for(let i=0;i<cart.length;i++){
+      const item=cart[i];
+      const p=currentCompany.products.find(prod=>prod.id===item.id);
+      if(p){
+        p.stock = Math.max(0, p.stock - item.qty);
       }
     }
-    await db.collection('companies').doc(currentCompanyId).update({ products: currentCompany.products });
-    await db.collection('sales').add({
-      companyId: currentCompanyId, items: [...cart], total,
-      paymentMethod: selectedPayment, valorPago, troco,
-      date: now.toISOString(), yearMonth: ymFromDate(now)
-    });
+    await db.collection('companies').doc(currentCompanyId).update({products:currentCompany.products});
+    await db.collection('sales').add({companyId:currentCompanyId,items:[...cart],total,paymentMethod:selectedPayment,valorPago,troco,date:now.toISOString(),yearMonth:ym});
     const datePart = `${String(now.getDate()).padStart(2,'0')}/${String(now.getMonth()+1).padStart(2,'0')}/${now.getFullYear()}`;
     const randomPart = String(Math.floor(Math.random()*10000)).padStart(4,'0');
     const orderId = `OS-${datePart}-${randomPart}`;
     await db.collection('orders').doc(orderId).set({
-      id: orderId, companyId: currentCompanyId, customerName: 'Venda no PDV',
-      address: 'Venda presencial', houseNumber: '-', phone: '',
-      items: [...cart], total, paymentMethod: selectedPayment, valorPago, troco,
-      status: 'delivered', date: firebase.firestore.FieldValue.serverTimestamp(),
-      notes: 'Venda no caixa', isPDV: true
+      id:orderId, companyId:currentCompanyId, customerName:'Venda no PDV', address:'Venda presencial', houseNumber:'-', phone:'', items:[...cart], total, paymentMethod:selectedPayment, valorPago, troco, status:'delivered', date:firebase.firestore.FieldValue.serverTimestamp(), notes:'Venda no caixa', isPDV:true
     });
     hideLoading();
     playNotificationSound();
-    showModal('Venda Registrada',
-      `<div class="text-center"><div style="font-size:48px">✅</div><div>Total: ${fmt(total)}</div><div>OS: ${orderId}</div>${troco>0?`<div>Troco: ${fmt(troco)}</div>`:''}</div>`,
-      '<button class="btn btn-primary" onclick="closeModal()">OK</button>'
-    );
-    cart = []; selectedPayment = null;
-    document.querySelectorAll('.pay-btn').forEach(b => b.classList.remove('selected'));
-    document.getElementById('troco-box').style.display = 'none';
+    showModal('Venda Registrada',`<div class="text-center"><div style="font-size:48px">✅</div><div>Total: ${fmt(total)}</div><div>OS: ${orderId}</div>${troco>0?`<div>Troco: ${fmt(troco)}</div>`:''}</div>`,'<button class="btn btn-primary" onclick="closeModal()">OK</button>');
+    cart=[]; selectedPayment=null;
+    document.querySelectorAll('.pay-btn').forEach(b=>b.classList.remove('selected'));
+    document.getElementById('troco-box').style.display='none';
     renderCart(); renderPDVGrid();
-  } catch(e) { hideLoading(); showToast('Erro: '+e.message, 'danger'); }
-}}
+  } catch(e){hideLoading();showToast('Erro: '+e.message,'danger');}
+}
 
 // ============================================================
 // ESTOQUE (com excluir)
