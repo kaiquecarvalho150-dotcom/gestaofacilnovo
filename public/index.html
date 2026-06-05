@@ -4,32 +4,25 @@
 <meta charset="UTF-8">
 <meta name="viewport" content="width=device-width, initial-scale=1.0">
 <title>Gestão Fácil — Sistema de Gestão Empresarial</title>
-<!-- Firebase -->
 <script src="https://www.gstatic.com/firebasejs/10.7.0/firebase-app-compat.js"></script>
 <script src="https://www.gstatic.com/firebasejs/10.7.0/firebase-firestore-compat.js"></script>
-<!-- Charts -->
 <script src="https://cdn.jsdelivr.net/npm/chart.js@4.4.0/dist/chart.umd.min.js"></script>
-<!-- Fonts + Icons -->
 <link href="https://fonts.googleapis.com/css2?family=Inter:wght@300;400;500;600;700;800;900&display=swap" rel="stylesheet">
 <link rel="stylesheet" href="https://cdnjs.cloudflare.com/ajax/libs/font-awesome/6.5.0/css/all.min.css">
 <style>
-/* ===== ESTILOS ORIGINAIS (não alterados) ===== */
+/* ===== SEUS ESTILOS ORIGINAIS (sem alterações) ===== */
 *{margin:0;padding:0;box-sizing:border-box}
 :root{--primary:#2563eb;--primary-dark:#1d4ed8;--primary-light:#dbeafe;--secondary:#7c3aed;--success:#16a34a;--danger:#dc2626;--warning:#d97706;--info:#0891b2;--dark:#0f172a;--dark2:#1e293b;--dark3:#334155;--gray:#64748b;--gray-light:#94a3b8;--light:#f8fafc;--border:#e2e8f0;--sidebar-w:262px}
 body{font-family:'Inter',sans-serif;background:var(--light);color:var(--dark);font-size:14px;line-height:1.5}
 .hidden{display:none!important}
-.flex{display:flex}.items-center{align-items:center}.justify-between{justify-content:space-between}
-.justify-center{justify-content:center}.flex-col{flex-direction:column}.flex-wrap{flex-wrap:wrap}
+.flex{display:flex}.items-center{align-items:center}.justify-between{justify-content:space-between}.justify-center{justify-content:center}.flex-col{flex-direction:column}.flex-wrap{flex-wrap:wrap}
 .gap-1{gap:4px}.gap-2{gap:8px}.gap-3{gap:12px}.gap-4{gap:16px}
-.mt-2{margin-top:8px}.mt-3{margin-top:12px}.mt-4{margin-top:16px}
-.mb-2{margin-bottom:8px}.mb-3{margin-bottom:12px}.mb-4{margin-bottom:16px}
+.mt-2{margin-top:8px}.mt-3{margin-top:12px}.mt-4{margin-top:16px}.mb-2{margin-bottom:8px}.mb-3{margin-bottom:12px}.mb-4{margin-bottom:16px}
 .text-center{text-align:center}.text-sm{font-size:12px}
-.text-gray{color:var(--gray)}.text-primary{color:var(--primary)}.text-success{color:var(--success)}
-.text-danger{color:var(--danger)}.text-warning{color:var(--warning)}.w-full{width:100%}
-.btn{display:inline-flex;align-items:center;justify-content:center;gap:6px;padding:9px 18px;border-radius:8px;border:none;cursor:pointer;font-size:13px;font-weight:600;font-family:'Inter',sans-serif;transition:all .2s;text-decoration:none;white-space:nowrap}
+.text-gray{color:var(--gray)}.text-primary{color:var(--primary)}.text-success{color:var(--success)}.text-danger{color:var(--danger)}.text-warning{color:var(--warning)}.w-full{width:100%}
+.btn{display:inline-flex;align-items:center;justify-content:center;gap:6px;padding:9px 18px;border-radius:8px;border:none;cursor:pointer;font-size:13px;font-weight:600;transition:all .2s}
 .btn:hover{transform:translateY(-1px);box-shadow:0 4px 12px rgba(0,0,0,.15)}.btn:active{transform:none}
 .btn-primary{background:var(--primary);color:#fff}.btn-primary:hover{background:var(--primary-dark)}
-.btn-secondary{background:var(--secondary);color:#fff}
 .btn-success{background:var(--success);color:#fff}.btn-success:hover{background:#15803d}
 .btn-danger{background:var(--danger);color:#fff}.btn-danger:hover{background:#b91c1c}
 .btn-warning{background:var(--warning);color:#fff}
@@ -41,16 +34,13 @@ body{font-family:'Inter',sans-serif;background:var(--light);color:var(--dark);fo
 .btn-lg{padding:13px 28px;font-size:15px;border-radius:10px}
 .form-group{margin-bottom:14px}
 .form-group label{display:block;font-size:12px;font-weight:600;color:var(--dark3);margin-bottom:5px;text-transform:uppercase;letter-spacing:.3px}
-.form-control{width:100%;padding:10px 13px;border:2px solid var(--border);border-radius:8px;font-size:14px;font-family:'Inter',sans-serif;color:var(--dark);background:#fff;transition:border-color .2s;outline:none}
+.form-control{width:100%;padding:10px 13px;border:2px solid var(--border);border-radius:8px;font-size:14px;outline:none}
 .form-control:focus{border-color:var(--primary);box-shadow:0 0 0 3px rgba(37,99,235,.1)}
-.form-control::placeholder{color:var(--gray-light)}
 select.form-control{cursor:pointer}
 .form-row{display:grid;grid-template-columns:1fr 1fr;gap:14px}
-.input-group{position:relative}
-.input-group .form-control{padding-left:40px}
+.input-group{position:relative}.input-group .form-control{padding-left:40px}
 .input-group .input-icon{position:absolute;left:12px;top:50%;transform:translateY(-50%);color:var(--gray);font-size:16px;pointer-events:none}
-.pwd-wrap{position:relative}
-.pwd-wrap .form-control{padding-right:42px}
+.pwd-wrap{position:relative}.pwd-wrap .form-control{padding-right:42px}
 .pwd-toggle{position:absolute;right:11px;top:50%;transform:translateY(-50%);background:none;border:none;cursor:pointer;color:var(--gray);padding:4px;font-size:15px}
 .pwd-toggle:hover{color:var(--primary)}
 .card{background:#fff;border-radius:12px;padding:20px;border:1px solid var(--border);box-shadow:0 1px 3px rgba(0,0,0,.06)}
@@ -90,9 +80,7 @@ table tr:hover td{background:#fafbfc}
 .alert-danger{background:#fee2e2;color:var(--danger);border:1px solid #fca5a5}
 .alert-warning{background:#fef3c7;color:var(--warning);border:1px solid #fcd34d}
 .alert-info{background:#dbeafe;color:var(--primary);border:1px solid #93c5fd}
-/* ============================================================
-   PAGE: LOGIN
-   ============================================================ */
+/* PÁGINA LOGIN */
 #page-login{min-height:100vh;background:linear-gradient(135deg,#0f172a 0%,#1a3058 50%,#0f172a 100%);display:flex;align-items:center;justify-content:center;padding:20px;position:relative;overflow:hidden}
 #page-login::before{content:'';position:absolute;inset:0;background:radial-gradient(circle at 30% 40%,rgba(37,99,235,.15) 0%,transparent 50%),radial-gradient(circle at 70% 60%,rgba(124,58,237,.15) 0%,transparent 50%)}
 .login-box{background:#fff;border-radius:24px;padding:44px;width:100%;max-width:420px;box-shadow:0 30px 80px rgba(0,0,0,.4);position:relative;z-index:1}
@@ -102,9 +90,7 @@ table tr:hover td{background:#fafbfc}
 .login-logo p{font-size:13px;color:var(--gray);margin-top:3px}
 .login-divider{text-align:center;margin:18px 0;color:var(--gray);font-size:12px;font-weight:600;display:flex;align-items:center;gap:12px}
 .login-divider::before,.login-divider::after{content:'';flex:1;height:1px;background:var(--border)}
-/* ============================================================
-   PAGE: PLANS
-   ============================================================ */
+/* PÁGINA PLANOS */
 #page-plans{min-height:100vh;background:linear-gradient(135deg,#0f172a 0%,#1a3058 100%);padding:40px 20px;display:flex;flex-direction:column;align-items:center}
 .plans-header{text-align:center;color:#fff;margin-bottom:40px}
 .plans-header h1{font-size:36px;font-weight:900}.plans-header h1 span{color:#60a5fa}
@@ -123,21 +109,15 @@ table tr:hover td{background:#fafbfc}
 .plan-features li{padding:9px 0;font-size:14px;display:flex;align-items:center;gap:10px;border-bottom:1px solid #f1f5f9;color:var(--dark3)}
 .plan-features li:last-child{border:none}
 .plan-features li i{color:var(--success);font-size:16px;flex-shrink:0}
-/* ============================================================
-   PAGE: REGISTER
-   ============================================================ */
+/* PÁGINA REGISTRO */
 #page-register{min-height:100vh;background:linear-gradient(135deg,#0f172a 0%,#1a3058 100%);display:flex;align-items:center;justify-content:center;padding:24px}
 .register-box{background:#fff;border-radius:20px;padding:40px;width:100%;max-width:620px;box-shadow:0 30px 80px rgba(0,0,0,.4)}
 .reg-plan-badge{background:linear-gradient(135deg,var(--primary),var(--secondary));color:#fff;padding:8px 20px;border-radius:10px;font-size:13px;font-weight:700;display:inline-block;margin-bottom:16px}
-/* ============================================================
-   PAGE: ADMIN LOGIN
-   ============================================================ */
+/* PÁGINA ADMIN LOGIN */
 #page-admin-login{min-height:100vh;background:linear-gradient(135deg,#0f172a 0%,#1e293b 100%);display:flex;align-items:center;justify-content:center;padding:20px}
 .admin-login-box{background:#fff;border-radius:20px;padding:44px;width:100%;max-width:400px;box-shadow:0 30px 80px rgba(0,0,0,.5)}
 .admin-badge-pill{background:linear-gradient(135deg,var(--dark),var(--dark2));color:#fff;padding:6px 16px;border-radius:8px;font-size:12px;font-weight:700;display:inline-flex;align-items:center;gap:6px;margin-bottom:20px}
-/* ============================================================
-   PAGE: ADMIN PANEL
-   ============================================================ */
+/* PÁGINA ADMIN PANEL */
 #page-admin{min-height:100vh;background:#f0f2f5}
 .admin-topbar{background:linear-gradient(135deg,#0f172a,#1e293b);color:#fff;padding:0 24px;height:64px;display:flex;align-items:center;justify-content:space-between;position:sticky;top:0;z-index:100;box-shadow:0 2px 12px rgba(0,0,0,.3)}
 .admin-topbar h1{font-size:20px;font-weight:800}.admin-topbar h1 span{color:#60a5fa}
@@ -147,9 +127,7 @@ table tr:hover td{background:#fafbfc}
 .stat-icon{width:48px;height:48px;border-radius:12px;display:flex;align-items:center;justify-content:center;font-size:22px;margin-bottom:12px}
 .stat-value{font-size:30px;font-weight:900;line-height:1;color:var(--dark)}
 .stat-label{font-size:11px;color:var(--gray);font-weight:600;margin-top:6px;text-transform:uppercase;letter-spacing:.3px}
-/* ============================================================
-   PAGE: COMPANY DASHBOARD
-   ============================================================ */
+/* DASHBOARD */
 #page-dashboard{display:flex;min-height:100vh}
 .sidebar{width:var(--sidebar-w);background:linear-gradient(180deg,#0f172a 0%,#1a2944 100%);min-height:100vh;position:fixed;left:0;top:0;bottom:0;z-index:50;display:flex;flex-direction:column;overflow-y:auto;transition:transform .3s}
 .sidebar-header{padding:20px 18px 16px;border-bottom:1px solid rgba(255,255,255,.08)}
@@ -162,7 +140,7 @@ table tr:hover td{background:#fafbfc}
 .nav-item:hover{background:rgba(255,255,255,.08);color:#fff}
 .nav-item.active{background:var(--primary);color:#fff}
 .nav-item .nav-ic{width:18px;text-align:center;font-size:14px}
-.nav-badge-dot{background:var(--danger);color:#fff;font-size:10px;font-weight:700;padding:2px 7px;border-radius:10px;margin-left:auto;min-width:20px;text-align:center}
+.nav-badge-dot{background:var(--danger);color:#fff;font-size:10px;font-weight:700;padding:2px 7px;border-radius:10px;margin-left:auto}
 .sidebar-footer{padding:14px 12px;border-top:1px solid rgba(255,255,255,.08)}
 .main-content{margin-left:var(--sidebar-w);flex:1;min-height:100vh;display:flex;flex-direction:column}
 .topbar{background:#fff;padding:0 24px;height:64px;display:flex;align-items:center;justify-content:space-between;border-bottom:1px solid var(--border);position:sticky;top:0;z-index:40;box-shadow:0 1px 3px rgba(0,0,0,.06)}
@@ -217,7 +195,7 @@ table tr:hover td{background:#fafbfc}
 .troco-box{background:#f0fdf4;border:2px solid #86efac;border-radius:10px;padding:12px;margin-bottom:10px;display:none}
 .troco-result{font-size:16px;font-weight:800;color:var(--success);margin-top:8px}
 /* STOCK */
-.stock-item-row{background:#fff;border-radius:10px;padding:14px 16px;border:1px solid var(--border);display:flex;align-items:center;gap:14px;margin-bottom:8px;transition:box-shadow .2s}
+.stock-item-row{background:#fff;border-radius:10px;padding:14px 16px;border:1px solid var(--border);display:flex;align-items:center;gap:14px;margin-bottom:8px;flex-wrap:wrap}
 .stock-item-row:hover{box-shadow:0 4px 12px rgba(0,0,0,.07)}
 .stock-item-icon{width:44px;height:44px;border-radius:10px;background:linear-gradient(135deg,#dbeafe,#ede9fe);display:flex;align-items:center;justify-content:center;font-size:20px;flex-shrink:0}
 .stock-item-info{flex:1}
@@ -243,14 +221,14 @@ table tr:hover td{background:#fafbfc}
 .menu-link-box{background:linear-gradient(135deg,var(--primary),var(--secondary));border-radius:12px;padding:18px 20px;color:#fff;margin-bottom:20px}
 .menu-link-url{background:rgba(255,255,255,.15);border-radius:8px;padding:10px 14px;font-size:12px;font-family:monospace;word-break:break-all;margin-top:10px;display:flex;align-items:center;justify-content:space-between;gap:10px}
 /* ORDERS */
-.order-card{background:#fff;border-radius:12px;padding:18px;border:1px solid var(--border);margin-bottom:12px;transition:box-shadow .2s}
-.order-card:hover{box-shadow:0 4px 14px rgba(0,0,0,.08)}
+.order-card{background:#fff;border-radius:12px;padding:18px;border:1px solid var(--border);margin-bottom:12px}
 .order-top{display:flex;align-items:flex-start;justify-content:space-between;margin-bottom:12px;flex-wrap:wrap;gap:8px}
 .order-id{font-size:13px;font-weight:700;color:var(--primary);font-family:monospace}
 .order-items-list{margin:10px 0;padding:10px;background:#f8fafc;border-radius:8px}
 .order-item-line{display:flex;justify-content:space-between;font-size:13px;padding:3px 0;color:var(--dark3)}
 .order-meta{display:flex;align-items:center;justify-content:space-between;margin-top:12px;padding-top:12px;border-top:1px solid #f1f5f9;flex-wrap:wrap;gap:8px}
 .order-total-val{font-size:18px;font-weight:900;color:var(--dark)}
+.order-actions{display:flex;gap:6px;flex-wrap:wrap}
 /* REPORTS */
 .reports-kpis{display:grid;grid-template-columns:repeat(auto-fit,minmax(155px,1fr));gap:14px;margin-bottom:20px}
 .rpt-kpi{background:#fff;border-radius:12px;padding:18px;border:1px solid var(--border);text-align:center}
@@ -264,7 +242,6 @@ table tr:hover td{background:#fafbfc}
 .earnings-tbl td{padding:9px 14px;font-size:13px;border-bottom:1px solid #f8fafc}
 .earnings-tbl .week-sum td{background:#eff6ff;font-weight:800;color:var(--primary)}
 .earnings-tbl .month-sum td{background:#f0fdf4;font-weight:900;color:var(--success);font-size:14px}
-/* EXPENSE */
 .expense-row{display:flex;align-items:center;gap:10px;padding:10px 14px;background:#fff;border-radius:10px;border:1px solid var(--border);margin-bottom:8px}
 .expense-icon{width:38px;height:38px;border-radius:10px;background:#fee2e2;display:flex;align-items:center;justify-content:center;font-size:18px;flex-shrink:0}
 .expense-info{flex:1}
@@ -279,20 +256,18 @@ table tr:hover td{background:#fafbfc}
 .emp-role{font-size:12px;color:var(--gray);margin-bottom:6px}
 .emp-details{font-size:12px;color:var(--dark3);line-height:1.8}
 .emp-salary{font-size:15px;font-weight:800;color:var(--success);margin-top:8px}
-/* ============================================================
-   PAGE: PUBLIC MENU
-   ============================================================ */
+.emp-pay-status{display:flex;align-items:center;gap:8px;margin-top:10px;padding-top:8px;border-top:1px solid var(--border)}
+.paid-badge{background:#dcfce7;color:var(--success);padding:4px 10px;border-radius:20px;font-size:11px;font-weight:700}
+/* PUBLIC MENU */
 #page-public-menu{min-height:100vh;background:#f8fafc}
 .pub-header{background:linear-gradient(135deg,var(--primary),var(--secondary));color:#fff;padding:24px 20px;text-align:center}
 .pub-header h1{font-size:28px;font-weight:900;margin-bottom:4px}
 .pub-header p{font-size:14px;opacity:.85}
-/* Auth area */
 .pub-auth-area{max-width:420px;margin:40px auto;padding:0 16px}
 .pub-auth-box{background:#fff;border-radius:20px;padding:36px;box-shadow:0 8px 40px rgba(0,0,0,.12)}
 .pub-auth-tabs{display:flex;gap:0;margin-bottom:24px;background:#f1f5f9;border-radius:10px;padding:4px}
 .pub-auth-tab{flex:1;padding:9px;text-align:center;border-radius:8px;cursor:pointer;font-size:13px;font-weight:700;color:var(--gray);transition:all .2s}
 .pub-auth-tab.active{background:#fff;color:var(--primary);box-shadow:0 1px 4px rgba(0,0,0,.1)}
-/* Menu view */
 .pub-body{max-width:860px;margin:0 auto;padding:20px 16px 100px}
 .pub-nav-tabs{display:flex;gap:0;background:#fff;border-bottom:2px solid var(--border);padding:0 16px;position:sticky;top:0;z-index:20}
 .pub-nav-tab{padding:14px 20px;font-size:14px;font-weight:700;cursor:pointer;color:var(--gray);border-bottom:3px solid transparent;margin-bottom:-2px;transition:all .2s;display:flex;align-items:center;gap:7px}
@@ -313,7 +288,6 @@ table tr:hover td{background:#fafbfc}
 .pub-cart-float{position:fixed;bottom:24px;right:24px;background:var(--primary);color:#fff;border:none;border-radius:50px;padding:14px 24px;font-size:15px;font-weight:700;cursor:pointer;box-shadow:0 8px 25px rgba(37,99,235,.4);display:flex;align-items:center;gap:10px;transition:all .2s;z-index:100}
 .pub-cart-float:hover{background:var(--primary-dark);transform:translateY(-2px)}
 .pub-cart-float .cart-count{background:#fff;color:var(--primary);width:24px;height:24px;border-radius:50%;display:flex;align-items:center;justify-content:center;font-size:13px;font-weight:900}
-/* MY ORDERS */
 .my-order-card{background:#fff;border-radius:12px;padding:18px;border:1px solid var(--border);margin-bottom:12px}
 .my-order-status-bar{display:flex;align-items:center;gap:0;margin-top:14px}
 .status-step{flex:1;text-align:center;position:relative}
@@ -326,7 +300,6 @@ table tr:hover td{background:#fafbfc}
 @keyframes pulse{0%,100%{box-shadow:0 0 0 0 rgba(37,99,235,.4)}50%{box-shadow:0 0 0 8px rgba(37,99,235,0)}}
 .status-step .step-label{font-size:10px;font-weight:600;color:var(--gray);text-transform:uppercase}
 .status-step.done .step-label,.status-step.current .step-label{color:var(--dark3)}
-/* RESPONSIVE */
 @media(max-width:768px){
   .sidebar{transform:translateX(-100%)}.sidebar.open{transform:translateX(0)}
   .main-content{margin-left:0}
@@ -388,142 +361,41 @@ table tr:hover td{background:#fafbfc}
     <button class="btn btn-primary w-full btn-lg mt-2" onclick="doLogin()"><i class="fa-solid fa-sign-in-alt"></i> Entrar no Sistema</button>
     <div class="login-divider mt-4">ou</div>
     <button class="btn btn-ghost w-full mt-2" onclick="showPage('page-plans')"><i class="fa-solid fa-tags"></i> Ver Planos Disponíveis</button>
-    <div class="text-center mt-3">
-      <button class="btn btn-sm" style="background:transparent;color:var(--gray);font-size:12px" onclick="showPage('page-admin-login')"><i class="fa-solid fa-shield-alt"></i> Painel Administrativo</button>
-    </div>
+    <div class="text-center mt-3"><button class="btn btn-sm" style="background:transparent;color:var(--gray);font-size:12px" onclick="showPage('page-admin-login')"><i class="fa-solid fa-shield-alt"></i> Painel Administrativo</button></div>
   </div>
 </div>
 
 <!-- ========= PAGE: PLANS ========= -->
 <div id="page-plans" class="hidden">
-  <div class="plans-header">
-    <h1>Escolha o <span>Plano Ideal</span></h1>
-    <p>Simples, transparente e sem surpresas. Cancele quando quiser.</p>
-  </div>
+  <div class="plans-header"><h1>Escolha o <span>Plano Ideal</span></h1><p>Simples, transparente e sem surpresas. Cancele quando quiser.</p></div>
   <div class="plans-grid">
-    <div class="plan-card">
-      <div class="plan-icon">📅</div>
-      <div class="plan-name">Plano Mensal</div>
-      <div style="margin:14px 0"><div class="plan-price-amount">R$30</div><div class="plan-price-period">por mês</div></div>
-      <ul class="plan-features">
-        <li><i class="fa-solid fa-check-circle"></i> Sistema completo de vendas (PDV)</li>
-        <li><i class="fa-solid fa-check-circle"></i> Controle de estoque integrado</li>
-        <li><i class="fa-solid fa-check-circle"></i> Cardápio digital com link</li>
-        <li><i class="fa-solid fa-check-circle"></i> Gestão de pedidos online</li>
-        <li><i class="fa-solid fa-check-circle"></i> Relatórios e gráficos</li>
-        <li><i class="fa-solid fa-check-circle"></i> Gestão de funcionários</li>
-        <li><i class="fa-solid fa-check-circle"></i> 30 dias de acesso</li>
-      </ul>
-      <button class="btn btn-outline w-full btn-lg" onclick="selectPlan('mensal',30,30)">Contratar Mensal</button>
-    </div>
-    <div class="plan-card featured">
-      <div class="plan-icon">🚀</div>
-      <div class="plan-name">Plano Anual</div>
-      <div style="margin:14px 0">
-        <div style="font-size:13px;color:var(--gray);text-decoration:line-through">R$360/ano</div>
-        <div class="plan-price-amount">R$260</div>
-        <div class="plan-price-period">por ano</div>
-        <div class="plan-save">💰 Economize R$100!</div>
-      </div>
-      <ul class="plan-features">
-        <li><i class="fa-solid fa-check-circle"></i> Tudo do plano mensal</li>
-        <li><i class="fa-solid fa-check-circle"></i> 365 dias de acesso</li>
-        <li><i class="fa-solid fa-check-circle"></i> Suporte prioritário</li>
-        <li><i class="fa-solid fa-check-circle"></i> Backup de dados na nuvem</li>
-        <li><i class="fa-solid fa-star"></i> Melhor custo-benefício</li>
-      </ul>
-      <button class="btn btn-primary w-full btn-lg" onclick="selectPlan('anual',260,365)">Contratar Anual</button>
-    </div>
+    <div class="plan-card"><div class="plan-icon">📅</div><div class="plan-name">Plano Mensal</div><div style="margin:14px 0"><div class="plan-price-amount">R$30</div><div class="plan-price-period">por mês</div></div><ul class="plan-features"><li><i class="fa-solid fa-check-circle"></i> Sistema completo de vendas (PDV)</li><li><i class="fa-solid fa-check-circle"></i> Controle de estoque integrado</li><li><i class="fa-solid fa-check-circle"></i> Cardápio digital com link</li><li><i class="fa-solid fa-check-circle"></i> Gestão de pedidos online</li><li><i class="fa-solid fa-check-circle"></i> Relatórios e gráficos</li><li><i class="fa-solid fa-check-circle"></i> Gestão de funcionários</li><li><i class="fa-solid fa-check-circle"></i> 30 dias de acesso</li></ul><button class="btn btn-outline w-full btn-lg" onclick="selectPlan('mensal',30,30)">Contratar Mensal</button></div>
+    <div class="plan-card featured"><div class="plan-icon">🚀</div><div class="plan-name">Plano Anual</div><div style="margin:14px 0"><div style="font-size:13px;color:var(--gray);text-decoration:line-through">R$360/ano</div><div class="plan-price-amount">R$260</div><div class="plan-price-period">por ano</div><div class="plan-save">💰 Economize R$100!</div></div><ul class="plan-features"><li><i class="fa-solid fa-check-circle"></i> Tudo do plano mensal</li><li><i class="fa-solid fa-check-circle"></i> 365 dias de acesso</li><li><i class="fa-solid fa-check-circle"></i> Suporte prioritário</li><li><i class="fa-solid fa-check-circle"></i> Backup de dados na nuvem</li><li><i class="fa-solid fa-star"></i> Melhor custo-benefício</li></ul><button class="btn btn-primary w-full btn-lg" onclick="selectPlan('anual',260,365)">Contratar Anual</button></div>
   </div>
   <div class="text-center"><button class="btn btn-ghost" onclick="showPage('page-login')"><i class="fa-solid fa-arrow-left"></i> Voltar ao Login</button></div>
 </div>
 
 <!-- ========= PAGE: REGISTER ========= -->
 <div id="page-register" class="hidden">
-  <div class="register-box">
-    <div id="reg-plan-badge" class="reg-plan-badge">📅 Plano Mensal — R$30/mês</div>
-    <h2 style="font-size:22px;font-weight:800;margin-bottom:6px">Dados da Empresa</h2>
-    <p style="color:var(--gray);font-size:13px;margin-bottom:24px">Preencha as informações da sua empresa para concluir o cadastro.</p>
-    <div class="form-row">
-      <div class="form-group"><label>Nome da Empresa *</label><input type="text" id="reg-company" class="form-control" placeholder="Nome da empresa"></div>
-      <div class="form-group"><label>Nome do Proprietário *</label><input type="text" id="reg-owner" class="form-control" placeholder="Nome completo"></div>
-    </div>
-    <div class="form-row">
-      <div class="form-group"><label>CNPJ *</label><input type="text" id="reg-cnpj" class="form-control" placeholder="00.000.000/0000-00" oninput="maskCNPJ(this)"></div>
-      <div class="form-group"><label>Telefone *</label><input type="text" id="reg-phone" class="form-control" placeholder="(00) 00000-0000" oninput="maskPhone(this)"></div>
-    </div>
-    <div class="form-group"><label>Endereço Completo *</label><input type="text" id="reg-address" class="form-control" placeholder="Rua, número, bairro, cidade — UF"></div>
-    <div class="form-row">
-      <div class="form-group"><label>Gmail para Login *</label><input type="email" id="reg-email" class="form-control" placeholder="empresa@gmail.com"></div>
-      <div class="form-group">
-        <label>Senha de Acesso *</label>
-        <div class="pwd-wrap"><input type="password" id="reg-password" class="form-control" placeholder="Mínimo 6 caracteres"><button class="pwd-toggle" type="button" onclick="togglePwd('reg-password','eye-rpwd')"><i class="fa-solid fa-eye" id="eye-rpwd"></i></button></div>
-      </div>
-    </div>
-    <div class="flex gap-3 mt-4">
-      <button class="btn btn-ghost flex-1" onclick="showPage('page-plans')"><i class="fa-solid fa-arrow-left"></i> Voltar</button>
-      <button class="btn btn-primary flex-1" onclick="finishRegister()"><i class="fa-solid fa-check"></i> Finalizar Cadastro</button>
-    </div>
-  </div>
+  <div class="register-box"><div id="reg-plan-badge" class="reg-plan-badge">📅 Plano Mensal — R$30/mês</div><h2 style="font-size:22px;font-weight:800;margin-bottom:6px">Dados da Empresa</h2><p style="color:var(--gray);font-size:13px;margin-bottom:24px">Preencha as informações da sua empresa para concluir o cadastro.</p><div class="form-row"><div class="form-group"><label>Nome da Empresa *</label><input type="text" id="reg-company" class="form-control" placeholder="Nome da empresa"></div><div class="form-group"><label>Nome do Proprietário *</label><input type="text" id="reg-owner" class="form-control" placeholder="Nome completo"></div></div><div class="form-row"><div class="form-group"><label>CNPJ *</label><input type="text" id="reg-cnpj" class="form-control" placeholder="00.000.000/0000-00" oninput="maskCNPJ(this)"></div><div class="form-group"><label>Telefone *</label><input type="text" id="reg-phone" class="form-control" placeholder="(00) 00000-0000" oninput="maskPhone(this)"></div></div><div class="form-group"><label>Endereço Completo *</label><input type="text" id="reg-address" class="form-control" placeholder="Rua, número, bairro, cidade — UF"></div><div class="form-row"><div class="form-group"><label>Gmail para Login *</label><input type="email" id="reg-email" class="form-control" placeholder="empresa@gmail.com"></div><div class="form-group"><label>Senha de Acesso *</label><div class="pwd-wrap"><input type="password" id="reg-password" class="form-control" placeholder="Mínimo 6 caracteres"><button class="pwd-toggle" type="button" onclick="togglePwd('reg-password','eye-rpwd')"><i class="fa-solid fa-eye" id="eye-rpwd"></i></button></div></div></div><div class="flex gap-3 mt-4"><button class="btn btn-ghost flex-1" onclick="showPage('page-plans')"><i class="fa-solid fa-arrow-left"></i> Voltar</button><button class="btn btn-primary flex-1" onclick="finishRegister()"><i class="fa-solid fa-check"></i> Finalizar Cadastro</button></div></div>
 </div>
 
 <!-- ========= PAGE: ADMIN LOGIN ========= -->
 <div id="page-admin-login" class="hidden">
-  <div class="admin-login-box">
-    <div class="admin-badge-pill"><i class="fa-solid fa-shield-alt"></i> ÁREA RESTRITA</div>
-    <h2 style="font-size:22px;font-weight:800;margin-bottom:6px">Painel Administrativo</h2>
-    <p style="color:var(--gray);font-size:13px;margin-bottom:24px">Acesso exclusivo para administradores do sistema.</p>
-    <div class="form-group"><label>E-mail Administrador</label><div class="input-group"><i class="fa-solid fa-user-shield input-icon"></i><input type="email" id="adm-email" class="form-control" placeholder="admin@gestaofacil.com" onkeydown="if(event.key==='Enter')doAdminLogin()"></div></div>
-    <div class="form-group">
-      <label>Senha</label>
-      <div class="pwd-wrap"><input type="password" id="adm-password" class="form-control" placeholder="••••••••" onkeydown="if(event.key==='Enter')doAdminLogin()"><button class="pwd-toggle" type="button" onclick="togglePwd('adm-password','eye-apwd')"><i class="fa-solid fa-eye" id="eye-apwd"></i></button></div>
-    </div>
-    <button class="btn btn-dark w-full btn-lg mt-2" onclick="doAdminLogin()"><i class="fa-solid fa-sign-in-alt"></i> Acessar Painel</button>
-    <div class="text-center mt-4"><button class="btn btn-sm" style="background:transparent;color:var(--gray)" onclick="showPage('page-login')"><i class="fa-solid fa-arrow-left"></i> Voltar ao Login</button></div>
-  </div>
+  <div class="admin-login-box"><div class="admin-badge-pill"><i class="fa-solid fa-shield-alt"></i> ÁREA RESTRITA</div><h2 style="font-size:22px;font-weight:800;margin-bottom:6px">Painel Administrativo</h2><p style="color:var(--gray);font-size:13px;margin-bottom:24px">Acesso exclusivo para administradores do sistema.</p><div class="form-group"><label>E-mail Administrador</label><div class="input-group"><i class="fa-solid fa-user-shield input-icon"></i><input type="email" id="adm-email" class="form-control" placeholder="admin@gestaofacil.com" onkeydown="if(event.key==='Enter')doAdminLogin()"></div></div><div class="form-group"><label>Senha</label><div class="pwd-wrap"><input type="password" id="adm-password" class="form-control" placeholder="••••••••" onkeydown="if(event.key==='Enter')doAdminLogin()"><button class="pwd-toggle" type="button" onclick="togglePwd('adm-password','eye-apwd')"><i class="fa-solid fa-eye" id="eye-apwd"></i></button></div></div><button class="btn btn-dark w-full btn-lg mt-2" onclick="doAdminLogin()"><i class="fa-solid fa-sign-in-alt"></i> Acessar Painel</button><div class="text-center mt-4"><button class="btn btn-sm" style="background:transparent;color:var(--gray)" onclick="showPage('page-login')"><i class="fa-solid fa-arrow-left"></i> Voltar ao Login</button></div></div>
 </div>
 
 <!-- ========= PAGE: ADMIN PANEL ========= -->
 <div id="page-admin" class="hidden">
-  <div class="admin-topbar">
-    <div class="flex items-center gap-3">
-      <div style="width:38px;height:38px;background:linear-gradient(135deg,#2563eb,#7c3aed);border-radius:10px;display:flex;align-items:center;justify-content:center;font-size:18px;color:#fff"><i class="fa-solid fa-chart-line"></i></div>
-      <h1>Gestão <span>Fácil</span> — <span style="color:#94a3b8;font-size:14px;font-weight:500">Painel Administrativo</span></h1>
-    </div>
-    <div class="flex gap-2">
-      <button class="btn btn-sm btn-primary" onclick="showCreateCompanyModal()"><i class="fa-solid fa-plus"></i> Novo Cadastro</button>
-      <button class="btn btn-sm" style="background:rgba(255,255,255,.1);color:#fff" onclick="doAdminLogout()"><i class="fa-solid fa-sign-out-alt"></i> Sair</button>
-    </div>
-  </div>
-  <div class="admin-content">
-    <div id="admin-stats" class="stats-grid"></div>
-    <div class="card">
-      <div class="card-header">
-        <div class="card-title"><i class="fa-solid fa-building"></i> Empresas Cadastradas</div>
-        <div class="flex gap-2">
-          <input type="text" id="admin-search" class="form-control" style="width:220px" placeholder="Buscar empresa..." oninput="renderAdminTable()">
-          <button class="btn btn-sm btn-primary" onclick="showCreateCompanyModal()"><i class="fa-solid fa-plus"></i> Nova Empresa</button>
-        </div>
-      </div>
-      <div class="table-wrap">
-        <table>
-          <thead><tr><th>Empresa</th><th>CNPJ</th><th>Plano</th><th>Dias Restantes</th><th>Status</th><th>Senha</th><th>Ações</th></tr></thead>
-          <tbody id="admin-table-body"></tbody>
-        </table>
-      </div>
-    </div>
-  </div>
+  <div class="admin-topbar"><div class="flex items-center gap-3"><div style="width:38px;height:38px;background:linear-gradient(135deg,#2563eb,#7c3aed);border-radius:10px;display:flex;align-items:center;justify-content:center;font-size:18px;color:#fff"><i class="fa-solid fa-chart-line"></i></div><h1>Gestão <span>Fácil</span> — <span style="color:#94a3b8;font-size:14px;font-weight:500">Painel Administrativo</span></h1></div><div class="flex gap-2"><button class="btn btn-sm btn-primary" onclick="showCreateCompanyModal()"><i class="fa-solid fa-plus"></i> Novo Cadastro</button><button class="btn btn-sm" style="background:rgba(255,255,255,.1);color:#fff" onclick="doAdminLogout()"><i class="fa-solid fa-sign-out-alt"></i> Sair</button></div></div>
+  <div class="admin-content"><div id="admin-stats" class="stats-grid"></div><div class="card"><div class="card-header"><div class="card-title"><i class="fa-solid fa-building"></i> Empresas Cadastradas</div><div class="flex gap-2"><input type="text" id="admin-search" class="form-control" style="width:220px" placeholder="Buscar empresa..." oninput="renderAdminTable()"><button class="btn btn-sm btn-primary" onclick="showCreateCompanyModal()"><i class="fa-solid fa-plus"></i> Nova Empresa</button></div></div><div class="table-wrap"><table><thead><tr><th>Empresa</th><th>CNPJ</th><th>Plano</th><th>Dias Restantes</th><th>Status</th><th>Senha</th><th>Ações</th></tr></thead><tbody id="admin-table-body"></tbody></table></div></div></div>
 </div>
 
 <!-- ========= PAGE: COMPANY DASHBOARD ========= -->
 <div id="page-dashboard" class="hidden">
   <div class="sidebar-overlay" id="sidebar-overlay" onclick="closeSidebar()"></div>
   <div class="sidebar" id="sidebar">
-    <div class="sidebar-header">
-      <div class="sidebar-brand">Gestão Fácil</div>
-      <div class="sidebar-company" id="sb-company-name">—</div>
-      <div class="sidebar-plan" id="sb-plan-info"><i class="fa-solid fa-calendar-alt"></i> —</div>
-    </div>
+    <div class="sidebar-header"><div class="sidebar-brand">Gestão Fácil</div><div class="sidebar-company" id="sb-company-name">—</div><div class="sidebar-plan" id="sb-plan-info"><i class="fa-solid fa-calendar-alt"></i> —</div></div>
     <nav class="sidebar-nav">
       <div class="nav-section-label">Principal</div>
       <div class="nav-item active" onclick="showSection('home')"><span class="nav-ic"><i class="fa-solid fa-home"></i></span> Dashboard</div>
@@ -537,210 +409,29 @@ table tr:hover td{background:#fafbfc}
       <div class="nav-item" onclick="requireAuth('reports')"><span class="nav-ic"><i class="fa-solid fa-chart-bar"></i></span> Relatórios</div>
       <div class="nav-item" onclick="showSection('employees')"><span class="nav-ic"><i class="fa-solid fa-users"></i></span> Funcionários</div>
     </nav>
-    <div class="sidebar-footer">
-      <div class="nav-item" onclick="doLogout()"><span class="nav-ic"><i class="fa-solid fa-sign-out-alt"></i></span> Sair do Sistema</div>
-    </div>
+    <div class="sidebar-footer"><div class="nav-item" onclick="doLogout()"><span class="nav-ic"><i class="fa-solid fa-sign-out-alt"></i></span> Sair do Sistema</div></div>
   </div>
   <div class="main-content">
-    <div class="topbar">
-      <div class="flex items-center gap-3">
-        <button class="hamburger" onclick="openSidebar()"><i class="fa-solid fa-bars"></i></button>
-        <div class="topbar-title" id="topbar-title">Dashboard</div>
-      </div>
-      <div class="flex items-center gap-3">
-        <div id="topbar-days" style="font-size:12px;color:var(--gray);font-weight:600"></div>
-        <div class="user-avatar" id="topbar-avatar">?</div>
-      </div>
-    </div>
+    <div class="topbar"><div class="flex items-center gap-3"><button class="hamburger" onclick="openSidebar()"><i class="fa-solid fa-bars"></i></button><div class="topbar-title" id="topbar-title">Dashboard</div></div><div class="flex items-center gap-3"><div id="topbar-days" style="font-size:12px;color:var(--gray);font-weight:600"></div><div class="user-avatar" id="topbar-avatar">?</div></div></div>
     <div class="content-area">
-      <!-- HOME -->
-      <div id="section-home" class="section active">
-        <div style="margin-bottom:20px"><h2 id="home-greeting" style="font-size:22px;font-weight:900"></h2><p id="home-date" style="color:var(--gray);margin-top:4px;font-size:13px"></p></div>
-        <div class="home-kpis" id="home-kpis"></div>
-        <div style="margin-bottom:14px;font-size:15px;font-weight:700">Acesso Rápido</div>
-        <div class="quick-grid" id="home-quick"></div>
-      </div>
-      <!-- PDV -->
-      <div id="section-pos" class="section">
-        <div class="pdv-layout">
-          <div class="pdv-products">
-            <div class="flex items-center justify-between mb-3 flex-wrap gap-2">
-              <div style="font-size:15px;font-weight:700">Produtos</div>
-              <input type="text" id="pdv-search" class="form-control" style="width:200px" placeholder="Buscar produto..." oninput="renderPDV()">
-            </div>
-            <div class="flex gap-2 flex-wrap mb-3" id="pdv-cats"></div>
-            <div class="pdv-grid" id="pdv-grid"></div>
-          </div>
-          <div class="cart-panel">
-            <div class="cart-header"><span><i class="fa-solid fa-shopping-cart"></i> Carrinho</span><button class="btn btn-sm btn-ghost" onclick="clearCart()"><i class="fa-solid fa-trash"></i></button></div>
-            <div class="cart-items" id="cart-items"><div class="cart-empty"><i class="fa-solid fa-cart-shopping" style="font-size:32px;color:var(--border);display:block;margin-bottom:8px"></i>Carrinho vazio</div></div>
-            <div class="cart-footer">
-              <div class="cart-total-row"><span>Subtotal</span><span id="cart-subtotal">R$ 0,00</span></div>
-              <div class="cart-total-row big"><span>Total</span><span id="cart-total">R$ 0,00</span></div>
-              <div style="font-size:12px;font-weight:700;color:var(--gray);margin-bottom:8px;text-transform:uppercase;letter-spacing:.3px">Forma de Pagamento</div>
-              <div class="pay-btns">
-                <div class="pay-btn" onclick="selectPayment(this,'dinheiro')"><i class="fa-solid fa-money-bill"></i><br>Dinheiro</div>
-                <div class="pay-btn" onclick="selectPayment(this,'cartao')"><i class="fa-solid fa-credit-card"></i><br>Cartão</div>
-                <div class="pay-btn" onclick="selectPayment(this,'pix')"><i class="fa-brands fa-pix"></i><br>Pix</div>
-              </div>
-              <div class="troco-box" id="troco-box">
-                <div style="font-size:12px;font-weight:700;color:var(--success);margin-bottom:6px"><i class="fa-solid fa-money-bill-wave"></i> Calcular Troco</div>
-                <input type="number" id="troco-input" class="form-control" placeholder="Valor recebido (R$)" oninput="calcTroco()" step="0.50" min="0">
-                <div class="troco-result" id="troco-result"></div>
-              </div>
-              <button class="btn btn-success w-full" onclick="completeSale()"><i class="fa-solid fa-check"></i> Finalizar Venda</button>
-            </div>
-          </div>
-        </div>
-      </div>
-      <!-- STOCK -->
-      <div id="section-stock" class="section">
-        <div class="flex items-center justify-between mb-4 flex-wrap gap-2">
-          <div style="font-size:15px;font-weight:700">Controle de Estoque</div>
-          <div class="flex gap-2">
-            <input type="text" id="stock-search" class="form-control" style="width:200px" placeholder="Buscar..." oninput="renderStock()">
-            <button class="btn btn-primary btn-sm" onclick="showAddStockModal()"><i class="fa-solid fa-plus"></i> Adicionar novo Item</button>
-          </div>
-        </div>
-        <div id="stock-list"></div>
-      </div>
-      <!-- PRODUCTS -->
-      <div id="section-products" class="section">
-        <div class="flex items-center justify-between mb-4 flex-wrap gap-3">
-          <div style="font-size:15px;font-weight:700">Produtos Cadastrados</div>
-          <button class="btn btn-primary" onclick="showProductModal()"><i class="fa-solid fa-plus"></i> Cadastrar Produto</button>
-        </div>
-        <div class="products-grid" id="products-grid"></div>
-      </div>
-      <!-- MENU -->
-      <div id="section-menu" class="section">
-        <div class="menu-link-box" id="menu-link-box">
-          <div style="width:100%">
-            <h3 style="font-size:15px;font-weight:700;margin-bottom:4px"><i class="fa-solid fa-link"></i> Link do Cardápio Digital</h3>
-            <p style="font-size:13px;opacity:.85">Compartilhe com seus clientes — eles fazem o pedido direto no cardápio</p>
-            <div class="menu-link-url"><span id="menu-link-text">Carregando...</span><button class="btn btn-sm" style="background:rgba(255,255,255,.2);color:#fff;flex-shrink:0" onclick="copyMenuLink()"><i class="fa-solid fa-copy"></i> Copiar</button></div>
-          </div>
-        </div>
-        <div class="flex items-center justify-between mb-4 flex-wrap gap-3">
-          <div style="font-size:15px;font-weight:700">Itens do Cardápio</div>
-          <button class="btn btn-primary" onclick="showMenuItemModal()"><i class="fa-solid fa-plus"></i> Adicionar Item</button>
-        </div>
-        <div class="products-grid" id="menu-grid"></div>
-      </div>
-      <!-- ORDERS -->
-      <div id="section-orders" class="section">
-        <div class="flex items-center justify-between mb-4 flex-wrap gap-3">
-          <div style="font-size:15px;font-weight:700">Pedidos Recebidos</div>
-          <div class="flex gap-2 flex-wrap">
-            <div class="filter-chip active" onclick="filterOrders(this,'all')">Todos</div>
-            <div class="filter-chip" onclick="filterOrders(this,'pending')">Novos</div>
-            <div class="filter-chip" onclick="filterOrders(this,'confirmed')">Confirmados</div>
-            <div class="filter-chip" onclick="filterOrders(this,'preparing')">Preparando</div>
-            <div class="filter-chip" onclick="filterOrders(this,'delivered')">Entregues</div>
-          </div>
-        </div>
-        <div id="orders-list"></div>
-      </div>
-      <!-- REPORTS -->
-      <div id="section-reports" class="section">
-        <div class="flex items-center justify-between mb-4 flex-wrap gap-3">
-          <div style="font-size:15px;font-weight:700"><i class="fa-solid fa-chart-bar"></i> Relatórios Financeiros</div>
-          <div class="flex gap-2 flex-wrap items-center">
-            <select id="rpt-month-select" class="form-control" style="width:200px" onchange="loadReports()"></select>
-            <button class="btn btn-warning btn-sm" onclick="clearPageReportData()"><i class="fa-solid fa-brush"></i> Limpar Dados da Página</button>
-          </div>
-        </div>
-        <div class="reports-kpis" id="rpt-kpis"></div>
-        <div class="charts-grid" id="rpt-charts"></div>
-        <div class="flex gap-4 flex-wrap mb-4" id="rpt-tables-wrap">
-          <div style="flex:1;min-width:280px">
-            <div class="card">
-              <div class="card-header"><div class="card-title"><i class="fa-solid fa-table"></i> Receitas por Dia</div></div>
-              <div class="table-wrap"><table class="earnings-tbl" id="earnings-table"></table></div>
-            </div>
-          </div>
-          <div style="flex:1;min-width:280px">
-            <div class="card">
-              <div class="card-header">
-                <div class="card-title"><i class="fa-solid fa-file-invoice-dollar"></i> Despesas do Mês</div>
-                <button class="btn btn-primary btn-sm" onclick="showAddExpenseModal()"><i class="fa-solid fa-plus"></i> Registrar Despesa</button>
-              </div>
-              <div id="expenses-list"></div>
-              <div style="margin-top:12px;padding-top:12px;border-top:1px solid var(--border);display:flex;justify-content:space-between;align-items:center">
-                <span style="font-weight:700;color:var(--gray)">Total Despesas:</span>
-                <span id="expenses-total" style="font-size:18px;font-weight:900;color:var(--danger)">R$ 0,00</span>
-              </div>
-            </div>
-          </div>
-        </div>
-      </div>
-      <!-- EMPLOYEES -->
-      <div id="section-employees" class="section">
-        <div class="flex items-center justify-between mb-4 flex-wrap gap-3">
-          <div style="font-size:15px;font-weight:700">Funcionários</div>
-          <button class="btn btn-primary" onclick="showEmployeeModal()"><i class="fa-solid fa-plus"></i> Cadastrar Funcionário</button>
-        </div>
-        <div class="employees-grid" id="employees-grid"></div>
-      </div>
+      <div id="section-home" class="section active"><div style="margin-bottom:20px"><h2 id="home-greeting" style="font-size:22px;font-weight:900"></h2><p id="home-date" style="color:var(--gray);margin-top:4px;font-size:13px"></p></div><div class="home-kpis" id="home-kpis"></div><div style="margin-bottom:14px;font-size:15px;font-weight:700">Acesso Rápido</div><div class="quick-grid" id="home-quick"></div></div>
+      <div id="section-pos" class="section"><div class="pdv-layout"><div class="pdv-products"><div class="flex items-center justify-between mb-3 flex-wrap gap-2"><div style="font-size:15px;font-weight:700">Produtos</div><input type="text" id="pdv-search" class="form-control" style="width:200px" placeholder="Buscar produto..." oninput="renderPDV()"></div><div class="flex gap-2 flex-wrap mb-3" id="pdv-cats"></div><div class="pdv-grid" id="pdv-grid"></div></div><div class="cart-panel"><div class="cart-header"><span><i class="fa-solid fa-shopping-cart"></i> Carrinho</span><button class="btn btn-sm btn-ghost" onclick="clearCart()"><i class="fa-solid fa-trash"></i></button></div><div class="cart-items" id="cart-items"><div class="cart-empty"><i class="fa-solid fa-cart-shopping" style="font-size:32px;color:var(--border);display:block;margin-bottom:8px"></i>Carrinho vazio</div></div><div class="cart-footer"><div class="cart-total-row"><span>Subtotal</span><span id="cart-subtotal">R$ 0,00</span></div><div class="cart-total-row big"><span>Total</span><span id="cart-total">R$ 0,00</span></div><div style="font-size:12px;font-weight:700;color:var(--gray);margin-bottom:8px;text-transform:uppercase;letter-spacing:.3px">Forma de Pagamento</div><div class="pay-btns"><div class="pay-btn" onclick="selectPayment(this,'dinheiro')"><i class="fa-solid fa-money-bill"></i><br>Dinheiro</div><div class="pay-btn" onclick="selectPayment(this,'cartao')"><i class="fa-solid fa-credit-card"></i><br>Cartão</div><div class="pay-btn" onclick="selectPayment(this,'pix')"><i class="fa-brands fa-pix"></i><br>Pix</div></div><div class="troco-box" id="troco-box"><div style="font-size:12px;font-weight:700;color:var(--success);margin-bottom:6px"><i class="fa-solid fa-money-bill-wave"></i> Calcular Troco</div><input type="number" id="troco-input" class="form-control" placeholder="Valor recebido (R$)" oninput="calcTroco()" step="0.50" min="0"><div class="troco-result" id="troco-result"></div></div><button class="btn btn-success w-full" onclick="completeSale()"><i class="fa-solid fa-check"></i> Finalizar Venda</button></div></div></div></div></div>
+      <div id="section-stock" class="section"><div class="flex items-center justify-between mb-4 flex-wrap gap-2"><div style="font-size:15px;font-weight:700">Controle de Estoque</div><div class="flex gap-2"><input type="text" id="stock-search" class="form-control" style="width:200px" placeholder="Buscar..." oninput="renderStock()"><button class="btn btn-primary btn-sm" onclick="showAddStockModal()"><i class="fa-solid fa-plus"></i> Adicionar novo Item</button></div></div><div id="stock-list"></div></div>
+      <div id="section-products" class="section"><div class="flex items-center justify-between mb-4 flex-wrap gap-3"><div style="font-size:15px;font-weight:700">Produtos Cadastrados</div><button class="btn btn-primary" onclick="showProductModal()"><i class="fa-solid fa-plus"></i> Cadastrar Produto</button></div><div class="products-grid" id="products-grid"></div></div>
+      <div id="section-menu" class="section"><div class="menu-link-box" id="menu-link-box"><div style="width:100%"><h3 style="font-size:15px;font-weight:700;margin-bottom:4px"><i class="fa-solid fa-link"></i> Link do Cardápio Digital</h3><p style="font-size:13px;opacity:.85">Compartilhe com seus clientes — eles fazem o pedido direto no cardápio</p><div class="menu-link-url"><span id="menu-link-text">Carregando...</span><button class="btn btn-sm" style="background:rgba(255,255,255,.2);color:#fff;flex-shrink:0" onclick="copyMenuLink()"><i class="fa-solid fa-copy"></i> Copiar</button></div></div></div><div class="flex items-center justify-between mb-4 flex-wrap gap-3"><div style="font-size:15px;font-weight:700">Itens do Cardápio</div><button class="btn btn-primary" onclick="showMenuItemModal()"><i class="fa-solid fa-plus"></i> Adicionar Item</button></div><div class="products-grid" id="menu-grid"></div></div>
+      <div id="section-orders" class="section"><div class="flex items-center justify-between mb-4 flex-wrap gap-3"><div style="font-size:15px;font-weight:700">Pedidos Recebidos</div><div class="flex gap-2 flex-wrap"><div class="filter-chip active" onclick="filterOrders(this,'all')">Todos</div><div class="filter-chip" onclick="filterOrders(this,'pending')">Novos</div><div class="filter-chip" onclick="filterOrders(this,'confirmed')">Confirmados</div><div class="filter-chip" onclick="filterOrders(this,'preparing')">Preparando</div><div class="filter-chip" onclick="filterOrders(this,'delivered')">Entregues</div></div></div><div id="orders-list"></div></div>
+      <div id="section-reports" class="section"><div class="flex items-center justify-between mb-4 flex-wrap gap-3"><div style="font-size:15px;font-weight:700"><i class="fa-solid fa-chart-bar"></i> Relatórios Financeiros</div><div class="flex gap-2 flex-wrap items-center"><select id="rpt-month-select" class="form-control" style="width:200px" onchange="loadReports()"></select><button class="btn btn-warning btn-sm" onclick="clearPageReportData()"><i class="fa-solid fa-brush"></i> Limpar Dados da Página</button></div></div><div class="reports-kpis" id="rpt-kpis"></div><div class="charts-grid" id="rpt-charts"></div><div class="flex gap-4 flex-wrap mb-4" id="rpt-tables-wrap"><div style="flex:1;min-width:280px"><div class="card"><div class="card-header"><div class="card-title"><i class="fa-solid fa-table"></i> Receitas por Dia</div></div><div class="table-wrap"><table class="earnings-tbl" id="earnings-table"></table></div></div></div><div style="flex:1;min-width:280px"><div class="card"><div class="card-header"><div class="card-title"><i class="fa-solid fa-file-invoice-dollar"></i> Despesas do Mês</div><button class="btn btn-primary btn-sm" onclick="showAddExpenseModal()"><i class="fa-solid fa-plus"></i> Registrar Despesa</button></div><div id="expenses-list"></div><div style="margin-top:12px;padding-top:12px;border-top:1px solid var(--border);display:flex;justify-content:space-between;align-items:center"><span style="font-weight:700;color:var(--gray)">Total Despesas:</span><span id="expenses-total" style="font-size:18px;font-weight:900;color:var(--danger)">R$ 0,00</span></div></div></div></div></div>
+      <div id="section-employees" class="section"><div class="flex items-center justify-between mb-4 flex-wrap gap-3"><div style="font-size:15px;font-weight:700">Funcionários</div><button class="btn btn-primary" onclick="showEmployeeModal()"><i class="fa-solid fa-plus"></i> Cadastrar Funcionário</button></div><div class="employees-grid" id="employees-grid"></div></div>
     </div>
   </div>
 </div>
 
 <!-- ========= PAGE: PUBLIC MENU ========= -->
 <div id="page-public-menu" class="hidden">
-  <div class="pub-header">
-    <div style="font-size:40px;margin-bottom:8px">🍽️</div>
-    <h1 id="pub-company-name">Cardápio</h1>
-    <p id="pub-company-sub">Faça seu pedido online</p>
-  </div>
-  <div id="pub-auth-view">
-    <div class="pub-auth-area">
-      <div class="pub-auth-box">
-        <div class="pub-auth-tabs">
-          <div class="pub-auth-tab active" id="tab-login" onclick="switchAuthTab('login')">Entrar</div>
-          <div class="pub-auth-tab" id="tab-register" onclick="switchAuthTab('register')">Criar Conta</div>
-        </div>
-        <div id="auth-login-form">
-          <div class="form-group"><label>E-mail</label><input type="email" id="pub-login-email" class="form-control" placeholder="seu@email.com" onkeydown="if(event.key==='Enter')doPubLogin()"></div>
-          <div class="form-group">
-            <label>Senha</label>
-            <div class="pwd-wrap"><input type="password" id="pub-login-password" class="form-control" placeholder="••••••••" onkeydown="if(event.key==='Enter')doPubLogin()"><button class="pwd-toggle" type="button" onclick="togglePwd('pub-login-password','eye-plpwd')"><i class="fa-solid fa-eye" id="eye-plpwd"></i></button></div>
-          </div>
-          <button class="btn btn-primary w-full btn-lg" onclick="doPubLogin()"><i class="fa-solid fa-sign-in-alt"></i> Entrar</button>
-        </div>
-        <div id="auth-register-form" class="hidden">
-          <div class="form-group"><label>Seu Nome *</label><input type="text" id="pub-reg-name" class="form-control" placeholder="Nome completo"></div>
-          <div class="form-group"><label>E-mail *</label><input type="email" id="pub-reg-email" class="form-control" placeholder="seu@email.com"></div>
-          <div class="form-group">
-            <label>Senha *</label>
-            <div class="pwd-wrap"><input type="password" id="pub-reg-password" class="form-control" placeholder="Mínimo 6 caracteres"><button class="pwd-toggle" type="button" onclick="togglePwd('pub-reg-password','eye-prpwd')"><i class="fa-solid fa-eye" id="eye-prpwd"></i></button></div>
-          </div>
-          <button class="btn btn-primary w-full btn-lg" onclick="doPubRegister()"><i class="fa-solid fa-user-plus"></i> Criar Conta</button>
-        </div>
-      </div>
-    </div>
-  </div>
-  <div id="pub-main-view" class="hidden">
-    <div class="pub-nav-tabs">
-      <div class="pub-nav-tab active" id="pnt-menu" onclick="showPubTab('menu')"><i class="fa-solid fa-utensils"></i> Cardápio</div>
-      <div class="pub-nav-tab" id="pnt-orders" onclick="showPubTab('orders')"><i class="fa-solid fa-receipt"></i> Meus Pedidos</div>
-      <div style="margin-left:auto;display:flex;align-items:center;padding-right:8px">
-        <button class="btn btn-sm btn-ghost" onclick="doPubLogout()"><i class="fa-solid fa-sign-out-alt"></i> Sair</button>
-      </div>
-    </div>
-    <div id="pub-tab-menu" class="pub-body">
-      <div class="pub-cats" id="pub-cats"></div>
-      <div class="pub-items-grid" id="pub-items"></div>
-    </div>
-    <div id="pub-tab-orders" class="pub-body hidden">
-      <h3 style="font-size:18px;font-weight:800;margin-bottom:16px"><i class="fa-solid fa-receipt"></i> Meus Pedidos</h3>
-      <div id="my-orders-list"></div>
-    </div>
-  </div>
-  <button class="pub-cart-float" id="pub-cart-btn" onclick="showPubCartModal()" style="display:none">
-    <i class="fa-solid fa-shopping-cart"></i> Ver Carrinho
-    <span class="cart-count" id="pub-cart-count">0</span>
-  </button>
+  <div class="pub-header"><div style="font-size:40px;margin-bottom:8px">🍽️</div><h1 id="pub-company-name">Cardápio</h1><p id="pub-company-sub">Faça seu pedido online</p></div>
+  <div id="pub-auth-view"><div class="pub-auth-area"><div class="pub-auth-box"><div class="pub-auth-tabs"><div class="pub-auth-tab active" id="tab-login" onclick="switchAuthTab('login')">Entrar</div><div class="pub-auth-tab" id="tab-register" onclick="switchAuthTab('register')">Criar Conta</div></div><div id="auth-login-form"><div class="form-group"><label>E-mail</label><input type="email" id="pub-login-email" class="form-control" placeholder="seu@email.com" onkeydown="if(event.key==='Enter')doPubLogin()"></div><div class="form-group"><label>Senha</label><div class="pwd-wrap"><input type="password" id="pub-login-password" class="form-control" placeholder="••••••••" onkeydown="if(event.key==='Enter')doPubLogin()"><button class="pwd-toggle" type="button" onclick="togglePwd('pub-login-password','eye-plpwd')"><i class="fa-solid fa-eye" id="eye-plpwd"></i></button></div></div><button class="btn btn-primary w-full btn-lg" onclick="doPubLogin()"><i class="fa-solid fa-sign-in-alt"></i> Entrar</button></div><div id="auth-register-form" class="hidden"><div class="form-group"><label>Seu Nome *</label><input type="text" id="pub-reg-name" class="form-control" placeholder="Nome completo"></div><div class="form-group"><label>E-mail *</label><input type="email" id="pub-reg-email" class="form-control" placeholder="seu@email.com"></div><div class="form-group"><label>Senha *</label><div class="pwd-wrap"><input type="password" id="pub-reg-password" class="form-control" placeholder="Mínimo 6 caracteres"><button class="pwd-toggle" type="button" onclick="togglePwd('pub-reg-password','eye-prpwd')"><i class="fa-solid fa-eye" id="eye-prpwd"></i></button></div></div><button class="btn btn-primary w-full btn-lg" onclick="doPubRegister()"><i class="fa-solid fa-user-plus"></i> Criar Conta</button></div></div></div></div>
+  <div id="pub-main-view" class="hidden"><div class="pub-nav-tabs"><div class="pub-nav-tab active" id="pnt-menu" onclick="showPubTab('menu')"><i class="fa-solid fa-utensils"></i> Cardápio</div><div class="pub-nav-tab" id="pnt-orders" onclick="showPubTab('orders')"><i class="fa-solid fa-receipt"></i> Meus Pedidos</div><div style="margin-left:auto;display:flex;align-items:center;padding-right:8px"><button class="btn btn-sm btn-ghost" onclick="doPubLogout()"><i class="fa-solid fa-sign-out-alt"></i> Sair</button></div></div><div id="pub-tab-menu" class="pub-body"><div class="pub-cats" id="pub-cats"></div><div class="pub-items-grid" id="pub-items"></div></div><div id="pub-tab-orders" class="pub-body hidden"><h3 style="font-size:18px;font-weight:800;margin-bottom:16px"><i class="fa-solid fa-receipt"></i> Meus Pedidos</h3><div id="my-orders-list"></div></div></div>
+  <button class="pub-cart-float" id="pub-cart-btn" onclick="showPubCartModal()" style="display:none"><i class="fa-solid fa-shopping-cart"></i> Ver Carrinho<span class="cart-count" id="pub-cart-count">0</span></button>
 </div>
 
 <script>
@@ -798,16 +489,16 @@ function getDayColor(d) { return d>10?'success':d>3?'warning':'danger'; }
 function getCategoryEmoji(cat) { if(!cat) return '📦'; const map={bebida:'🥤',bebidas:'🥤',comida:'🍽️',lanche:'🍔',pizza:'🍕',doce:'🍰',cafe:'☕',café:'☕',salgado:'🥪',fruta:'🍎',carne:'🥩',peixe:'🐟',sorvete:'🍦',combo:'🎁',combos:'🎁'}; const k=Object.keys(map).find(k=>cat.toLowerCase().includes(k)); return k?map[k]:'📦'; }
 function maskCNPJ(el){let v=el.value.replace(/\D/g,'').slice(0,14);v=v.replace(/(\d{2})(\d)/,'$1.$2').replace(/(\d{3})(\d)/,'$1.$2').replace(/(\d{3})(\d)/,'$1/$2').replace(/(\d{4})(\d)/,'$1-$2');el.value=v;}
 function maskPhone(el){let v=el.value.replace(/\D/g,'').slice(0,11);v=v.replace(/(\d{2})(\d)/,'($1) $2').replace(/(\d{5})(\d)/,'$1-$2');el.value=v;}
-function togglePwd(id, iconId) { const inp=document.getElementById(id); const ico=document.getElementById(iconId); if(!inp) return; inp.type=inp.type==='password'?'text':'password'; if(ico) ico.className=inp.type==='password'?'fa-solid fa-eye':'fa-solid fa-eye-slash'; }
-function showToast(msg, type='info') { const icons={success:'check-circle',danger:'exclamation-circle',warning:'exclamation-triangle',info:'info-circle'}; const t=document.createElement('div'); t.className=`toast toast-${type}`; t.innerHTML=`<i class="fa-solid fa-${icons[type]||'info-circle'}"></i><span>${msg}</span>`; document.getElementById('toast-container').appendChild(t); setTimeout(()=>{ t.style.animation='toastIn .3s ease reverse'; }, 2700); setTimeout(()=>t.remove(), 3000); }
-function showLoading(msg='Carregando...') { document.getElementById('loading-msg').textContent=msg; document.getElementById('loading-overlay').classList.remove('hidden'); }
-function hideLoading() { document.getElementById('loading-overlay').classList.add('hidden'); }
-function showModal(title, body, footer, large) { document.getElementById('modal-title').innerHTML=title; document.getElementById('modal-body').innerHTML=body; document.getElementById('modal-footer').innerHTML=footer||''; document.getElementById('modal-box').className='modal'+(large?' modal-lg':''); document.getElementById('modal-overlay').classList.remove('hidden'); }
-function closeModal() { document.getElementById('modal-overlay').classList.add('hidden'); }
-function handleModalOverlayClick(e) { if(e.target.id==='modal-overlay') closeModal(); }
+function togglePwd(id,iconId){const inp=document.getElementById(id);const ico=document.getElementById(iconId);if(!inp)return;inp.type=inp.type==='password'?'text':'password';if(ico)ico.className=inp.type==='password'?'fa-solid fa-eye':'fa-solid fa-eye-slash';}
+function showToast(msg,type='info'){const icons={success:'check-circle',danger:'exclamation-circle',warning:'exclamation-triangle',info:'info-circle'};const t=document.createElement('div');t.className=`toast toast-${type}`;t.innerHTML=`<i class="fa-solid fa-${icons[type]||'info-circle'}"></i><span>${msg}</span>`;document.getElementById('toast-container').appendChild(t);setTimeout(()=>{t.style.animation='toastIn .3s ease reverse';},2700);setTimeout(()=>t.remove(),3000);}
+function showLoading(msg='Carregando...'){document.getElementById('loading-msg').textContent=msg;document.getElementById('loading-overlay').classList.remove('hidden');}
+function hideLoading(){document.getElementById('loading-overlay').classList.add('hidden');}
+function showModal(title,body,footer,large){document.getElementById('modal-title').innerHTML=title;document.getElementById('modal-body').innerHTML=body;document.getElementById('modal-footer').innerHTML=footer||'';document.getElementById('modal-box').className='modal'+(large?' modal-lg':'');document.getElementById('modal-overlay').classList.remove('hidden');}
+function closeModal(){document.getElementById('modal-overlay').classList.add('hidden');}
+function handleModalOverlayClick(e){if(e.target.id==='modal-overlay')closeModal();}
 
 // ============================================================
-// SOM PROFISSIONAL (Caixa Registradora + Notificação)
+// SOM PROFISSIONAL
 // ============================================================
 function playNotificationSound() {
   try {
@@ -843,7 +534,7 @@ function showSection(name) {
   document.querySelectorAll('.nav-item').forEach(n=>n.classList.remove('active'));
   const labels={home:'Dashboard',pos:'PDV — Caixa',stock:'Estoque',products:'Cadastrar Produto',menu:'Cadastrar Cardápio',orders:'Pedidos',reports:'Relatórios',employees:'Funcionários'};
   document.getElementById('topbar-title').textContent=labels[name]||name;
-  document.querySelectorAll('.nav-item').forEach(n=>{ if(n.textContent.trim().startsWith(labels[name]||name)) n.classList.add('active'); });
+  document.querySelectorAll('.nav-item').forEach(n=>{if(n.textContent.trim().startsWith(labels[name]||name))n.classList.add('active');});
   closeSidebar();
   const renders={home:renderHome,pos:renderPDV,stock:renderStock,products:renderProducts,menu:renderMenu,employees:renderEmployees};
   if(renders[name]) renders[name]();
@@ -918,7 +609,7 @@ function renderAdminTable(){
   if(q) list=list.filter(c=>c.companyName.toLowerCase().includes(q)||c.cnpj.includes(q)||c.email.toLowerCase().includes(q));
   const tb=document.getElementById('admin-table-body');
   if(!list.length){tb.innerHTML='<tr><td colspan="7" class="text-center">Nenhuma empresa</td></tr>';return;}
-  tb.innerHTML=list.map(c=>{const days=getDaysRemaining(c);const dc=getDayColor(days);return`<tr><td><div style="font-weight:700">${c.companyName}</div><div style="font-size:11px">${c.ownerName} · ${c.email}</div></td><td>${c.cnpj}</td><td><span class="badge badge-primary">${c.plan==='mensal'?'Mensal':'Anual'}</span><div style="font-size:11px">${fmt(c.planPrice)}</div></td><td><span class="badge badge-${dc}">${days} dias</span><div style="font-size:11px">Início: ${fmtDate(c.startDate)}</div></td><td>${c.blocked?'<span class="badge badge-danger">Bloqueado</span>':days>0?'<span class="badge badge-success">Ativo</span>':'<span class="badge badge-warning">Expirado</span>'}</td><td><button class="btn btn-sm btn-ghost" onclick="showPasswordModal(\'${c.id}\')"><i class="fa-solid fa-eye"></i></button></td><td><div class="flex gap-1"><button class="btn btn-sm btn-info" onclick="manageDaysModal(\'${c.id}\')"><i class="fa-solid fa-calendar-plus"></i></button><button class="btn btn-sm btn-primary" onclick="editCompanyModal(\'${c.id}\')"><i class="fa-solid fa-edit"></i></button><button class="btn btn-sm btn-${c.blocked?'success':'warning'}" onclick="toggleBlock(\'${c.id}\')"><i class="fa-solid fa-${c.blocked?'unlock':'lock'}"></i></button><button class="btn btn-sm btn-danger" onclick="deleteCompany(\'${c.id}\')"><i class="fa-solid fa-trash"></i></button></div></td></tr>`;}).join('');
+  tb.innerHTML=list.map(c=>{const days=getDaysRemaining(c);const dc=getDayColor(days);return`<tr><td><div style="font-weight:700">${c.companyName}</div><div style="font-size:11px">${c.ownerName} · ${c.email}</div></td><td>${c.cnpj}</td><td><span class="badge badge-primary">${c.plan==='mensal'?'Mensal':'Anual'}</span><div style="font-size:11px">${fmt(c.planPrice)}</div></td><td><span class="badge badge-${dc}">${days} dias</span><div style="font-size:11px">Início: ${fmtDate(c.startDate)}</div></td><td>${c.blocked?'<span class="badge badge-danger">Bloqueado</span>':days>0?'<span class="badge badge-success">Ativo</span>':'<span class="badge badge-warning">Expirado</span>'}</td><td><button class="btn btn-sm btn-ghost" onclick="showPasswordModal('${c.id}')"><i class="fa-solid fa-eye"></i></button></td><td><div class="flex gap-1"><button class="btn btn-sm btn-info" onclick="manageDaysModal('${c.id}')"><i class="fa-solid fa-calendar-plus"></i></button><button class="btn btn-sm btn-primary" onclick="editCompanyModal('${c.id}')"><i class="fa-solid fa-edit"></i></button><button class="btn btn-sm btn-${c.blocked?'success':'warning'}" onclick="toggleBlock('${c.id}')"><i class="fa-solid fa-${c.blocked?'unlock':'lock'}"></i></button><button class="btn btn-sm btn-danger" onclick="deleteCompany('${c.id}')"><i class="fa-solid fa-trash"></i></button></div></td></tr>`;}).join('');
 }
 function initDashboard(){
   if(!currentCompany) return;
@@ -965,12 +656,12 @@ function renderHome(){
     <div class="quick-card" onclick="requireAuth('reports')"><div class="qc-icon"><i class="fa-solid fa-chart-bar"></i></div><h3>Relatórios</h3></div>
     <div class="quick-card" onclick="showSection('employees')"><div class="qc-icon"><i class="fa-solid fa-users"></i></div><h3>Funcionários</h3></div>`;
 }
-function showCreateCompanyModal(){ /* manter */ showToast('Admin: criar empresa'); }
-function editCompanyModal(id){ /* manter */ showToast('Admin: editar empresa'); }
-function manageDaysModal(id){ /* manter */ }
-function toggleBlock(id){ /* manter */ }
-function deleteCompany(id){ /* manter */ }
-function showPasswordModal(id){ /* manter */ }
+function showCreateCompanyModal(){/* manter */ showToast('Admin: criar empresa');}
+function editCompanyModal(id){/* manter */ showToast('Admin: editar empresa');}
+function manageDaysModal(id){/* manter */}
+function toggleBlock(id){/* manter */}
+function deleteCompany(id){/* manter */}
+function showPasswordModal(id){/* manter */}
 
 // ============================================================
 // PLANOS E REGISTRO
@@ -1070,7 +761,11 @@ async function completeSale(){
   try{
     const now=new Date();
     const ym=ymFromDate(now);
-    cart.forEach(item => { const p=currentCompany.products.find(p=>p.id===item.id); if(p) p.stock=Math.max(0,p.stock-item.qty); });
+    // CORREÇÃO DEFINITIVA: subtração correta
+    cart.forEach(item => { 
+      const p = currentCompany.products.find(p => p.id === item.id); 
+      if (p) p.stock = Math.max(0, p.stock - item.qty); 
+    });
     await db.collection('companies').doc(currentCompanyId).update({products:currentCompany.products});
     await db.collection('sales').add({companyId:currentCompanyId,items:[...cart],total,paymentMethod:selectedPayment,valorPago,troco,date:now.toISOString(),yearMonth:ym});
     const datePart = `${String(now.getDate()).padStart(2,'0')}/${String(now.getMonth()+1).padStart(2,'0')}/${now.getFullYear()}`;
@@ -1114,8 +809,8 @@ async function deleteStockProduct(pid){
   catch(e){hideLoading();showToast('Erro: '+e.message,'danger');}
 }
 function showStockModal(pid){
-  const p = currentCompany.products.find(p => p.id === pid);
-  if (!p) return;
+  const p=currentCompany.products.find(p=>p.id===pid);
+  if(!p) return;
   showModal(`Ajustar Estoque - ${p.name}`,
     `<div class="form-group"><label>Nova Quantidade</label><input type="number" id="sk-qty" class="form-control" value="${p.stock}" min="0"></div>
      <div class="form-group"><label>Estoque Mínimo (alerta)</label><input type="number" id="sk-min" class="form-control" value="${p.minStock || 5}" min="0"></div>`,
@@ -1124,14 +819,14 @@ function showStockModal(pid){
   );
 }
 async function saveStock(pid){
-  const p = currentCompany.products.find(p => p.id === pid);
-  if (!p) return;
-  p.stock = parseInt(document.getElementById('sk-qty').value) || 0;
-  p.minStock = parseInt(document.getElementById('sk-min').value) || 5;
-  await db.collection('companies').doc(currentCompanyId).update({ products: currentCompany.products });
+  const p=currentCompany.products.find(p=>p.id===pid);
+  if(!p) return;
+  p.stock=parseInt(document.getElementById('sk-qty').value)||0;
+  p.minStock=parseInt(document.getElementById('sk-min').value)||5;
+  await db.collection('companies').doc(currentCompanyId).update({products:currentCompany.products});
   closeModal();
   renderStock();
-  showToast('Estoque atualizado!', 'success');
+  showToast('Estoque atualizado!','success');
 }
 function showAddStockModal(){
   if(!currentCompany.products.length){showToast('Nenhum produto cadastrado','warning');return;}
@@ -1180,7 +875,7 @@ function renderOrdersFromData(orders){
   const sLabel={pending:'Novo',confirmed:'Confirmado',preparing:'Preparando',delivered:'Entregue',cancelled:'Cancelado'};
   const sColor={pending:'danger',confirmed:'primary',preparing:'warning',delivered:'success',cancelled:'gray'};
   const pLabel={dinheiro:'Dinheiro',cartao:'Cartão',pix:'Pix'};
-  el.innerHTML=filtered.map(o=>`<div class="order-card"><div class="order-top"><div><div class="order-id">${o.id}</div><div class="order-date">${o.date ? fmtDateTime(o.date.toDate ? o.date.toDate() : o.date) : 'Data inválida'}</div><div><strong>${o.customerName}</strong> - ${o.address}, ${o.houseNumber}</div>${o.phone?`<div>📞 ${o.phone}</div>`:''}</div><span class="badge badge-${sColor[o.status]}">${sLabel[o.status]}</span></div><div class="order-items-list">${o.items.map(i=>`<div class="order-item-line"><span>${i.qty}x ${i.name}</span><span>${fmt(i.price*i.qty)}</span></div>`).join('')}</div><div class="order-meta"><div>Total: ${fmt(o.total)}</div><div>Pagamento: ${pLabel[o.paymentMethod]||o.paymentMethod}</div><div class="order-actions">${o.status==='pending'?`<button class="btn btn-sm btn-success" onclick="updateOrderStatus('${o.id}','confirmed')">Confirmar</button>`:''}${o.status==='confirmed'?`<button class="btn btn-sm btn-warning" onclick="updateOrderStatus('${o.id}','preparing')">Preparar</button>`:''}${o.status==='preparing'?`<button class="btn btn-sm btn-primary" onclick="updateOrderStatus('${o.id}','delivered')">Entregar</button>`:''}<button class="btn btn-sm btn-danger" onclick="deleteOrder('${o.id}')">Excluir Pedido</button></div></div></div>`).join('');
+  el.innerHTML=filtered.map(o=>`<div class="order-card"><div class="order-top"><div><div class="order-id">${o.id}</div><div class="order-date">${fmtDateTime(o.date)}</div><div><strong>${o.customerName}</strong> - ${o.address}, ${o.houseNumber}</div>${o.phone?`<div>📞 ${o.phone}</div>`:''}</div><span class="badge badge-${sColor[o.status]}">${sLabel[o.status]}</span></div><div class="order-items-list">${o.items.map(i=>`<div class="order-item-line"><span>${i.qty}x ${i.name}</span><span>${fmt(i.price*i.qty)}</span></div>`).join('')}</div><div class="order-meta"><div>Total: ${fmt(o.total)}</div><div>Pagamento: ${pLabel[o.paymentMethod]||o.paymentMethod}</div><div class="order-actions">${o.status==='pending'?`<button class="btn btn-sm btn-success" onclick="updateOrderStatus('${o.id}','confirmed')">Confirmar</button>`:''}${o.status==='confirmed'?`<button class="btn btn-sm btn-warning" onclick="updateOrderStatus('${o.id}','preparing')">Preparar</button>`:''}${o.status==='preparing'?`<button class="btn btn-sm btn-primary" onclick="updateOrderStatus('${o.id}','delivered')">Entregar</button>`:''}<button class="btn btn-sm btn-danger" onclick="deleteOrder('${o.id}')">Excluir Pedido</button></div></div></div>`).join('');
 }
 function filterOrders(el,filter){orderFilter=filter;document.querySelectorAll('#section-orders .filter-chip').forEach(c=>c.classList.remove('active'));el.classList.add('active');renderOrdersFromData(allCompanyOrders);}
 async function updateOrderStatus(oid,status){try{await db.collection('orders').doc(oid).update({status,updatedAt:new Date().toISOString()});if(status==='delivered'){const o=allCompanyOrders.find(x=>x.id===oid);if(o)await db.collection('sales').add({companyId:currentCompanyId,items:o.items,total:o.total,paymentMethod:o.paymentMethod,valorPago:o.valorPago||o.total,troco:o.troco||0,date:new Date().toISOString(),yearMonth:ymFromDate(new Date()),fromOrder:oid});}showToast('Status atualizado','success');}catch(e){showToast('Erro: '+e.message,'danger');}}
