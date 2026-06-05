@@ -503,6 +503,8 @@ table tr:hover td{background:#fafbfc}
     </div>
     <div class="flex gap-2">
       <button class="btn btn-sm btn-primary" onclick="showCreateCompanyModal()"><i class="fa-solid fa-plus"></i> Novo Cadastro</button>
+      <button class="btn btn-sm btn-warning" onclick="showZerarReceitasModal()"><i class="fa-solid fa-rotate-left"></i> Zerar Receitas</button>
+      <button class="btn btn-sm" style="background:rgba(255,255,255,.18);color:#fff" onclick="showAdminConfigModal()"><i class="fa-solid fa-gear"></i> Configurações</button>
       <button class="btn btn-sm" style="background:rgba(255,255,255,.1);color:#fff" onclick="doAdminLogout()"><i class="fa-solid fa-sign-out-alt"></i> Sair</button>
     </div>
   </div>
@@ -643,12 +645,13 @@ table tr:hover td{background:#fafbfc}
       <div id="section-orders" class="section">
         <div class="flex items-center justify-between mb-4 flex-wrap gap-3">
           <div style="font-size:15px;font-weight:700">Pedidos Recebidos</div>
-          <div class="flex gap-2 flex-wrap">
+          <div class="flex gap-2 flex-wrap items-center">
             <div class="filter-chip active" onclick="filterOrders(this,'all')">Todos</div>
             <div class="filter-chip" onclick="filterOrders(this,'pending')">Novos</div>
             <div class="filter-chip" onclick="filterOrders(this,'confirmed')">Confirmados</div>
             <div class="filter-chip" onclick="filterOrders(this,'preparing')">Preparando</div>
             <div class="filter-chip" onclick="filterOrders(this,'delivered')">Entregues</div>
+            <button class="btn btn-sm btn-danger" onclick="deleteAllOrders()"><i class="fa-solid fa-trash"></i> Excluir Todos</button>
           </div>
         </div>
         <div id="orders-list"></div>
@@ -802,6 +805,12 @@ let allCompanies = [];     // cached for admin panel
 let prevPendingCount = 0;  // Para controle de notificação sonora
 let dashboardInterval = null;
 let ordersRefreshInterval = null;
+// Mercado Pago
+let mpAccessToken = '';
+let mpRevenueZeroDate = null;
+let mpPollInterval = null;
+let pixTimerInterval = null;
+let pendingPaymentId = null;
 
 // ============================================================
 // UTILITY
@@ -895,8 +904,158 @@ function closeSidebar() { document.getElementById('sidebar').classList.remove('o
 // ============================================================
 // PLANS
 // ============================================================
-function selectPlan(plan, price, days) {
+// ============================================================
+// MERCADO PAGO — PIX AUTOMÁTICO
+// ============================================================
+async function loadMPConfig() {
+  try {
+    const doc = await db.collection('admin_config').doc('settings').get();
+    if (doc.exists) {
+      mpAccessToken = doc.data().mpAccessToken || '';
+      mpRevenueZeroDate = doc.data().revenueZeroDate || null;
+    }
+  } catch(e) {}
+}
+
+async function selectPlan(plan, price, days) {
   pendingPlan = { plan, price, days };
+  showLoading('Carregando configurações de pagamento...');
+  await loadMPConfig();
+  hideLoading();
+  if (mpAccessToken) {
+    await initPixPayment(plan, price, days);
+  } else {
+    showManualPayment(plan, price, days);
+  }
+}
+
+async function initPixPayment(plan, price, days) {
+  const planLabel = plan==='mensal' ? 'Plano Mensal — Gestão Fácil' : 'Plano Anual — Gestão Fácil';
+  const idempKey = genId();
+  showModal(
+    '<i class="fa-solid fa-qrcode" style="color:#32bcad"></i> Pague com PIX',
+    `<div class="text-center" style="padding:16px 0">
+      <div class="loading-spinner" style="margin:0 auto 16px;border-top-color:#32bcad;width:36px;height:36px;border-width:4px"></div>
+      <div style="font-weight:700;color:var(--dark)">Gerando PIX...</div>
+      <div style="font-size:13px;color:var(--gray);margin-top:4px">Aguarde enquanto preparamos seu pagamento</div>
+    </div>`, '', false);
+  try {
+    const resp = await fetch('https://api.mercadopago.com/v1/payments', {
+      method: 'POST',
+      headers: {
+        'Authorization': `Bearer ${mpAccessToken}`,
+        'Content-Type': 'application/json',
+        'X-Idempotency-Key': idempKey
+      },
+      body: JSON.stringify({
+        transaction_amount: price,
+        description: planLabel,
+        payment_method_id: 'pix',
+        payer: { email: 'pagamento@gestaofacil.com.br', first_name: 'Cliente', last_name: 'GF' },
+        external_reference: idempKey
+      })
+    });
+    const data = await resp.json();
+    if (resp.status !== 201 && resp.status !== 200) throw new Error(data.message || `Erro ${resp.status}`);
+    pendingPaymentId = data.id;
+    const pixCode = data.point_of_interaction?.transaction_data?.qr_code || '';
+    const pixImg  = data.point_of_interaction?.transaction_data?.qr_code_base64 || '';
+    showPixModal(plan, price, days, pixCode, pixImg);
+    startPixPolling(plan, price, days);
+  } catch(e) {
+    closeModal();
+    showToast('Erro ao gerar PIX: ' + e.message + '. Usando link de pagamento.', 'warning');
+    setTimeout(() => showManualPayment(plan, price, days), 500);
+  }
+}
+
+function showPixModal(plan, price, days, pixCode, pixImg) {
+  const planBadge = plan==='mensal' ? '📅 Mensal — R$ 30,00' : '🚀 Anual — R$ 260,00';
+  showModal(
+    '<i class="fa-solid fa-qrcode" style="color:#32bcad"></i> Pague com PIX — Qualquer Banco',
+    `<div class="text-center">
+      <div class="mb-3"><span class="badge badge-${plan==='mensal'?'primary':'secondary'}" style="font-size:13px;padding:7px 18px">${planBadge}</span></div>
+      ${pixImg ? `<div style="background:#fff;border:3px solid #32bcad;border-radius:14px;display:inline-flex;padding:10px;margin-bottom:14px"><img src="data:image/png;base64,${pixImg}" style="width:190px;height:190px"></div>` : ''}
+      <div style="background:#f0fdf4;border:2px solid #86efac;border-radius:10px;padding:12px;margin-bottom:14px;text-align:left">
+        <div style="font-size:11px;font-weight:700;color:var(--gray);margin-bottom:6px;text-align:center">📋 COPIA E COLA PIX</div>
+        <div style="font-size:10px;font-family:monospace;word-break:break-all;color:var(--dark);background:#fff;padding:8px;border-radius:6px;border:1px solid #d1fae5;cursor:pointer;user-select:all" onclick="this.select?.()">
+          ${pixCode||'—'}
+        </div>
+        <button class="btn btn-sm btn-success w-full mt-2" onclick="navigator.clipboard.writeText('${pixCode.replace(/'/g,"\'")}').then(()=>showToast('Código PIX copiado!','success'))">
+          <i class="fa-solid fa-copy"></i> Copiar Código PIX
+        </button>
+      </div>
+      <div id="pix-status-box" style="padding:14px;border-radius:10px;background:#fef3c7;border:2px solid #fcd34d">
+        <div style="display:flex;align-items:center;justify-content:center;gap:10px">
+          <div class="loading-spinner" style="width:20px;height:20px;border-width:3px;border-top-color:var(--warning);flex-shrink:0"></div>
+          <div>
+            <div style="font-size:13px;font-weight:700;color:var(--warning)">Aguardando pagamento...</div>
+            <div style="font-size:12px;color:var(--gray)">A verificação é automática. Não feche esta tela.</div>
+          </div>
+        </div>
+      </div>
+      <div id="pix-timer-txt" style="font-size:12px;color:var(--gray);margin-top:8px;font-weight:600"></div>
+    </div>`,
+    `<button class="btn btn-ghost w-full" onclick="cancelPixPayment()"><i class="fa-solid fa-times"></i> Cancelar Pagamento</button>`,
+    false
+  );
+}
+
+function startPixPolling(plan, price, days) {
+  let timeLeft = 900; // 15 min
+  if (pixTimerInterval) clearInterval(pixTimerInterval);
+  if (mpPollInterval) clearInterval(mpPollInterval);
+  pixTimerInterval = setInterval(() => {
+    timeLeft--;
+    const m = Math.floor(timeLeft/60), s = String(timeLeft%60).padStart(2,'0');
+    const el = document.getElementById('pix-timer-txt');
+    if (el) el.textContent = `⏱ Expira em ${m}:${s}`;
+    if (timeLeft <= 0) {
+      clearInterval(pixTimerInterval); clearInterval(mpPollInterval);
+      const box = document.getElementById('pix-status-box');
+      if (box) { box.style.background='#fee2e2'; box.style.borderColor='#fca5a5'; box.innerHTML='<div style="color:var(--danger);font-weight:700">⏰ PIX expirado. Feche e tente novamente.</div>'; }
+    }
+  }, 1000);
+  mpPollInterval = setInterval(async () => {
+    try {
+      const st = await checkMPPayment(pendingPaymentId);
+      if (st === 'approved') {
+        clearInterval(mpPollInterval); clearInterval(pixTimerInterval);
+        onPixApproved(plan, price, days);
+      } else if (st === 'rejected' || st === 'cancelled') {
+        clearInterval(mpPollInterval); clearInterval(pixTimerInterval);
+        const box = document.getElementById('pix-status-box');
+        if (box) { box.style.background='#fee2e2'; box.style.borderColor='#fca5a5'; box.innerHTML='<div style="color:var(--danger);font-weight:700">❌ Pagamento recusado. Tente novamente.</div>'; }
+      }
+    } catch(er) {}
+  }, 5000);
+}
+
+async function checkMPPayment(paymentId) {
+  const r = await fetch(`https://api.mercadopago.com/v1/payments/${paymentId}`, {
+    headers: { 'Authorization': `Bearer ${mpAccessToken}` }
+  });
+  const d = await r.json();
+  return d.status;
+}
+
+function onPixApproved(plan, price, days) {
+  const box = document.getElementById('pix-status-box');
+  if (box) {
+    box.style.background='#dcfce7'; box.style.borderColor='#86efac';
+    box.innerHTML='<div style="font-size:28px;margin-bottom:6px">✅</div><div style="font-size:15px;font-weight:800;color:var(--success)">Pagamento confirmado!</div><div style="font-size:12px;color:var(--gray);margin-top:4px">Redirecionando para o cadastro...</div>';
+  }
+  setTimeout(() => { cancelPixPayment(); goRegister(); }, 2000);
+}
+
+function cancelPixPayment() {
+  if (mpPollInterval) clearInterval(mpPollInterval);
+  if (pixTimerInterval) clearInterval(pixTimerInterval);
+  pendingPaymentId = null;
+  closeModal();
+}
+
+function showManualPayment(plan, price, days) {
   const url = plan === 'mensal' ? 'https://mpago.la/29cP1TT' : 'https://mpago.la/2ZsJfA4';
   window.open(url, '_blank');
   showModal(
@@ -906,7 +1065,7 @@ function selectPlan(plan, price, days) {
       <h3 style="font-size:20px;font-weight:800;margin-bottom:8px">Pagamento pelo Mercado Pago</h3>
       <p style="color:var(--gray)">Uma nova aba foi aberta com o link de pagamento seguro.</p>
       <div class="alert alert-info mt-3"><i class="fa-solid fa-info-circle"></i> Plano <strong>${plan==='mensal'?'Mensal — R$ 30,00':'Anual — R$ 260,00'}</strong> · ${days} dias de acesso</div>
-      <p style="color:var(--gray);font-size:13px;margin-top:12px">Após concluir o pagamento, clique no botão abaixo para preencher os dados da empresa.</p>
+      <p style="color:var(--gray);font-size:13px;margin-top:12px">Após concluir o pagamento, clique em "Já Paguei" abaixo.</p>
     </div>`,
     `<button class="btn btn-ghost" onclick="closeModal()">Cancelar</button>
      <button class="btn btn-success btn-lg" onclick="closeModal();goRegister()"><i class="fa-solid fa-check"></i> Já Paguei — Preencher Dados</button>`,
@@ -928,6 +1087,28 @@ async function finishRegister() {
   const pw = document.getElementById('reg-password').value.trim();
   if (!co||!own||!cnpj||!ph||!addr||!em||!pw) { showToast('Preencha todos os campos obrigatórios','warning'); return; }
   if (pw.length < 6) { showToast('Senha deve ter no mínimo 6 caracteres','warning'); return; }
+  // Verify payment if PIX was used
+  if (mpAccessToken && pendingPaymentId) {
+    showLoading('Verificando pagamento...');
+    try {
+      const st = await checkMPPayment(pendingPaymentId);
+      hideLoading();
+      if (st !== 'approved') {
+        showModal('<i class="fa-solid fa-times-circle" style="color:var(--danger)"></i> Pagamento Não Confirmado',
+          `<div class="text-center" style="padding:16px 0">
+            <div style="font-size:56px;margin-bottom:12px">❌</div>
+            <h3 style="font-size:18px;font-weight:800;margin-bottom:8px">Pagamento não reconhecido</h3>
+            <p style="color:var(--gray)">Não foi possível confirmar seu pagamento.</p>
+            <div class="alert alert-warning mt-3"><i class="fa-solid fa-exclamation-triangle"></i> Status: <strong>${st||'não localizado'}</strong></div>
+            <p style="font-size:13px;color:var(--gray);margin-top:8px">Efetue o pagamento e aguarde a confirmação automática antes de preencher o cadastro.</p>
+          </div>`,
+          `<button class="btn btn-ghost" onclick="closeModal();showPage('page-plans')">Voltar aos Planos</button>`,
+          false
+        );
+        return;
+      }
+    } catch(e) { hideLoading(); showToast('Erro ao verificar pagamento. Tente novamente.','danger'); return; }
+  }
   showLoading('Criando conta...');
   try {
     const snap = await db.collection('companies').where('email','==',em).get();
@@ -1003,6 +1184,7 @@ function doAdminLogout() { allCompanies=[]; showPage('page-login'); }
 async function loadAdminData() {
   const snap = await db.collection('companies').get();
   allCompanies = snap.docs.map(d => ({ id:d.id, ...d.data() }));
+  await loadMPConfig();
   renderAdminStats();
   renderAdminTable();
 }
@@ -1011,13 +1193,18 @@ function renderAdminStats() {
   const active = allCompanies.filter(c => !c.blocked && getDaysRemaining(c)>0).length;
   const blocked = allCompanies.filter(c => c.blocked).length;
   const expired = allCompanies.filter(c => !c.blocked && getDaysRemaining(c)<=0).length;
-  const revenue = allCompanies.reduce((s,c)=>s+(c.planPrice||0),0);
+  // Revenue: only count companies created after revenueZeroDate (if set)
+  const revenueList = mpRevenueZeroDate
+    ? allCompanies.filter(c => c.createdAt && c.createdAt >= mpRevenueZeroDate)
+    : allCompanies;
+  const revenue = revenueList.reduce((s,c)=>s+(c.planPrice||0),0);
+  const zeroLabel = mpRevenueZeroDate ? `<div style="font-size:10px;color:var(--gray);margin-top:4px">Desde ${new Date(mpRevenueZeroDate).toLocaleDateString('pt-BR')}</div>` : '';
   document.getElementById('admin-stats').innerHTML = `
     <div class="stat-card"><div class="stat-icon" style="background:#dbeafe;color:var(--primary)"><i class="fa-solid fa-building"></i></div><div class="stat-value">${total}</div><div class="stat-label">Total Empresas</div></div>
     <div class="stat-card"><div class="stat-icon" style="background:#dcfce7;color:var(--success)"><i class="fa-solid fa-circle-check"></i></div><div class="stat-value" style="color:var(--success)">${active}</div><div class="stat-label">Ativas</div></div>
     <div class="stat-card"><div class="stat-icon" style="background:#fee2e2;color:var(--danger)"><i class="fa-solid fa-ban"></i></div><div class="stat-value" style="color:var(--danger)">${blocked}</div><div class="stat-label">Bloqueadas</div></div>
     <div class="stat-card"><div class="stat-icon" style="background:#fef3c7;color:var(--warning)"><i class="fa-solid fa-clock"></i></div><div class="stat-value" style="color:var(--warning)">${expired}</div><div class="stat-label">Expiradas</div></div>
-    <div class="stat-card"><div class="stat-icon" style="background:#f0fdf4;color:var(--success)"><i class="fa-solid fa-dollar-sign"></i></div><div class="stat-value" style="color:var(--success);font-size:20px">${fmt(revenue)}</div><div class="stat-label">Receita Total</div></div>`;
+    <div class="stat-card"><div class="stat-icon" style="background:#f0fdf4;color:var(--success)"><i class="fa-solid fa-dollar-sign"></i></div><div class="stat-value" style="color:var(--success);font-size:20px">${fmt(revenue)}</div><div class="stat-label">Receita Total</div>${zeroLabel}</div>`;
 }
 function renderAdminTable() {
   const q = (document.getElementById('admin-search')?.value||'').toLowerCase();
@@ -1156,6 +1343,60 @@ function showPasswordModal(id) {
     `<button class="btn btn-ghost" onclick="closeModal()">Fechar</button><button class="btn btn-primary" onclick="navigator.clipboard.writeText('Email: '+document.getElementById('pv-email').value+' | Senha: '+document.getElementById('pv-pwd').value);showToast('Copiado!','success')"><i class="fa-solid fa-copy"></i> Copiar Credenciais</button>`,
     false
   );
+}
+
+// ============================================================
+// ADMIN CONFIG & ZERAR RECEITAS
+// ============================================================
+function showAdminConfigModal() {
+  showModal('<i class="fa-solid fa-gear"></i> Configurações do Sistema',
+    `<div class="alert alert-warning mb-3"><i class="fa-solid fa-shield-alt"></i> O Access Token do Mercado Pago é necessário para o PIX automático.</div>
+    <div class="form-group">
+      <label>Mercado Pago Access Token (Production)</label>
+      <div class="pwd-wrap">
+        <input type="password" id="cfg-mp-token" class="form-control" value="${mpAccessToken}" placeholder="APP_USR-XXXXXXXXX...">
+        <button class="pwd-toggle" type="button" onclick="togglePwd('cfg-mp-token','eye-cfgmp')"><i class="fa-solid fa-eye" id="eye-cfgmp"></i></button>
+      </div>
+      <div style="font-size:11px;color:var(--gray);margin-top:4px">Obtenha em: mercadopago.com.br → Credenciais → Access Token</div>
+    </div>
+    <div class="alert alert-info"><i class="fa-solid fa-info-circle"></i> Com o token configurado, clientes pagam via PIX de qualquer banco e o dinheiro cai na sua conta do Mercado Pago. O cadastro só é liberado após confirmação automática do pagamento.</div>`,
+    `<button class="btn btn-ghost" onclick="closeModal()">Cancelar</button>
+     <button class="btn btn-primary" onclick="saveAdminConfig()"><i class="fa-solid fa-save"></i> Salvar Configurações</button>`,
+    false
+  );
+}
+async function saveAdminConfig() {
+  const token = document.getElementById('cfg-mp-token').value.trim();
+  showLoading('Salvando...');
+  try {
+    await db.collection('admin_config').doc('settings').set({ mpAccessToken: token }, { merge: true });
+    mpAccessToken = token;
+    hideLoading(); closeModal();
+    showToast(token ? 'PIX automático ativado! ✅' : 'Token removido.', 'success');
+  } catch(e) { hideLoading(); showToast('Erro: '+e.message,'danger'); }
+}
+function showZerarReceitasModal() {
+  const zeroDate = mpRevenueZeroDate ? new Date(mpRevenueZeroDate).toLocaleDateString('pt-BR') : 'nunca zerada';
+  showModal('<i class="fa-solid fa-rotate-left" style="color:var(--warning)"></i> Zerar Contagem de Receitas',
+    `<div class="alert alert-warning"><i class="fa-solid fa-exclamation-triangle"></i> Esta ação reinicia a contagem de receita do painel.</div>
+    <p style="margin-bottom:8px">O painel mostrará <strong>R$ 0,00</strong> e começará a contar apenas as novas assinaturas a partir de hoje.</p>
+    <p style="font-size:13px;color:var(--gray)">Última zeragem: <strong>${zeroDate}</strong></p>
+    <p style="font-size:13px;color:var(--gray);margin-top:4px">As empresas cadastradas <strong>não</strong> serão afetadas.</p>`,
+    `<button class="btn btn-ghost" onclick="closeModal()">Cancelar</button>
+     <button class="btn btn-warning" onclick="confirmZerarReceitas()"><i class="fa-solid fa-rotate-left"></i> Confirmar Zeragem</button>`,
+    false
+  );
+}
+async function confirmZerarReceitas() {
+  showLoading('Zerando receitas...');
+  const zeroDate = new Date().toISOString();
+  try {
+    await db.collection('admin_config').doc('settings').set({ revenueZeroDate: zeroDate }, { merge: true });
+    mpRevenueZeroDate = zeroDate;
+    hideLoading(); closeModal();
+    showToast('Receitas zeradas! Nova contagem iniciada.','success');
+    renderAdminStats();
+  } catch(e) { hideLoading(); showToast('Erro: '+e.message,'danger'); }
 }
 
 // ============================================================
@@ -1842,6 +2083,33 @@ async function deleteOrder(oid) {
     showToast('Pedido excluído!','success');
   } catch(e) { hideLoading(); showToast('Erro: '+e.message,'danger'); }
 }
+async function deleteAllOrders() {
+  const count = allCompanyOrders.length;
+  if (!count) { showToast('Nenhum pedido para excluir','warning'); return; }
+  showModal('<i class="fa-solid fa-trash" style="color:var(--danger)"></i> Excluir Todos os Pedidos',
+    `<div class="alert alert-danger"><i class="fa-solid fa-exclamation-triangle"></i> Ação irreversível!</div>
+    <p>Isso excluirá permanentemente <strong>${count} pedido(s)</strong> de todos os status.</p>
+    <p style="font-size:13px;color:var(--gray);margin-top:6px">As vendas registradas em Relatórios <strong>não</strong> serão afetadas.</p>`,
+    `<button class="btn btn-ghost" onclick="closeModal()">Cancelar</button>
+     <button class="btn btn-danger" onclick="confirmDeleteAllOrders()"><i class="fa-solid fa-trash"></i> Excluir Todos</button>`,
+    false
+  );
+}
+async function confirmDeleteAllOrders() {
+  closeModal();
+  showLoading('Excluindo todos os pedidos...');
+  try {
+    const batchSize = 500;
+    const orders = [...allCompanyOrders];
+    for (let i=0; i<orders.length; i+=batchSize) {
+      const batch = db.batch();
+      orders.slice(i, i+batchSize).forEach(o => batch.delete(db.collection('orders').doc(o.id)));
+      await batch.commit();
+    }
+    hideLoading();
+    showToast(`${orders.length} pedido(s) excluídos com sucesso!`,'success');
+  } catch(e) { hideLoading(); showToast('Erro: '+e.message,'danger'); }
+}
 async function updateOrderStatus(oid, status) {
   try {
     await db.collection('orders').doc(oid).update({ status, updatedAt: new Date().toISOString() });
@@ -2422,6 +2690,7 @@ async function placePubOrder() {
   showLoading('Enviando pedido...');
   try {
     const now=new Date();
+    const osNum = genOSNumber();
     // Usar o método add para que o Firestore gere o ID automaticamente (evita conflitos)
     const orderRef = await db.collection('orders').add({
       companyId: pubCompanyId,
@@ -2437,10 +2706,12 @@ async function placePubOrder() {
       valorPago: valorPago,
       troco: troco,
       status: 'pending',
-      date: firebase.firestore.FieldValue.serverTimestamp(),
-      notes: notes || ''
+      date: now.toISOString(),
+      notes: notes || '',
+      orderNumber: osNum,
+      source: 'cardapio'
     });
-    const orderId = orderRef.id;
+    const orderId = osNum;
     hideLoading();
     pubCart=[];
     updatePubCartCount();
@@ -2449,7 +2720,7 @@ async function placePubOrder() {
       `<div class="text-center" style="padding:20px 0">
         <div style="font-size:56px;margin-bottom:14px">🎉</div>
         <h3 style="font-size:20px;font-weight:800;margin-bottom:8px">Pedido realizado!</h3>
-        <p style="color:var(--gray)">Pedido <strong style="color:var(--primary);font-family:monospace">${orderId}</strong></p>
+        <p style="color:var(--gray)">Número do Pedido: <strong style="color:var(--primary);font-family:monospace">${orderId}</strong></p>
         <p style="color:var(--gray);margin-top:6px">Total: <strong>${fmt(total)}</strong></p>
         ${troco>0?`<div class="alert alert-success mt-3" style="justify-content:center"><i class="fa-solid fa-money-bill-wave"></i> Troco: <strong>${fmt(troco)}</strong></div>`:''}
         <p style="color:var(--gray);margin-top:8px;font-size:13px">Acompanhe o status em "Meus Pedidos"</p>
@@ -2473,11 +2744,13 @@ function renderMyOrders(orders) {
   el.innerHTML = orders.map(o=>{
     const currentStep=stepMap[o.status]??-1;
     const cancelled=o.status==='cancelled';
+    const dateObj = o.date ? (o.date.toDate ? o.date.toDate() : new Date(o.date)) : new Date();
+    const displayId = o.orderNumber || o.id;
     return `<div class="my-order-card">
       <div class="flex items-center justify-between flex-wrap gap-2 mb-2">
         <div>
-          <div style="font-size:14px;font-weight:700;color:var(--primary);font-family:monospace">${o.id}</div>
-          <div style="font-size:12px;color:var(--gray)">${new Date(o.date).toLocaleString('pt-BR')}</div>
+          <div style="font-size:13px;font-weight:700;color:var(--primary);font-family:monospace">${displayId}</div>
+          <div style="font-size:12px;color:var(--gray)">${dateObj.toLocaleDateString('pt-BR')} às ${dateObj.toLocaleTimeString('pt-BR',{hour:'2-digit',minute:'2-digit'})}</div>
         </div>
         <span class="badge badge-${sColor[o.status]}">${sLabel[o.status]}</span>
       </div>
