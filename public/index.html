@@ -196,6 +196,11 @@ table tr:hover td{background:#fafbfc}
 /* PDV */
 .pdv-layout{display:grid;grid-template-columns:1fr 360px;gap:20px;height:calc(100vh - 130px)}
 .pdv-products{overflow-y:auto}
+/* PDV MOBILE TABS */
+.pdv-tabs-mobile{display:none;position:sticky;top:64px;z-index:30;background:#fff;border-bottom:2px solid var(--border);margin:-8px -24px 16px;padding:0;box-shadow:0 2px 8px rgba(0,0,0,.06)}
+.pdv-tab-btn{flex:1;padding:14px 8px;text-align:center;font-weight:700;font-size:14px;cursor:pointer;color:var(--gray);border-bottom:3px solid transparent;border:none;background:transparent;font-family:'Inter',sans-serif;transition:all .2s;position:relative}
+.pdv-tab-btn.active{color:var(--primary);border-bottom:3px solid var(--primary)}
+.pdv-tab-btn .tab-badge{position:absolute;top:8px;right:calc(50% - 28px);background:var(--danger);color:#fff;font-size:10px;font-weight:800;min-width:18px;height:18px;border-radius:10px;display:inline-flex;align-items:center;justify-content:center;padding:0 4px}
 .filter-chip{padding:6px 14px;border-radius:20px;border:2px solid var(--border);background:#fff;cursor:pointer;font-size:12px;font-weight:600;transition:all .2s}
 .filter-chip.active{background:var(--primary);color:#fff;border-color:var(--primary)}
 .pdv-grid{display:grid;grid-template-columns:repeat(auto-fill,minmax(140px,1fr));gap:10px}
@@ -341,11 +346,21 @@ table tr:hover td{background:#fafbfc}
 @media(max-width:768px){
   .sidebar{transform:translateX(-100%)}.sidebar.open{transform:translateX(0)}
   .main-content{margin-left:0}
-  .pdv-layout{grid-template-columns:1fr}
+  .pdv-layout{grid-template-columns:1fr;height:auto;gap:0}
+  .pdv-tabs-mobile{display:flex}
+  .pdv-products{display:block}
+  .pdv-products.pdv-tab-hidden{display:none!important}
+  .cart-panel{display:none;flex-direction:column;min-height:70vh;border-radius:0;border-left:none;border-right:none}
+  .cart-panel.pdv-tab-active{display:flex!important}
+  .cart-items{max-height:40vh;overflow-y:auto}
+  .content-area{padding:8px}
   .form-row{grid-template-columns:1fr}
   .charts-grid{grid-template-columns:1fr}
   .quick-grid{grid-template-columns:repeat(2,1fr)}
   .home-kpis{grid-template-columns:repeat(2,1fr)}
+  .pdv-grid{grid-template-columns:repeat(auto-fill,minmax(110px,1fr));gap:8px}
+  .pdv-card{padding:10px 8px}
+  .pdv-card-img,.pdv-card-no-img{width:48px;height:48px;font-size:20px}
 }
 .hamburger{display:none;background:none;border:none;cursor:pointer;padding:8px;color:var(--dark);font-size:20px}
 @media(max-width:768px){.hamburger{display:flex}}
@@ -600,8 +615,18 @@ table tr:hover td{background:#fafbfc}
       </div>
       <!-- PDV -->
       <div id="section-pos" class="section">
+        <!-- MOBILE TABS (hidden on desktop) -->
+        <div class="pdv-tabs-mobile">
+          <button class="pdv-tab-btn active" id="pdv-tab-prod" onclick="switchPDVTab('produtos')">
+            <i class="fa-solid fa-box-open"></i> Produtos
+          </button>
+          <button class="pdv-tab-btn" id="pdv-tab-cart" onclick="switchPDVTab('carrinho')">
+            <i class="fa-solid fa-shopping-cart"></i> Carrinho
+            <span class="tab-badge" id="pdv-cart-badge" style="display:none">0</span>
+          </button>
+        </div>
         <div class="pdv-layout">
-          <div class="pdv-products">
+          <div class="pdv-products" id="pdv-products-panel">
             <div class="flex items-center justify-between mb-3 flex-wrap gap-2">
               <div style="font-size:15px;font-weight:700">Produtos</div>
               <input type="text" id="pdv-search" class="form-control" style="width:200px" placeholder="Buscar produto..." oninput="renderPDV()">
@@ -609,12 +634,22 @@ table tr:hover td{background:#fafbfc}
             <div class="flex gap-2 flex-wrap mb-3" id="pdv-cats"></div>
             <div class="pdv-grid" id="pdv-grid"></div>
           </div>
-          <div class="cart-panel">
-            <div class="cart-header"><span><i class="fa-solid fa-shopping-cart"></i> Carrinho</span><button class="btn btn-sm btn-ghost" onclick="clearCart()"><i class="fa-solid fa-trash"></i></button></div>
+          <div class="cart-panel" id="pdv-cart-panel">
+            <div class="cart-header">
+              <span><i class="fa-solid fa-shopping-cart"></i> Carrinho</span>
+              <div class="flex gap-2">
+                <button class="btn btn-sm btn-warning" onclick="showSetDeliveryFeeModal()" title="Taxa de Entrega"><i class="fa-solid fa-truck"></i></button>
+                <button class="btn btn-sm" style="background:#f1f5f9;color:var(--dark3)" onclick="printOS()" title="Reimprimir última OS"><i class="fa-solid fa-print"></i></button>
+                <button class="btn btn-sm btn-ghost" onclick="clearCart()"><i class="fa-solid fa-trash"></i></button>
+              </div>
+            </div>
             <div class="cart-items" id="cart-items"><div class="cart-empty"><i class="fa-solid fa-cart-shopping" style="font-size:32px;color:var(--border);display:block;margin-bottom:8px"></i>Carrinho vazio</div></div>
             <div class="cart-footer">
               <div class="cart-total-row"><span>Subtotal</span><span id="cart-subtotal">R$ 0,00</span></div>
-              <div class="cart-total-row" id="cart-delivery-row" style="display:none;color:var(--warning);font-weight:700"><span><i class="fa-solid fa-truck"></i> Taxa de Entrega</span><span id="cart-delivery-val">R$ 0,00</span></div>
+              <div class="cart-total-row" id="cart-delivery-row" style="display:none;color:var(--warning);font-weight:700">
+                <span><i class="fa-solid fa-truck"></i> Taxa de Entrega <button onclick="showSetDeliveryFeeModal()" style="background:none;border:none;cursor:pointer;color:var(--warning);font-size:11px;padding:0 4px"><i class="fa-solid fa-edit"></i></button></span>
+                <span id="cart-delivery-val">R$ 0,00</span>
+              </div>
               <div class="cart-total-row big"><span>Total</span><span id="cart-total">R$ 0,00</span></div>
               <div style="font-size:12px;font-weight:700;color:var(--gray);margin-bottom:8px;text-transform:uppercase;letter-spacing:.3px">Forma de Pagamento</div>
               <div class="pay-btns">
@@ -840,6 +875,10 @@ let pendingPaymentId = null;
 let adminWhatsApp = '';
 // Auth guards
 let employeesUnlocked = false;
+// PDV delivery fee (global, set by company)
+let pdvDeliveryFee = 0;
+// Last sale for reprint
+let lastSaleData = null;
 // Clock
 let homeClockInterval = null;
 // Customer order tracking
@@ -1471,6 +1510,7 @@ async function confirmZerarReceitas() {
 // ============================================================
 function initDashboard() {
   const c = currentCompany; if(!c) return;
+  pdvDeliveryFee = parseFloat(c.pdvDeliveryFee)||0;
   document.getElementById('sb-company-name').textContent = c.companyName;
   const days = getDaysRemaining(c);
   document.getElementById('sb-plan-info').innerHTML = `<i class="fa-solid fa-calendar-alt"></i> ${c.plan==='mensal'?'Mensal':'Anual'} · ${days} dias`;
@@ -1621,9 +1661,11 @@ function addToCart(pid) {
   } else {
     const item = cart.find(i=>i.id===pid && !(i.additionals&&i.additionals.length));
     if (item) { if(item.qty>=p.stock){showToast('Limite de estoque','warning');return;} item.qty++; }
-    else cart.push({id:pid, name:p.name, price:p.price, qty:1, additionals:[], deliveryFee:p.deliveryFee||0});
+    else cart.push({id:pid, name:p.name, price:p.price, qty:1, additionals:[]});
     renderCart();
     showToast(`${p.name} adicionado!`,'success');
+    // On mobile, switch to cart tab briefly to confirm
+    if (window.innerWidth <= 768) switchPDVTab('carrinho');
   }
 }
 function showAddToCartModal(pid) {
@@ -1669,10 +1711,11 @@ function confirmAddToCart(pid) {
     item.qty += qty;
   } else {
     if(qty>p.stock){showToast('Limite de estoque','warning');return;}
-    cart.push({id:pid, name:cartName, price:totalPrice, qty, additionals:selected, _sigKey:sigKey, deliveryFee:p.deliveryFee||0});
+    cart.push({id:pid, name:cartName, price:totalPrice, qty, additionals:selected, _sigKey:sigKey});
   }
   closeModal(); renderCart();
   showToast(`${p.name} adicionado!`,'success');
+  if (window.innerWidth <= 768) switchPDVTab('carrinho');
 }
 function updateQty(pid, delta) {
   const idx = cart.findIndex(i=>i.id===pid); if(idx<0) return;
@@ -1691,7 +1734,7 @@ function renderCart() {
       <div class="cart-item-price">${fmt(item.price*item.qty)}</div>
     </div>`).join('');
   const subtotal = cart.reduce((s,i)=>s+i.price*i.qty, 0);
-  const totalDelivery = cart.reduce((s,i)=>s+(i.deliveryFee||0)*i.qty, 0);
+  const totalDelivery = pdvDeliveryFee > 0 && cart.length > 0 ? pdvDeliveryFee : 0;
   const total = subtotal + totalDelivery;
   document.getElementById('cart-subtotal').textContent = fmt(subtotal);
   const deliveryEl = document.getElementById('cart-delivery-row');
@@ -1699,6 +1742,10 @@ function renderCart() {
   const deliveryVal = document.getElementById('cart-delivery-val');
   if (deliveryVal) deliveryVal.textContent = fmt(totalDelivery);
   document.getElementById('cart-total').textContent = fmt(total);
+  // Update mobile cart badge
+  const cartCount = cart.reduce((s,i)=>s+i.qty, 0);
+  const badge = document.getElementById('pdv-cart-badge');
+  if (badge) { badge.textContent = cartCount; badge.style.display = cartCount > 0 ? 'inline-flex' : 'none'; }
 }
 function selectPayment(el, method) {
   selectedPayment = method;
@@ -1709,7 +1756,8 @@ function selectPayment(el, method) {
   else { tb.style.display='none'; }
 }
 function calcTroco() {
-  const total = cart.reduce((s,i)=>s+i.price*i.qty+(i.deliveryFee||0)*i.qty, 0);
+  const delivery = pdvDeliveryFee > 0 && cart.length > 0 ? pdvDeliveryFee : 0;
+  const total = cart.reduce((s,i)=>s+i.price*i.qty, 0) + delivery;
   const pago = parseFloat(document.getElementById('troco-input').value)||0;
   const troco = pago - total;
   const el = document.getElementById('troco-result');
@@ -1718,7 +1766,8 @@ function calcTroco() {
   else { el.innerHTML=`Troco: <strong>${fmt(troco)}</strong>`; }
 }
 function showSplitModal() {
-  const total = cart.reduce((s,i)=>s+i.price*i.qty+(i.deliveryFee||0)*i.qty, 0);
+  const delivery = pdvDeliveryFee > 0 && cart.length > 0 ? pdvDeliveryFee : 0;
+  const total = cart.reduce((s,i)=>s+i.price*i.qty, 0) + delivery;
   if (!total) { showToast('Carrinho vazio','warning'); return; }
   showModal('<i class="fa-solid fa-divide"></i> Dividir Conta',
     `<div class="text-center mb-4">
@@ -1756,7 +1805,7 @@ async function completeSale() {
   if (!cart.length) { showToast('Adicione produtos ao carrinho','warning'); return; }
   if (!selectedPayment) { showToast('Selecione a forma de pagamento','warning'); return; }
   const subtotalCart = cart.reduce((s,i)=>s+i.price*i.qty, 0);
-  const deliveryCart = cart.reduce((s,i)=>s+(i.deliveryFee||0)*i.qty, 0);
+  const deliveryCart = pdvDeliveryFee > 0 && cart.length > 0 ? pdvDeliveryFee : 0;
   const total = subtotalCart + deliveryCart;
   let valorPago = total, troco = 0;
   if (selectedPayment==='dinheiro') {
@@ -1797,6 +1846,8 @@ async function completeSale() {
     });
     hideLoading();
     const payNames = {dinheiro:'Dinheiro',cartao:'Cartão',pix:'Pix'};
+    // Store for reprint
+    lastSaleData = { items:[...cart], total, subtotal:subtotalCart, deliveryTotal:deliveryCart, paymentMethod:selectedPayment, valorPago, troco, date:now.toISOString(), orderNumber:osNum };
     showModal('<i class="fa-solid fa-check-circle" style="color:var(--success)"></i> Venda Registrada!',
       `<div class="text-center" style="padding:12px 0">
         <div style="font-size:48px;margin-bottom:10px">✅</div>
@@ -1807,7 +1858,10 @@ async function completeSale() {
         ${deliveryCart>0?`<div style="font-size:13px;color:var(--warning);font-weight:700;margin-top:6px"><i class="fa-solid fa-truck"></i> Taxa de Entrega: ${fmt(deliveryCart)}</div>`:''}
         ${troco>0?`<div class="alert alert-success mt-3" style="justify-content:center"><i class="fa-solid fa-money-bill-wave"></i> Troco para o cliente: <strong>${fmt(troco)}</strong></div>`:''}
       </div>`,
-      `<button class="btn btn-primary w-full" onclick="closeModal()"><i class="fa-solid fa-plus"></i> Nova Venda</button>`,
+      `<div class="flex gap-2 w-full">
+         <button class="btn btn-outline flex-1" onclick="printOS()"><i class="fa-solid fa-print"></i> Imprimir OS</button>
+         <button class="btn btn-primary flex-1" onclick="closeModal()"><i class="fa-solid fa-plus"></i> Nova Venda</button>
+       </div>`,
       false
     );
     cart=[]; selectedPayment=null;
@@ -1815,6 +1869,220 @@ async function completeSale() {
     document.getElementById('troco-box').style.display='none';
     renderCart(); renderPDVGrid();
   } catch(e) { hideLoading(); showToast('Erro ao registrar venda: '+e.message,'danger'); }
+}
+
+// ============================================================
+// IMPRESSÃO OS / CUPOM
+// ============================================================
+function printOS(data) {
+  if (!data) data = lastSaleData;
+  if (!data) { showToast('Nenhuma venda registrada para imprimir','warning'); return; }
+  const c = currentCompany || {};
+  const payNames = {dinheiro:'Dinheiro',cartao:'Cartão / Débito',pix:'PIX'};
+  const dateObj = new Date(data.date);
+  const dateStr = dateObj.toLocaleDateString('pt-BR');
+  const timeStr = dateObj.toLocaleTimeString('pt-BR',{hour:'2-digit',minute:'2-digit',second:'2-digit'});
+
+  const itemsRows = (data.items||[]).map(item => {
+    const addDesc = item.additionals && item.additionals.length
+      ? `<tr><td colspan="3" style="font-size:10px;color:#555;padding-left:10px">+ ${item.additionals.map(a=>a.name).join(', ')}</td></tr>`
+      : '';
+    return `<tr>
+      <td style="padding:3px 0">${item.qty}x ${item.name}</td>
+      <td style="text-align:right;padding:3px 4px;white-space:nowrap">${fmtPrint(item.price)}</td>
+      <td style="text-align:right;padding:3px 0;white-space:nowrap;font-weight:700">${fmtPrint(item.price*item.qty)}</td>
+    </tr>${addDesc}`;
+  }).join('');
+
+  const subtotal = data.subtotal ?? data.total;
+  const delivery = data.deliveryTotal || 0;
+
+  const html = `<!DOCTYPE html>
+<html lang="pt-BR">
+<head>
+<meta charset="UTF-8">
+<title>OS ${data.orderNumber}</title>
+<style>
+  * { margin:0; padding:0; box-sizing:border-box; }
+  body {
+    font-family: 'Courier New', Courier, monospace;
+    font-size: 12px;
+    color: #000;
+    background: #fff;
+    width: 80mm;
+    margin: 0 auto;
+    padding: 6px 4px 20px;
+  }
+  .center { text-align: center; }
+  .right  { text-align: right; }
+  .bold   { font-weight: bold; }
+  .big    { font-size: 15px; }
+  .small  { font-size: 10px; }
+  .dashed { border-top: 1px dashed #000; margin: 6px 0; }
+  .solid  { border-top: 2px solid #000; margin: 6px 0; }
+  table   { width: 100%; border-collapse: collapse; }
+  td      { vertical-align: top; font-size: 11px; }
+  .row-total td { font-size: 14px; font-weight: 900; }
+  .row-delivery td { color: #b45309; }
+  .troco-box { background: #f0fdf4; border: 1px dashed #166534; padding: 6px 8px; margin-top: 6px; border-radius:4px; }
+  @media print {
+    body { width: 80mm; }
+    @page { size: 80mm auto; margin: 0; }
+    button { display: none; }
+  }
+  .print-btn {
+    display: block; width: 100%; margin-top: 14px; padding: 10px;
+    background: #2563eb; color: #fff; border: none; border-radius: 8px;
+    font-size: 14px; font-weight: 700; cursor: pointer; font-family: inherit;
+  }
+  .print-btn:hover { background: #1d4ed8; }
+  .no-print { }
+  @media print { .no-print { display:none; } }
+</style>
+</head>
+<body>
+
+  <!-- CABEÇALHO -->
+  <div class="center bold big">${c.companyName||'ESTABELECIMENTO'}</div>
+  ${c.cnpj ? `<div class="center small">CNPJ: ${c.cnpj}</div>` : ''}
+  ${c.address ? `<div class="center small">${c.address}</div>` : ''}
+  ${c.phone  ? `<div class="center small">Tel: ${c.phone}</div>` : ''}
+
+  <div class="solid"></div>
+
+  <!-- OS / DATA -->
+  <div class="center bold" style="font-size:13px;letter-spacing:1px">${data.orderNumber}</div>
+  <div class="center small">${dateStr} &nbsp;|&nbsp; ${timeStr}</div>
+
+  <div class="dashed"></div>
+
+  <!-- ITENS -->
+  <div class="bold" style="margin-bottom:4px">ITENS</div>
+  <table>
+    <thead>
+      <tr>
+        <td class="bold">Produto</td>
+        <td class="bold right">Unit.</td>
+        <td class="bold right">Total</td>
+      </tr>
+    </thead>
+    <tbody>
+      ${itemsRows}
+    </tbody>
+  </table>
+
+  <div class="dashed"></div>
+
+  <!-- TOTAIS -->
+  <table>
+    <tr>
+      <td>Subtotal:</td>
+      <td class="right">${fmtPrint(subtotal)}</td>
+    </tr>
+    ${delivery > 0 ? `<tr class="row-delivery">
+      <td><i>Taxa de Entrega:</i></td>
+      <td class="right"><i>${fmtPrint(delivery)}</i></td>
+    </tr>` : ''}
+    <tr class="row-total">
+      <td>TOTAL:</td>
+      <td class="right">${fmtPrint(data.total)}</td>
+    </tr>
+  </table>
+
+  <div class="dashed"></div>
+
+  <!-- PAGAMENTO -->
+  <div><span class="bold">Pagamento:</span> ${payNames[data.paymentMethod]||data.paymentMethod}</div>
+  ${data.valorPago && data.valorPago > data.total
+    ? `<div><span class="bold">Recebido:</span> ${fmtPrint(data.valorPago)}</div>`
+    : ''}
+  ${data.troco > 0
+    ? `<div class="troco-box"><span class="bold" style="font-size:13px">TROCO: ${fmtPrint(data.troco)}</span></div>`
+    : ''}
+
+  <div class="solid"></div>
+
+  <!-- RODAPÉ -->
+  <div class="center bold" style="margin-top:4px">Obrigado pela preferência! 🙏</div>
+  <div class="center small" style="margin-top:2px">Gestão Fácil — Sistema de Gestão</div>
+
+  <!-- BOTÃO IMPRIMIR (some na impressão) -->
+  <button class="print-btn no-print" onclick="window.print()">
+    🖨️ Clique aqui para Imprimir
+  </button>
+
+</body>
+</html>`;
+
+  const win = window.open('', '_blank', 'width=420,height=700,left=100,top=50');
+  if (!win) { showToast('Permita pop-ups neste site para imprimir','warning'); return; }
+  win.document.write(html);
+  win.document.close();
+  win.focus();
+  // Auto-print after small delay (some browsers need it)
+  setTimeout(() => {
+    try { win.print(); } catch(e) {}
+  }, 400);
+}
+
+// Formata valor para impressão (sem emoji do R$, usando R$)
+function fmtPrint(v) {
+  return 'R$ ' + Number(v||0).toLocaleString('pt-BR',{minimumFractionDigits:2,maximumFractionDigits:2});
+}
+
+// ============================================================
+// PDV MOBILE TABS
+// ============================================================
+function switchPDVTab(tab) {
+  const prodPanel = document.getElementById('pdv-products-panel');
+  const cartPanel = document.getElementById('pdv-cart-panel');
+  const tabProd = document.getElementById('pdv-tab-prod');
+  const tabCart = document.getElementById('pdv-tab-cart');
+  if (!prodPanel || !cartPanel) return;
+  if (tab === 'produtos') {
+    prodPanel.classList.remove('pdv-tab-hidden');
+    cartPanel.classList.remove('pdv-tab-active');
+    tabProd?.classList.add('active');
+    tabCart?.classList.remove('active');
+  } else {
+    prodPanel.classList.add('pdv-tab-hidden');
+    cartPanel.classList.add('pdv-tab-active');
+    tabCart?.classList.add('active');
+    tabProd?.classList.remove('active');
+  }
+}
+
+// ============================================================
+// PDV DELIVERY FEE (global, set by company)
+// ============================================================
+function showSetDeliveryFeeModal() {
+  showModal('<i class="fa-solid fa-truck" style="color:var(--warning)"></i> Taxa de Entrega',
+    `<p style="color:var(--gray);margin-bottom:14px;font-size:13px">Defina a taxa de entrega que será cobrada nesta venda. Ela aparece na OS e é somada ao total.</p>
+    <div class="form-group">
+      <label>Valor da Taxa de Entrega (R$)</label>
+      <input type="number" id="modal-delivery-fee" class="form-control" value="${pdvDeliveryFee||0}" step="0.50" min="0" placeholder="0,00" style="font-size:20px;font-weight:700;text-align:center">
+    </div>
+    <div class="flex gap-2 mt-2">
+      <button class="btn btn-ghost flex-1" onclick="setDeliveryFee(0)"><i class="fa-solid fa-times"></i> Remover</button>
+    </div>`,
+    `<button class="btn btn-ghost" onclick="closeModal()">Cancelar</button>
+     <button class="btn btn-warning" onclick="setDeliveryFee()"><i class="fa-solid fa-check"></i> Confirmar Taxa</button>`,
+    false
+  );
+  setTimeout(() => document.getElementById('modal-delivery-fee')?.focus(), 100);
+}
+async function setDeliveryFee(forceValue) {
+  const val = forceValue !== undefined ? forceValue : parseFloat(document.getElementById('modal-delivery-fee')?.value)||0;
+  pdvDeliveryFee = val;
+  // Persist in company data
+  const c = currentCompany;
+  if (c) {
+    c.pdvDeliveryFee = val;
+    try { await db.collection('companies').doc(currentCompanyId).update({ pdvDeliveryFee: val }); } catch(e) {}
+  }
+  closeModal();
+  renderCart();
+  showToast(val > 0 ? `Taxa de entrega: ${fmt(val)}` : 'Taxa de entrega removida.', val > 0 ? 'success' : 'info');
 }
 
 // ============================================================
@@ -1954,7 +2222,7 @@ function renderProducts() {
         <div class="product-card-cat">${p.category||'Sem categoria'}</div>
         <div class="product-card-price">${fmt(p.price)}</div>
         <div style="font-size:12px;color:var(--gray);margin-top:4px"><i class="fa-solid fa-boxes-stacked"></i> ${p.stock} em estoque · Custo: ${fmt(p.cost)}</div>
-        ${p.deliveryFee?`<div style="font-size:11px;color:var(--warning);font-weight:700;margin-top:2px"><i class="fa-solid fa-truck"></i> Entrega: ${fmt(p.deliveryFee)}</div>`:''}
+
         <div class="product-card-actions">
           <button class="btn btn-sm btn-primary flex-1" onclick="showProductModal('${p.id}')"><i class="fa-solid fa-edit"></i> Editar</button>
           <button class="btn btn-sm btn-danger" onclick="deleteProduct('${p.id}')"><i class="fa-solid fa-trash"></i></button>
@@ -1977,11 +2245,7 @@ function showProductModal(pid) {
     </div>
     <div class="form-group"><label>Estoque Mínimo</label><input type="number" id="prd-minstock" class="form-control" value="${p?.minStock||5}" min="0"></div>
     <div class="form-group"><label>Imagem (URL)</label><input type="text" id="prd-img" class="form-control" value="${p?.image||''}" placeholder="https://..."></div>
-    <div style="background:#fef3c7;border:2px solid #fcd34d;border-radius:10px;padding:14px;margin-top:12px">
-      <div style="font-size:12px;font-weight:700;color:var(--warning);margin-bottom:8px"><i class="fa-solid fa-truck"></i> Taxa de Entrega (opcional)</div>
-      <input type="number" id="prd-delivery" class="form-control" value="${p?.deliveryFee||0}" step="0.01" min="0" placeholder="R$ 0,00">
-      <div style="font-size:11px;color:var(--gray);margin-top:4px">Valor cobrado pela entrega deste produto. Aparece na OS do caixa e é somado ao total. Não pode ser alterado pelo cliente.</div>
-    </div>
+
     <div style="border-top:2px solid var(--border);margin-top:14px;padding-top:14px">
       <div style="font-size:12px;font-weight:700;color:var(--dark3);text-transform:uppercase;letter-spacing:.3px;margin-bottom:10px"><i class="fa-solid fa-plus-circle"></i> Adicionais no PDV</div>
       <div id="prd-adds-container">${(p?.additionals||[]).map((a,idx)=>`<div class="flex items-center gap-2 mb-2" id="prd-add-row-${idx}"><input type="text" class="form-control" id="prd-add-name-${idx}" value="${a.name}" placeholder="Ex: Bacon extra" style="flex:2"><input type="number" class="form-control" id="prd-add-price-${idx}" value="${a.price}" step="0.01" min="0" placeholder="R$" style="flex:1"><button class="btn btn-sm btn-danger" onclick="document.getElementById('prd-add-row-${idx}').remove()"><i class="fa-solid fa-times"></i></button></div>`).join('')}</div>
@@ -2002,7 +2266,7 @@ function addPrdAdditionalRow() {
   container.appendChild(row);
 }
 async function saveProduct(pid) {
-  const name=document.getElementById('prd-name').value.trim(), price=parseFloat(document.getElementById('prd-price').value)||0, cost=parseFloat(document.getElementById('prd-cost').value)||0, cat=document.getElementById('prd-cat').value.trim(), stock=parseInt(document.getElementById('prd-stock').value)||0, minStock=parseInt(document.getElementById('prd-minstock').value)||5, img=document.getElementById('prd-img').value.trim(), deliveryFee=parseFloat(document.getElementById('prd-delivery').value)||0;
+  const name=document.getElementById('prd-name').value.trim(), price=parseFloat(document.getElementById('prd-price').value)||0, cost=parseFloat(document.getElementById('prd-cost').value)||0, cat=document.getElementById('prd-cat').value.trim(), stock=parseInt(document.getElementById('prd-stock').value)||0, minStock=parseInt(document.getElementById('prd-minstock').value)||5, img=document.getElementById('prd-img').value.trim();
   if (!name||!price) { showToast('Nome e preço são obrigatórios','warning'); return; }
   const c = currentCompany;
   c.products = c.products||[];
@@ -2014,8 +2278,8 @@ async function saveProduct(pid) {
     const aPrice = parseFloat(document.getElementById(`prd-add-price-${idxStr}`)?.value)||0;
     if (aName) additionals.push({id:genId(), name:aName, price:aPrice});
   });
-  if (pid) { const p=c.products.find(p=>p.id===pid); if(p){p.name=name;p.price=price;p.cost=cost;p.category=cat;p.stock=stock;p.minStock=minStock;p.image=img;p.additionals=additionals;p.deliveryFee=deliveryFee;} }
-  else { c.products.push({id:genId(),name,price,cost,category:cat,stock,minStock,image:img,deliveryFee,createdAt:new Date().toISOString(),additionals}); }
+  if (pid) { const p=c.products.find(p=>p.id===pid); if(p){p.name=name;p.price=price;p.cost=cost;p.category=cat;p.stock=stock;p.minStock=minStock;p.image=img;p.additionals=additionals;} }
+  else { c.products.push({id:genId(),name,price,cost,category:cat,stock,minStock,image:img,createdAt:new Date().toISOString(),additionals}); }
   showLoading('Salvando...');
   try { await db.collection('companies').doc(currentCompanyId).update({products:c.products}); hideLoading(); closeModal(); renderProducts(); showToast(pid?'Produto atualizado!':'Produto cadastrado!','success'); }
   catch(e) { hideLoading(); showToast('Erro: '+e.message,'danger'); }
