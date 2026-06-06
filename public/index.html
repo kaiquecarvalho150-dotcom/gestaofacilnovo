@@ -351,6 +351,23 @@ table tr:hover td{background:#fafbfc}
 @media(max-width:768px){.hamburger{display:flex}}
 .sidebar-overlay{display:none;position:fixed;inset:0;background:rgba(0,0,0,.5);z-index:49}
 .sidebar-overlay.show{display:block}
+/* ADMIN MOBILE */
+@media(max-width:768px){
+  .admin-topbar{flex-wrap:wrap;height:auto;padding:10px 14px;gap:8px}
+  .admin-topbar h1{font-size:15px}
+  .admin-topbar>.flex.gap-2{flex-wrap:wrap;gap:6px;width:100%}
+  .admin-topbar .btn-sm{font-size:11px;padding:5px 9px}
+  .admin-content{padding:12px 10px}
+  .stats-grid{grid-template-columns:repeat(2,1fr);gap:10px}
+  .stat-value{font-size:22px}
+  .table-wrap{font-size:11px}
+  table th,table td{padding:7px 8px;font-size:11px}
+  .admin-topbar>.flex:first-child{width:100%;justify-content:space-between}
+  #admin-mobile-logout{display:flex!important}
+}
+/* CLOCK */
+.home-clock{display:inline-flex;align-items:center;gap:8px;background:linear-gradient(135deg,var(--primary),var(--secondary));color:#fff;padding:7px 16px;border-radius:20px;font-size:20px;font-weight:900;font-family:'Inter',monospace;letter-spacing:2px;box-shadow:0 4px 14px rgba(37,99,235,.3)}
+.home-clock-sec{font-size:14px;opacity:.8;font-weight:400}
 </style>
 </head>
 <body>
@@ -498,13 +515,15 @@ table tr:hover td{background:#fafbfc}
 <div id="page-admin" class="hidden">
   <div class="admin-topbar">
     <div class="flex items-center gap-3">
-      <div style="width:38px;height:38px;background:linear-gradient(135deg,#2563eb,#7c3aed);border-radius:10px;display:flex;align-items:center;justify-content:center;font-size:18px;color:#fff"><i class="fa-solid fa-chart-line"></i></div>
-      <h1>Gestão <span>Fácil</span> — <span style="color:#94a3b8;font-size:14px;font-weight:500">Painel Administrativo</span></h1>
+      <div style="width:38px;height:38px;background:linear-gradient(135deg,#2563eb,#7c3aed);border-radius:10px;display:flex;align-items:center;justify-content:center;font-size:18px;color:#fff;flex-shrink:0"><i class="fa-solid fa-chart-line"></i></div>
+      <h1>Gestão <span>Fácil</span> — <span style="color:#94a3b8;font-size:13px;font-weight:500">Admin</span></h1>
+      <!-- Mobile logout -->
+      <button id="admin-mobile-logout" style="display:none;margin-left:auto;background:var(--danger);color:#fff;border:none;border-radius:8px;padding:7px 12px;font-size:12px;font-weight:700;cursor:pointer" onclick="doAdminLogout()"><i class="fa-solid fa-sign-out-alt"></i> Sair</button>
     </div>
     <div class="flex gap-2">
-      <button class="btn btn-sm btn-primary" onclick="showCreateCompanyModal()"><i class="fa-solid fa-plus"></i> Novo Cadastro</button>
-      <button class="btn btn-sm btn-warning" onclick="showZerarReceitasModal()"><i class="fa-solid fa-rotate-left"></i> Zerar Receitas</button>
-      <button class="btn btn-sm" style="background:rgba(255,255,255,.18);color:#fff" onclick="showAdminConfigModal()"><i class="fa-solid fa-gear"></i> Configurações</button>
+      <button class="btn btn-sm btn-primary" onclick="showCreateCompanyModal()"><i class="fa-solid fa-plus"></i> Nova Empresa</button>
+      <button class="btn btn-sm btn-warning" onclick="showZerarReceitasModal()"><i class="fa-solid fa-rotate-left"></i> Zerar</button>
+      <button class="btn btn-sm" style="background:rgba(255,255,255,.18);color:#fff" onclick="showAdminConfigModal()"><i class="fa-solid fa-gear"></i> Config</button>
       <button class="btn btn-sm" style="background:rgba(255,255,255,.1);color:#fff" onclick="doAdminLogout()"><i class="fa-solid fa-sign-out-alt"></i> Sair</button>
     </div>
   </div>
@@ -548,7 +567,7 @@ table tr:hover td{background:#fafbfc}
       <div class="nav-section-label">Operação</div>
       <div class="nav-item" onclick="showSection('orders')"><span class="nav-ic"><i class="fa-solid fa-receipt"></i></span> Pedidos <span class="nav-badge-dot" id="nb-orders">0</span></div>
       <div class="nav-item" onclick="requireAuth('reports')"><span class="nav-ic"><i class="fa-solid fa-chart-bar"></i></span> Relatórios</div>
-      <div class="nav-item" onclick="showSection('employees')"><span class="nav-ic"><i class="fa-solid fa-users"></i></span> Funcionários</div>
+      <div class="nav-item" onclick="requireAuthEmployees()"><span class="nav-ic"><i class="fa-solid fa-users"></i></span> Funcionários</div>
     </nav>
     <div class="sidebar-footer">
       <div class="nav-item" onclick="doLogout()"><span class="nav-ic"><i class="fa-solid fa-sign-out-alt"></i></span> Sair do Sistema</div>
@@ -568,7 +587,13 @@ table tr:hover td{background:#fafbfc}
     <div class="content-area">
       <!-- HOME -->
       <div id="section-home" class="section active">
-        <div style="margin-bottom:20px"><h2 id="home-greeting" style="font-size:22px;font-weight:900"></h2><p id="home-date" style="color:var(--gray);margin-top:4px;font-size:13px"></p></div>
+        <div style="margin-bottom:20px">
+          <h2 id="home-greeting" style="font-size:22px;font-weight:900"></h2>
+          <div style="display:flex;align-items:center;gap:12px;margin-top:8px;flex-wrap:wrap">
+            <p id="home-date" style="color:var(--gray);font-size:13px;margin:0"></p>
+            <div class="home-clock" id="home-clock"><i class="fa-solid fa-clock" style="font-size:16px;opacity:.8"></i><span id="home-clock-hm">00:00</span><span class="home-clock-sec" id="home-clock-sec">:00</span></div>
+          </div>
+        </div>
         <div class="home-kpis" id="home-kpis"></div>
         <div style="margin-bottom:14px;font-size:15px;font-weight:700">Acesso Rápido</div>
         <div class="quick-grid" id="home-quick"></div>
@@ -589,6 +614,7 @@ table tr:hover td{background:#fafbfc}
             <div class="cart-items" id="cart-items"><div class="cart-empty"><i class="fa-solid fa-cart-shopping" style="font-size:32px;color:var(--border);display:block;margin-bottom:8px"></i>Carrinho vazio</div></div>
             <div class="cart-footer">
               <div class="cart-total-row"><span>Subtotal</span><span id="cart-subtotal">R$ 0,00</span></div>
+              <div class="cart-total-row" id="cart-delivery-row" style="display:none;color:var(--warning);font-weight:700"><span><i class="fa-solid fa-truck"></i> Taxa de Entrega</span><span id="cart-delivery-val">R$ 0,00</span></div>
               <div class="cart-total-row big"><span>Total</span><span id="cart-total">R$ 0,00</span></div>
               <div style="font-size:12px;font-weight:700;color:var(--gray);margin-bottom:8px;text-transform:uppercase;letter-spacing:.3px">Forma de Pagamento</div>
               <div class="pay-btns">
@@ -811,6 +837,13 @@ let mpRevenueZeroDate = null;
 let mpPollInterval = null;
 let pixTimerInterval = null;
 let pendingPaymentId = null;
+let adminWhatsApp = '';
+// Auth guards
+let employeesUnlocked = false;
+// Clock
+let homeClockInterval = null;
+// Customer order tracking
+let prevOrderStatuses = {};
 
 // ============================================================
 // UTILITY
@@ -885,6 +918,7 @@ function showSection(name) {
   document.querySelectorAll('.nav-item').forEach(n => { if(n.textContent.trim().startsWith(labels[name]||name)) n.classList.add('active'); });
   closeSidebar();
   const renders = {home:renderHome,pos:renderPDV,stock:renderStock,products:renderProducts,menu:renderMenu,employees:renderEmployees};
+  if (name !== 'home' && homeClockInterval) { clearInterval(homeClockInterval); homeClockInterval = null; }
   if (renders[name]) renders[name]();
   if (name === 'orders') { 
     renderOrdersFromData(allCompanyOrders); 
@@ -913,19 +947,44 @@ async function loadMPConfig() {
     if (doc.exists) {
       mpAccessToken = doc.data().mpAccessToken || '';
       mpRevenueZeroDate = doc.data().revenueZeroDate || null;
+      adminWhatsApp = doc.data().adminWhatsApp || '';
     }
   } catch(e) {}
 }
 
 async function selectPlan(plan, price, days) {
   pendingPlan = { plan, price, days };
-  showLoading('Carregando configurações de pagamento...');
+  showLoading('Carregando...');
   await loadMPConfig();
   hideLoading();
-  if (mpAccessToken) {
-    await initPixPayment(plan, price, days);
+  const planLabel = plan === 'mensal' ? `Plano Mensal (R$ ${price},00/mês)` : `Plano Anual (R$ ${price},00/ano)`;
+  if (adminWhatsApp) {
+    const msg = encodeURIComponent(`Olá, gostaria de adquirir o ${planLabel}.`);
+    const wNum = adminWhatsApp.replace(/\D/g,'');
+    window.open(`https://wa.me/${wNum}?text=${msg}`, '_blank');
+    showModal(
+      '<i class="fa-brands fa-whatsapp" style="color:#25d366"></i> Contato pelo WhatsApp',
+      `<div class="text-center" style="padding:16px 0">
+        <div style="font-size:56px;margin-bottom:14px">💬</div>
+        <h3 style="font-size:18px;font-weight:800;margin-bottom:8px">Mensagem enviada!</h3>
+        <div class="badge badge-${plan==='mensal'?'primary':'secondary'}" style="font-size:14px;padding:8px 20px;margin-bottom:12px">${planLabel}</div>
+        <p style="color:var(--gray);font-size:13px">Uma conversa foi aberta no WhatsApp com a mensagem do plano selecionado. Aguarde o contato para concluir seu cadastro.</p>
+      </div>`,
+      `<button class="btn btn-ghost w-full" onclick="closeModal()">Fechar</button>`,
+      false
+    );
   } else {
-    showManualPayment(plan, price, days);
+    // Fallback: sem WhatsApp configurado
+    showModal(
+      '<i class="fa-brands fa-whatsapp" style="color:#25d366"></i> Contratar Plano',
+      `<div class="text-center" style="padding:16px 0">
+        <div style="font-size:48px;margin-bottom:12px">📋</div>
+        <div class="badge badge-${plan==='mensal'?'primary':'secondary'}" style="font-size:14px;padding:8px 20px;margin-bottom:14px">${planLabel}</div>
+        <p style="color:var(--gray)">Para contratar, entre em contato com o administrador do sistema.</p>
+      </div>`,
+      `<button class="btn btn-ghost w-full" onclick="closeModal()">Fechar</button>`,
+      false
+    );
   }
 }
 
@@ -1161,7 +1220,8 @@ function doLogout() {
   if (dashboardInterval) { clearInterval(dashboardInterval); dashboardInterval = null; }
   if (ordersRefreshInterval) { clearInterval(ordersRefreshInterval); ordersRefreshInterval = null; }
   currentCompanyId = null; currentCompany = null; cart = []; selectedPayment = null;
-  reportsUnlocked = false; allCompanyOrders = [];
+  reportsUnlocked = false; employeesUnlocked = false; allCompanyOrders = [];
+  if (homeClockInterval) { clearInterval(homeClockInterval); homeClockInterval = null; }
   Object.values(chartInstances).forEach(c => { try { c.destroy(); } catch(e){} });
   chartInstances = {};
   showPage('page-login');
@@ -1350,29 +1410,36 @@ function showPasswordModal(id) {
 // ============================================================
 function showAdminConfigModal() {
   showModal('<i class="fa-solid fa-gear"></i> Configurações do Sistema',
-    `<div class="alert alert-warning mb-3"><i class="fa-solid fa-shield-alt"></i> O Access Token do Mercado Pago é necessário para o PIX automático.</div>
-    <div class="form-group">
-      <label>Mercado Pago Access Token (Production)</label>
-      <div class="pwd-wrap">
-        <input type="password" id="cfg-mp-token" class="form-control" value="${mpAccessToken}" placeholder="APP_USR-XXXXXXXXX...">
-        <button class="pwd-toggle" type="button" onclick="togglePwd('cfg-mp-token','eye-cfgmp')"><i class="fa-solid fa-eye" id="eye-cfgmp"></i></button>
-      </div>
-      <div style="font-size:11px;color:var(--gray);margin-top:4px">Obtenha em: mercadopago.com.br → Credenciais → Access Token</div>
+    `<div class="form-group">
+      <label><i class="fa-brands fa-whatsapp" style="color:#25d366"></i> WhatsApp para Contato de Planos *</label>
+      <input type="text" id="cfg-whatsapp" class="form-control" value="${adminWhatsApp}" placeholder="5511999999999 (com DDI e DDD, sem espaços)">
+      <div style="font-size:11px;color:var(--gray);margin-top:4px">Ex: 5511999999999 — Quando cliente clicar em um plano, será redirecionado para este WhatsApp.</div>
     </div>
-    <div class="alert alert-info"><i class="fa-solid fa-info-circle"></i> Com o token configurado, clientes pagam via PIX de qualquer banco e o dinheiro cai na sua conta do Mercado Pago. O cadastro só é liberado após confirmação automática do pagamento.</div>`,
+    <div style="border-top:1px solid var(--border);margin:14px 0;padding-top:14px">
+      <div style="font-size:12px;font-weight:700;color:var(--gray);text-transform:uppercase;margin-bottom:8px">Mercado Pago (opcional)</div>
+      <div class="form-group">
+        <label>Access Token (Produção)</label>
+        <div class="pwd-wrap">
+          <input type="password" id="cfg-mp-token" class="form-control" value="${mpAccessToken}" placeholder="APP_USR-XXXXXXXXX...">
+          <button class="pwd-toggle" type="button" onclick="togglePwd('cfg-mp-token','eye-cfgmp')"><i class="fa-solid fa-eye" id="eye-cfgmp"></i></button>
+        </div>
+        <div style="font-size:11px;color:var(--gray);margin-top:4px">Para verificação automática de pagamentos futuros.</div>
+      </div>
+    </div>`,
     `<button class="btn btn-ghost" onclick="closeModal()">Cancelar</button>
-     <button class="btn btn-primary" onclick="saveAdminConfig()"><i class="fa-solid fa-save"></i> Salvar Configurações</button>`,
+     <button class="btn btn-primary" onclick="saveAdminConfig()"><i class="fa-solid fa-save"></i> Salvar</button>`,
     false
   );
 }
 async function saveAdminConfig() {
+  const wa = document.getElementById('cfg-whatsapp').value.trim().replace(/\D/g,'');
   const token = document.getElementById('cfg-mp-token').value.trim();
   showLoading('Salvando...');
   try {
-    await db.collection('admin_config').doc('settings').set({ mpAccessToken: token }, { merge: true });
-    mpAccessToken = token;
+    await db.collection('admin_config').doc('settings').set({ adminWhatsApp: wa, mpAccessToken: token }, { merge: true });
+    adminWhatsApp = wa; mpAccessToken = token;
     hideLoading(); closeModal();
-    showToast(token ? 'PIX automático ativado! ✅' : 'Token removido.', 'success');
+    showToast('Configurações salvas! ✅','success');
   } catch(e) { hideLoading(); showToast('Erro: '+e.message,'danger'); }
 }
 function showZerarReceitasModal() {
@@ -1460,6 +1527,24 @@ function playNotificationSound() {
   } catch(e) {}
 }
 
+function playCustomerStatusSound(status) {
+  try {
+    if ('speechSynthesis' in window) {
+      window.speechSynthesis.cancel();
+      const msgs = {
+        confirmed: 'Pedido confirmado!',
+        preparing: 'Pedido sendo feito!',
+        delivered: 'Pedido entregue!',
+        cancelled: 'Pedido cancelado.'
+      };
+      const msg = msgs[status] || 'Status do pedido atualizado!';
+      const u = new SpeechSynthesisUtterance(msg);
+      u.lang = 'pt-BR'; u.rate = 0.88; u.pitch = 1.1; u.volume = 1;
+      window.speechSynthesis.speak(u);
+    }
+  } catch(e) {}
+}
+
 // ============================================================
 // HOME
 // ============================================================
@@ -1486,7 +1571,8 @@ function renderHome() {
     <div class="quick-card" onclick="showSection('menu')"><div class="qc-icon" style="background:#fef3c7;color:var(--warning)"><i class="fa-solid fa-utensils"></i></div><h3>Cardápio Digital</h3><p>Gerenciar cardápio</p></div>
     <div class="quick-card" onclick="showSection('orders')"><div class="qc-icon" style="background:#fee2e2;color:var(--danger)"><i class="fa-solid fa-receipt"></i></div><h3>Pedidos <span class="badge badge-danger">${pending}</span></h3><p>Pedidos de clientes</p></div>
     <div class="quick-card" onclick="requireAuth('reports')"><div class="qc-icon" style="background:#f0fdf4;color:var(--success)"><i class="fa-solid fa-chart-bar"></i></div><h3>Relatórios</h3><p>Análises financeiras</p></div>
-    <div class="quick-card" onclick="showSection('employees')"><div class="qc-icon" style="background:#e0f2fe;color:var(--info)"><i class="fa-solid fa-users"></i></div><h3>Funcionários</h3><p>Equipe e salários</p></div>`;
+    <div class="quick-card" onclick="requireAuthEmployees()"><div class="qc-icon" style="background:#e0f2fe;color:var(--info)"><i class="fa-solid fa-users"></i></div><h3>Funcionários</h3><p>Equipe e salários</p></div>`;
+  startHomeClock();
 }
 
 // ============================================================
@@ -1535,7 +1621,7 @@ function addToCart(pid) {
   } else {
     const item = cart.find(i=>i.id===pid && !(i.additionals&&i.additionals.length));
     if (item) { if(item.qty>=p.stock){showToast('Limite de estoque','warning');return;} item.qty++; }
-    else cart.push({id:pid, name:p.name, price:p.price, qty:1, additionals:[]});
+    else cart.push({id:pid, name:p.name, price:p.price, qty:1, additionals:[], deliveryFee:p.deliveryFee||0});
     renderCart();
     showToast(`${p.name} adicionado!`,'success');
   }
@@ -1583,7 +1669,7 @@ function confirmAddToCart(pid) {
     item.qty += qty;
   } else {
     if(qty>p.stock){showToast('Limite de estoque','warning');return;}
-    cart.push({id:pid, name:cartName, price:totalPrice, qty, additionals:selected, _sigKey:sigKey});
+    cart.push({id:pid, name:cartName, price:totalPrice, qty, additionals:selected, _sigKey:sigKey, deliveryFee:p.deliveryFee||0});
   }
   closeModal(); renderCart();
   showToast(`${p.name} adicionado!`,'success');
@@ -1604,8 +1690,14 @@ function renderCart() {
       <div class="qty-controls"><button class="qty-btn" onclick="updateQty('${item.id}',-1)">−</button><span class="qty-num">${item.qty}</span><button class="qty-btn" onclick="updateQty('${item.id}',1)">+</button></div>
       <div class="cart-item-price">${fmt(item.price*item.qty)}</div>
     </div>`).join('');
-  const total = cart.reduce((s,i)=>s+i.price*i.qty, 0);
-  document.getElementById('cart-subtotal').textContent = fmt(total);
+  const subtotal = cart.reduce((s,i)=>s+i.price*i.qty, 0);
+  const totalDelivery = cart.reduce((s,i)=>s+(i.deliveryFee||0)*i.qty, 0);
+  const total = subtotal + totalDelivery;
+  document.getElementById('cart-subtotal').textContent = fmt(subtotal);
+  const deliveryEl = document.getElementById('cart-delivery-row');
+  if (deliveryEl) deliveryEl.style.display = totalDelivery > 0 ? 'flex' : 'none';
+  const deliveryVal = document.getElementById('cart-delivery-val');
+  if (deliveryVal) deliveryVal.textContent = fmt(totalDelivery);
   document.getElementById('cart-total').textContent = fmt(total);
 }
 function selectPayment(el, method) {
@@ -1617,7 +1709,7 @@ function selectPayment(el, method) {
   else { tb.style.display='none'; }
 }
 function calcTroco() {
-  const total = cart.reduce((s,i)=>s+i.price*i.qty, 0);
+  const total = cart.reduce((s,i)=>s+i.price*i.qty+(i.deliveryFee||0)*i.qty, 0);
   const pago = parseFloat(document.getElementById('troco-input').value)||0;
   const troco = pago - total;
   const el = document.getElementById('troco-result');
@@ -1626,7 +1718,7 @@ function calcTroco() {
   else { el.innerHTML=`Troco: <strong>${fmt(troco)}</strong>`; }
 }
 function showSplitModal() {
-  const total = cart.reduce((s,i)=>s+i.price*i.qty, 0);
+  const total = cart.reduce((s,i)=>s+i.price*i.qty+(i.deliveryFee||0)*i.qty, 0);
   if (!total) { showToast('Carrinho vazio','warning'); return; }
   showModal('<i class="fa-solid fa-divide"></i> Dividir Conta',
     `<div class="text-center mb-4">
@@ -1663,7 +1755,9 @@ function updateSplitResult(total) {
 async function completeSale() {
   if (!cart.length) { showToast('Adicione produtos ao carrinho','warning'); return; }
   if (!selectedPayment) { showToast('Selecione a forma de pagamento','warning'); return; }
-  const total = cart.reduce((s,i)=>s+i.price*i.qty, 0);
+  const subtotalCart = cart.reduce((s,i)=>s+i.price*i.qty, 0);
+  const deliveryCart = cart.reduce((s,i)=>s+(i.deliveryFee||0)*i.qty, 0);
+  const total = subtotalCart + deliveryCart;
   let valorPago = total, troco = 0;
   if (selectedPayment==='dinheiro') {
     valorPago = parseFloat(document.getElementById('troco-input').value)||total;
@@ -1679,7 +1773,7 @@ async function completeSale() {
     cart.forEach(item => { const p=c.products.find(p=>p.id===item.id); if(p) p.stock=Math.max(0,p.stock-item.qty); });
     await db.collection('companies').doc(currentCompanyId).update({ products: c.products });
     const osNum = genOSNumber();
-    const sale = { companyId:currentCompanyId, items:[...cart], total, paymentMethod:selectedPayment, valorPago, troco, date:now.toISOString(), yearMonth:ym, orderNumber:osNum };
+    const sale = { companyId:currentCompanyId, items:[...cart], total, subtotal:subtotalCart, deliveryTotal:deliveryCart, paymentMethod:selectedPayment, valorPago, troco, date:now.toISOString(), yearMonth:ym, orderNumber:osNum };
     await db.collection('sales').add(sale);
     // Registra também em 'orders' para aparecer na seção Pedidos em tempo real
     await db.collection('orders').add({
@@ -1710,6 +1804,7 @@ async function completeSale() {
         <div style="font-size:11px;color:var(--gray);margin-bottom:10px">${now.toLocaleString('pt-BR')}</div>
         <div style="font-size:28px;font-weight:900;color:var(--success)">${fmt(total)}</div>
         <div style="color:var(--gray);margin-top:6px">${cart.length} item(s) · ${payNames[selectedPayment]}</div>
+        ${deliveryCart>0?`<div style="font-size:13px;color:var(--warning);font-weight:700;margin-top:6px"><i class="fa-solid fa-truck"></i> Taxa de Entrega: ${fmt(deliveryCart)}</div>`:''}
         ${troco>0?`<div class="alert alert-success mt-3" style="justify-content:center"><i class="fa-solid fa-money-bill-wave"></i> Troco para o cliente: <strong>${fmt(troco)}</strong></div>`:''}
       </div>`,
       `<button class="btn btn-primary w-full" onclick="closeModal()"><i class="fa-solid fa-plus"></i> Nova Venda</button>`,
@@ -1859,6 +1954,7 @@ function renderProducts() {
         <div class="product-card-cat">${p.category||'Sem categoria'}</div>
         <div class="product-card-price">${fmt(p.price)}</div>
         <div style="font-size:12px;color:var(--gray);margin-top:4px"><i class="fa-solid fa-boxes-stacked"></i> ${p.stock} em estoque · Custo: ${fmt(p.cost)}</div>
+        ${p.deliveryFee?`<div style="font-size:11px;color:var(--warning);font-weight:700;margin-top:2px"><i class="fa-solid fa-truck"></i> Entrega: ${fmt(p.deliveryFee)}</div>`:''}
         <div class="product-card-actions">
           <button class="btn btn-sm btn-primary flex-1" onclick="showProductModal('${p.id}')"><i class="fa-solid fa-edit"></i> Editar</button>
           <button class="btn btn-sm btn-danger" onclick="deleteProduct('${p.id}')"><i class="fa-solid fa-trash"></i></button>
@@ -1881,6 +1977,11 @@ function showProductModal(pid) {
     </div>
     <div class="form-group"><label>Estoque Mínimo</label><input type="number" id="prd-minstock" class="form-control" value="${p?.minStock||5}" min="0"></div>
     <div class="form-group"><label>Imagem (URL)</label><input type="text" id="prd-img" class="form-control" value="${p?.image||''}" placeholder="https://..."></div>
+    <div style="background:#fef3c7;border:2px solid #fcd34d;border-radius:10px;padding:14px;margin-top:12px">
+      <div style="font-size:12px;font-weight:700;color:var(--warning);margin-bottom:8px"><i class="fa-solid fa-truck"></i> Taxa de Entrega (opcional)</div>
+      <input type="number" id="prd-delivery" class="form-control" value="${p?.deliveryFee||0}" step="0.01" min="0" placeholder="R$ 0,00">
+      <div style="font-size:11px;color:var(--gray);margin-top:4px">Valor cobrado pela entrega deste produto. Aparece na OS do caixa e é somado ao total. Não pode ser alterado pelo cliente.</div>
+    </div>
     <div style="border-top:2px solid var(--border);margin-top:14px;padding-top:14px">
       <div style="font-size:12px;font-weight:700;color:var(--dark3);text-transform:uppercase;letter-spacing:.3px;margin-bottom:10px"><i class="fa-solid fa-plus-circle"></i> Adicionais no PDV</div>
       <div id="prd-adds-container">${(p?.additionals||[]).map((a,idx)=>`<div class="flex items-center gap-2 mb-2" id="prd-add-row-${idx}"><input type="text" class="form-control" id="prd-add-name-${idx}" value="${a.name}" placeholder="Ex: Bacon extra" style="flex:2"><input type="number" class="form-control" id="prd-add-price-${idx}" value="${a.price}" step="0.01" min="0" placeholder="R$" style="flex:1"><button class="btn btn-sm btn-danger" onclick="document.getElementById('prd-add-row-${idx}').remove()"><i class="fa-solid fa-times"></i></button></div>`).join('')}</div>
@@ -1901,7 +2002,7 @@ function addPrdAdditionalRow() {
   container.appendChild(row);
 }
 async function saveProduct(pid) {
-  const name=document.getElementById('prd-name').value.trim(), price=parseFloat(document.getElementById('prd-price').value)||0, cost=parseFloat(document.getElementById('prd-cost').value)||0, cat=document.getElementById('prd-cat').value.trim(), stock=parseInt(document.getElementById('prd-stock').value)||0, minStock=parseInt(document.getElementById('prd-minstock').value)||5, img=document.getElementById('prd-img').value.trim();
+  const name=document.getElementById('prd-name').value.trim(), price=parseFloat(document.getElementById('prd-price').value)||0, cost=parseFloat(document.getElementById('prd-cost').value)||0, cat=document.getElementById('prd-cat').value.trim(), stock=parseInt(document.getElementById('prd-stock').value)||0, minStock=parseInt(document.getElementById('prd-minstock').value)||5, img=document.getElementById('prd-img').value.trim(), deliveryFee=parseFloat(document.getElementById('prd-delivery').value)||0;
   if (!name||!price) { showToast('Nome e preço são obrigatórios','warning'); return; }
   const c = currentCompany;
   c.products = c.products||[];
@@ -1913,8 +2014,8 @@ async function saveProduct(pid) {
     const aPrice = parseFloat(document.getElementById(`prd-add-price-${idxStr}`)?.value)||0;
     if (aName) additionals.push({id:genId(), name:aName, price:aPrice});
   });
-  if (pid) { const p=c.products.find(p=>p.id===pid); if(p){p.name=name;p.price=price;p.cost=cost;p.category=cat;p.stock=stock;p.minStock=minStock;p.image=img;p.additionals=additionals;} }
-  else { c.products.push({id:genId(),name,price,cost,category:cat,stock,minStock,image:img,createdAt:new Date().toISOString(),additionals}); }
+  if (pid) { const p=c.products.find(p=>p.id===pid); if(p){p.name=name;p.price=price;p.cost=cost;p.category=cat;p.stock=stock;p.minStock=minStock;p.image=img;p.additionals=additionals;p.deliveryFee=deliveryFee;} }
+  else { c.products.push({id:genId(),name,price,cost,category:cat,stock,minStock,image:img,deliveryFee,createdAt:new Date().toISOString(),additionals}); }
   showLoading('Salvando...');
   try { await db.collection('companies').doc(currentCompanyId).update({products:c.products}); hideLoading(); closeModal(); renderProducts(); showToast(pid?'Produto atualizado!':'Produto cadastrado!','success'); }
   catch(e) { hideLoading(); showToast('Erro: '+e.message,'danger'); }
@@ -2112,7 +2213,7 @@ async function confirmDeleteAllOrders() {
 }
 async function updateOrderStatus(oid, status) {
   try {
-    await db.collection('orders').doc(oid).update({ status, updatedAt: new Date().toISOString() });
+    await db.collection('orders').doc(oid).update({ status, updatedAt: new Date().toISOString(), statusSoundPending: true });
     if (status==='delivered') {
       const o = allCompanyOrders.find(x=>x.id===oid);
       // Só cria venda se não veio do PDV (PDV já salvou em 'sales' ao finalizar)
@@ -2129,6 +2230,46 @@ async function updateOrderStatus(oid, status) {
 // ============================================================
 // REPORTS
 // ============================================================
+// ============================================================
+// EMPLOYEES AUTH GUARD
+// ============================================================
+function requireAuthEmployees() {
+  if (employeesUnlocked) { showSection('employees'); return; }
+  showModal('<i class="fa-solid fa-lock"></i> Acesso Restrito — Funcionários',
+    `<p style="color:var(--gray);margin-bottom:14px">Digite a senha da empresa para acessar a área de funcionários.</p>
+    <div class="form-group"><label>Senha</label><div class="pwd-wrap"><input type="password" id="emp-auth-pw" class="form-control" placeholder="••••••••" onkeydown="if(event.key==='Enter')checkEmployeeAuth()"><button class="pwd-toggle" type="button" onclick="togglePwd('emp-auth-pw','eye-empauthpw')"><i class="fa-solid fa-eye" id="eye-empauthpw"></i></button></div></div>`,
+    `<button class="btn btn-ghost" onclick="closeModal()">Cancelar</button><button class="btn btn-primary" onclick="checkEmployeeAuth()"><i class="fa-solid fa-unlock"></i> Entrar</button>`,
+    false
+  );
+}
+function checkEmployeeAuth() {
+  const pw = document.getElementById('emp-auth-pw').value;
+  if (pw === currentCompany.password) {
+    employeesUnlocked = true;
+    closeModal();
+    showSection('employees');
+  } else {
+    showToast('Senha incorreta','danger');
+  }
+}
+// ============================================================
+// HOME CLOCK
+// ============================================================
+function startHomeClock() {
+  if (homeClockInterval) clearInterval(homeClockInterval);
+  function updateClock() {
+    const now = new Date();
+    const hh = String(now.getHours()).padStart(2,'0');
+    const mi = String(now.getMinutes()).padStart(2,'0');
+    const ss = String(now.getSeconds()).padStart(2,'0');
+    const elHM = document.getElementById('home-clock-hm');
+    const elSec = document.getElementById('home-clock-sec');
+    if (elHM) elHM.textContent = `${hh}:${mi}`;
+    if (elSec) elSec.textContent = `:${ss}`;
+  }
+  updateClock();
+  homeClockInterval = setInterval(updateClock, 1000);
+}
 function requireAuth(section) {
   if (reportsUnlocked) { showSection(section); return; }
   showModal('<i class="fa-solid fa-lock"></i> Acesso Restrito — Relatórios',
@@ -2526,6 +2667,16 @@ function setupCustomerOrdersListener() {
   if (customerOrdersUnsubscribe) customerOrdersUnsubscribe();
   customerOrdersUnsubscribe = db.collection('orders').where('customerId','==',currentCustomer.id).where('companyId','==',pubCompanyId).onSnapshot(snap => {
     const orders = snap.docs.map(d=>({id:d.id,...d.data()})).sort((a,b)=>new Date(b.date)-new Date(a.date));
+    // Detect status changes and play voice notification
+    orders.forEach(o => {
+      const prev = prevOrderStatuses[o.id];
+      if (prev && prev !== o.status && o.statusSoundPending) {
+        playCustomerStatusSound(o.status);
+        // Clear the sound flag so it doesn't repeat
+        db.collection('orders').doc(o.id).update({ statusSoundPending: false }).catch(()=>{});
+      }
+      prevOrderStatuses[o.id] = o.status;
+    });
     renderMyOrders(orders);
   });
 }
