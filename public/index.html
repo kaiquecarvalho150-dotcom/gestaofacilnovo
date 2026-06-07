@@ -447,7 +447,7 @@ table tr:hover td{background:#fafbfc}
     <div class="plan-card">
       <div class="plan-icon">📅</div>
       <div class="plan-name">Plano Mensal</div>
-      <div style="margin:14px 0"><div class="plan-price-amount">R$30</div><div class="plan-price-period">por mês</div></div>
+      <div style="margin:14px 0"><div class="plan-price-amount">R$29,90</div><div class="plan-price-period">por mês</div></div>
       <ul class="plan-features">
         <li><i class="fa-solid fa-check-circle"></i> Sistema completo de vendas (PDV)</li>
         <li><i class="fa-solid fa-check-circle"></i> Controle de estoque integrado</li>
@@ -457,14 +457,14 @@ table tr:hover td{background:#fafbfc}
         <li><i class="fa-solid fa-check-circle"></i> Gestão de funcionários</li>
         <li><i class="fa-solid fa-check-circle"></i> 30 dias de acesso</li>
       </ul>
-      <button class="btn btn-outline w-full btn-lg" onclick="selectPlan('mensal',30,30)">Contratar Mensal</button>
+      <button class="btn btn-outline w-full btn-lg" onclick="selectPlan('mensal',29.90,30)">Contratar Mensal</button>
     </div>
     <div class="plan-card featured">
       <div class="plan-icon">🚀</div>
       <div class="plan-name">Plano Anual</div>
       <div style="margin:14px 0">
         <div style="font-size:13px;color:var(--gray);text-decoration:line-through">R$360/ano</div>
-        <div class="plan-price-amount">R$260</div>
+        <div class="plan-price-amount">R$259,90</div>
         <div class="plan-price-period">por ano</div>
         <div class="plan-save">💰 Economize R$100!</div>
       </div>
@@ -475,7 +475,7 @@ table tr:hover td{background:#fafbfc}
         <li><i class="fa-solid fa-check-circle"></i> Backup de dados na nuvem</li>
         <li><i class="fa-solid fa-star"></i> Melhor custo-benefício</li>
       </ul>
-      <button class="btn btn-primary w-full btn-lg" onclick="selectPlan('anual',260,365)">Contratar Anual</button>
+      <button class="btn btn-primary w-full btn-lg" onclick="selectPlan('anual',259.90,365)">Contratar Anual</button>
     </div>
   </div>
   <div class="text-center"><button class="btn btn-ghost" onclick="showPage('page-login')"><i class="fa-solid fa-arrow-left"></i> Voltar ao Login</button></div>
@@ -484,7 +484,7 @@ table tr:hover td{background:#fafbfc}
 <!-- ========= PAGE: REGISTER ========= -->
 <div id="page-register" class="hidden">
   <div class="register-box">
-    <div id="reg-plan-badge" class="reg-plan-badge">📅 Plano Mensal — R$30/mês</div>
+    <div id="reg-plan-badge" class="reg-plan-badge">📅 Plano Mensal — R$29,90/mês</div>
     <h2 style="font-size:22px;font-weight:800;margin-bottom:6px">Dados da Empresa</h2>
     <p style="color:var(--gray);font-size:13px;margin-bottom:24px">Preencha as informações da sua empresa para concluir o cadastro.</p>
     <div class="form-row">
@@ -640,6 +640,7 @@ table tr:hover td{background:#fafbfc}
               <div class="flex gap-2">
                 <button class="btn btn-sm btn-warning" onclick="showSetDeliveryFeeModal()" title="Taxa de Entrega"><i class="fa-solid fa-truck"></i></button>
                 <button class="btn btn-sm" style="background:#f1f5f9;color:var(--dark3)" onclick="printOS()" title="Reimprimir última OS"><i class="fa-solid fa-print"></i></button>
+                <button class="btn btn-sm" style="background:#f1f5f9;color:var(--dark3)" onclick="showDailyHistory()" title="Histórico do dia"><i class="fa-solid fa-clock-rotate-left"></i></button>
                 <button class="btn btn-sm btn-ghost" onclick="clearCart()"><i class="fa-solid fa-trash"></i></button>
               </div>
             </div>
@@ -651,6 +652,9 @@ table tr:hover td{background:#fafbfc}
                 <span id="cart-delivery-val">R$ 0,00</span>
               </div>
               <div class="cart-total-row big"><span>Total</span><span id="cart-total">R$ 0,00</span></div>
+              <div class="form-group mb-2">
+                <input type="text" id="pdv-customer-name" class="form-control" placeholder="👤 Nome do cliente (opcional)" style="font-size:13px">
+              </div>
               <div style="font-size:12px;font-weight:700;color:var(--gray);margin-bottom:8px;text-transform:uppercase;letter-spacing:.3px">Forma de Pagamento</div>
               <div class="pay-btns">
                 <div class="pay-btn" onclick="selectPayment(this,'dinheiro')"><i class="fa-solid fa-money-bill"></i><br>Dinheiro</div>
@@ -698,6 +702,7 @@ table tr:hover td{background:#fafbfc}
         </div>
         <div class="flex items-center justify-between mb-4 flex-wrap gap-3">
           <div style="font-size:15px;font-weight:700">Itens do Cardápio</div>
+          <button class="btn btn-ghost" onclick="showGlobalAdditionalsModal()"><i class="fa-solid fa-list-check"></i> Adicionais Globais</button>
           <button class="btn btn-primary" onclick="showMenuItemModal()"><i class="fa-solid fa-plus"></i> Adicionar Item</button>
         </div>
         <div class="products-grid" id="menu-grid"></div>
@@ -873,12 +878,16 @@ let mpPollInterval = null;
 let pixTimerInterval = null;
 let pendingPaymentId = null;
 let adminWhatsApp = '';
+let adminLogoUrl = '';
 // Auth guards
 let employeesUnlocked = false;
 // PDV delivery fee (global, set by company)
 let pdvDeliveryFee = 0;
 // Last sale for reprint
 let lastSaleData = null;
+// Speech unlock flag (mobile fix)
+let speechUnlocked = false;
+let sharedAudioCtx = null;
 // Clock
 let homeClockInterval = null;
 // Customer order tracking
@@ -942,6 +951,28 @@ function closeModal() { document.getElementById('modal-overlay').classList.add('
 function handleModalOverlayClick(e) { if(e.target.id==='modal-overlay') closeModal(); }
 
 // ============================================================
+// MOBILE SOUND UNLOCK (runs immediately on load)
+// ============================================================
+function unlockAudio() {
+  // Unlock Web Speech API on mobile
+  if (!speechUnlocked && 'speechSynthesis' in window) {
+    const u = new SpeechSynthesisUtterance('');
+    u.volume = 0; u.rate = 10;
+    window.speechSynthesis.speak(u);
+    speechUnlocked = true;
+  }
+  // Unlock AudioContext
+  if (!sharedAudioCtx) {
+    sharedAudioCtx = new (window.AudioContext || window.webkitAudioContext)();
+  }
+  if (sharedAudioCtx.state === 'suspended') sharedAudioCtx.resume();
+}
+// Unlock on any user interaction
+['touchstart','touchend','click','keydown'].forEach(ev =>
+  document.addEventListener(ev, unlockAudio, { passive: true })
+);
+
+// ============================================================
 // NAVIGATION
 // ============================================================
 function showPage(id) {
@@ -987,6 +1018,7 @@ async function loadMPConfig() {
       mpAccessToken = doc.data().mpAccessToken || '';
       mpRevenueZeroDate = doc.data().revenueZeroDate || null;
       adminWhatsApp = doc.data().adminWhatsApp || '';
+      adminLogoUrl = doc.data().logoUrl || '';
     }
   } catch(e) {}
 }
@@ -1162,7 +1194,7 @@ function showManualPayment(plan, price, days) {
       <div style="font-size:56px;margin-bottom:16px">💳</div>
       <h3 style="font-size:20px;font-weight:800;margin-bottom:8px">Pagamento pelo Mercado Pago</h3>
       <p style="color:var(--gray)">Uma nova aba foi aberta com o link de pagamento seguro.</p>
-      <div class="alert alert-info mt-3"><i class="fa-solid fa-info-circle"></i> Plano <strong>${plan==='mensal'?'Mensal — R$ 30,00':'Anual — R$ 260,00'}</strong> · ${days} dias de acesso</div>
+      <div class="alert alert-info mt-3"><i class="fa-solid fa-info-circle"></i> Plano <strong>${plan==='mensal'?'Mensal — R$ 29,90':'Anual — R$ 259,90'}</strong> · ${days} dias de acesso</div>
       <p style="color:var(--gray);font-size:13px;margin-top:12px">Após concluir o pagamento, clique em "Já Paguei" abaixo.</p>
     </div>`,
     `<button class="btn btn-ghost" onclick="closeModal()">Cancelar</button>
@@ -1172,7 +1204,7 @@ function showManualPayment(plan, price, days) {
 }
 function goRegister() {
   if (!pendingPlan) return;
-  document.getElementById('reg-plan-badge').textContent = pendingPlan.plan==='mensal' ? '📅 Plano Mensal — R$30/mês' : '🚀 Plano Anual — R$260/ano';
+  document.getElementById('reg-plan-badge').textContent = pendingPlan.plan==='mensal' ? '📅 Plano Mensal — R$29,90/mês' : '🚀 Plano Anual — R$259,90/ano';
   showPage('page-register');
 }
 async function finishRegister() {
@@ -1338,7 +1370,7 @@ function showCreateCompanyModal() {
     <div class="form-group"><label>Endereço</label><input type="text" id="nc-address" class="form-control"></div>
     <div class="form-row"><div class="form-group"><label>E-mail *</label><input type="email" id="nc-email" class="form-control"></div>
     <div class="form-group"><label>Senha *</label><div class="pwd-wrap"><input type="password" id="nc-password" class="form-control"><button class="pwd-toggle" type="button" onclick="togglePwd('nc-password','eye-ncpwd')"><i class="fa-solid fa-eye" id="eye-ncpwd"></i></button></div></div></div>
-    <div class="form-row"><div class="form-group"><label>Plano *</label><select id="nc-plan" class="form-control"><option value="mensal">Mensal — R$ 30/mês</option><option value="anual">Anual — R$ 260/ano</option></select></div>
+    <div class="form-row"><div class="form-group"><label>Plano *</label><select id="nc-plan" class="form-control"><option value="mensal">Mensal — R$ 29,90/mês</option><option value="anual">Anual — R$ 259,90/ano</option></select></div>
     <div class="form-group"><label>Dias de Acesso *</label><input type="number" id="nc-days" class="form-control" value="30" min="1"></div></div>`,
     `<button class="btn btn-ghost" onclick="closeModal()">Cancelar</button><button class="btn btn-primary" onclick="createCompanyAdmin()"><i class="fa-solid fa-save"></i> Criar</button>`,
     true
@@ -1352,7 +1384,7 @@ async function createCompanyAdmin() {
     const snap = await db.collection('companies').where('email','==',em).get();
     if (!snap.empty) { hideLoading(); showToast('E-mail já cadastrado','danger'); return; }
     const id = genId();
-    const company = { companyName:co, ownerName:own, cnpj, phone:ph, address:addr, email:em, password:pw, plan, planPrice:plan==='mensal'?30:260, accessDays:days, startDate:new Date().toISOString(), createdAt:new Date().toISOString(), blocked:false, products:[], menuItems:[], employees:[], expenses:[] };
+    const company = { companyName:co, ownerName:own, cnpj, phone:ph, address:addr, email:em, password:pw, plan, planPrice:plan==='mensal'?29.90:259.90, accessDays:days, startDate:new Date().toISOString(), createdAt:new Date().toISOString(), blocked:false, products:[], menuItems:[], employees:[], expenses:[] };
     await db.collection('companies').doc(id).set(company);
     allCompanies.push({ id, ...company });
     hideLoading(); closeModal();
@@ -1475,8 +1507,9 @@ async function saveAdminConfig() {
   const token = document.getElementById('cfg-mp-token').value.trim();
   showLoading('Salvando...');
   try {
-    await db.collection('admin_config').doc('settings').set({ adminWhatsApp: wa, mpAccessToken: token }, { merge: true });
-    adminWhatsApp = wa; mpAccessToken = token;
+    const logo = document.getElementById('cfg-logo-url')?.value.trim()||'';
+    await db.collection('admin_config').doc('settings').set({ adminWhatsApp: wa, mpAccessToken: token, logoUrl: logo }, { merge: true });
+    adminWhatsApp = wa; mpAccessToken = token; adminLogoUrl = logo;
     hideLoading(); closeModal();
     showToast('Configurações salvas! ✅','success');
   } catch(e) { hideLoading(); showToast('Erro: '+e.message,'danger'); }
@@ -1511,6 +1544,7 @@ async function confirmZerarReceitas() {
 function initDashboard() {
   const c = currentCompany; if(!c) return;
   pdvDeliveryFee = parseFloat(c.pdvDeliveryFee)||0;
+  adminLogoUrl = c.logoUrl || adminLogoUrl;
   document.getElementById('sb-company-name').textContent = c.companyName;
   const days = getDaysRemaining(c);
   document.getElementById('sb-plan-info').innerHTML = `<i class="fa-solid fa-calendar-alt"></i> ${c.plan==='mensal'?'Mensal':'Anual'} · ${days} dias`;
@@ -1551,24 +1585,32 @@ function initDashboard() {
 // Função para tocar o som de notificação
 function playNotificationSound() {
   try {
+    unlockAudio();
     if ('speechSynthesis' in window) {
       window.speechSynthesis.cancel();
       const u = new SpeechSynthesisUtterance('Mais um pedido');
       u.lang = 'pt-BR'; u.rate = 0.88; u.pitch = 1.1; u.volume = 1;
       window.speechSynthesis.speak(u);
-    } else {
-      const ac = new (window.AudioContext || window.webkitAudioContext)();
-      const osc = ac.createOscillator(); const gn = ac.createGain();
-      osc.connect(gn); gn.connect(ac.destination);
-      osc.frequency.value = 880; osc.type = 'sine';
-      gn.gain.setValueAtTime(0.4, ac.currentTime);
-      osc.start(ac.currentTime); osc.stop(ac.currentTime + 0.4);
+    }
+    // Also play a beep via AudioContext (works reliably on mobile)
+    if (sharedAudioCtx) {
+      const osc = sharedAudioCtx.createOscillator();
+      const gn = sharedAudioCtx.createGain();
+      osc.connect(gn); gn.connect(sharedAudioCtx.destination);
+      osc.frequency.setValueAtTime(880, sharedAudioCtx.currentTime);
+      osc.frequency.setValueAtTime(1100, sharedAudioCtx.currentTime + 0.15);
+      osc.type = 'sine';
+      gn.gain.setValueAtTime(0.5, sharedAudioCtx.currentTime);
+      gn.gain.exponentialRampToValueAtTime(0.001, sharedAudioCtx.currentTime + 0.6);
+      osc.start(sharedAudioCtx.currentTime);
+      osc.stop(sharedAudioCtx.currentTime + 0.6);
     }
   } catch(e) {}
 }
 
 function playCustomerStatusSound(status) {
   try {
+    unlockAudio();
     if ('speechSynthesis' in window) {
       window.speechSynthesis.cancel();
       const msgs = {
@@ -1577,10 +1619,23 @@ function playCustomerStatusSound(status) {
         delivered: 'Pedido entregue!',
         cancelled: 'Pedido cancelado.'
       };
-      const msg = msgs[status] || 'Status do pedido atualizado!';
+      const msg = msgs[status] || 'Status atualizado!';
       const u = new SpeechSynthesisUtterance(msg);
       u.lang = 'pt-BR'; u.rate = 0.88; u.pitch = 1.1; u.volume = 1;
       window.speechSynthesis.speak(u);
+    }
+    // Beep via AudioContext for mobile reliability
+    if (sharedAudioCtx) {
+      const freq = {confirmed:880, preparing:660, delivered:1100, cancelled:440};
+      const osc = sharedAudioCtx.createOscillator();
+      const gn = sharedAudioCtx.createGain();
+      osc.connect(gn); gn.connect(sharedAudioCtx.destination);
+      osc.frequency.value = freq[status]||880;
+      osc.type = 'sine';
+      gn.gain.setValueAtTime(0.4, sharedAudioCtx.currentTime);
+      gn.gain.exponentialRampToValueAtTime(0.001, sharedAudioCtx.currentTime + 0.5);
+      osc.start(sharedAudioCtx.currentTime);
+      osc.stop(sharedAudioCtx.currentTime + 0.5);
     }
   } catch(e) {}
 }
@@ -1620,8 +1675,11 @@ function renderHome() {
 // ============================================================
 function renderPDV() {
   const c = currentCompany; if(!c) return;
+  // Merge products + menuItems categories
   const prods = c.products||[];
-  const cats = ['Todos', ...new Set(prods.map(p=>p.category).filter(Boolean))];
+  const menus = (c.menuItems||[]).filter(mi => !prods.some(p=>p.id===mi.id));
+  const allItems = [...prods, ...menus];
+  const cats = ['Todos', ...new Set(allItems.map(p=>p.category).filter(Boolean))];
   document.getElementById('pdv-cats').innerHTML = cats.map((cat,i) =>
     `<div class="filter-chip ${i===0?'active':''}" onclick="setPDVCat(this,'${cat}')">${cat}</div>`).join('');
   renderPDVGrid();
@@ -1636,13 +1694,21 @@ function setPDVCat(el, cat) {
 }
 function renderPDVGrid() {
   const c = currentCompany; if(!c) return;
+  // Products with stock tracking
   let prods = c.products||[];
+  // Menu items that aren't already in products
+  let menus = (c.menuItems||[]).filter(mi => !prods.some(p=>p.id===mi.id));
   const q = document.getElementById('pdv-search')?.value.toLowerCase()||'';
-  if (pdvActiveCat!=='Todos') prods = prods.filter(p=>p.category===pdvActiveCat);
-  if (q) prods = prods.filter(p=>p.name.toLowerCase().includes(q));
+  if (pdvActiveCat!=='Todos') {
+    prods = prods.filter(p=>p.category===pdvActiveCat);
+    menus = menus.filter(m=>m.category===pdvActiveCat);
+  }
+  if (q) {
+    prods = prods.filter(p=>p.name.toLowerCase().includes(q));
+    menus = menus.filter(m=>m.name.toLowerCase().includes(q));
+  }
   const g = document.getElementById('pdv-grid');
-  if (!prods.length) { g.innerHTML = '<div style="grid-column:1/-1;text-align:center;padding:40px;color:var(--gray)">Nenhum produto encontrado</div>'; return; }
-  g.innerHTML = prods.map(p => {
+  const prodCards = prods.map(p => {
     const oos = p.stock<=0;
     return `<div class="pdv-card ${oos?'out-of-stock':''}" onclick="${oos?"showToast('Produto sem estoque','warning')":`addToCart('${p.id}')`}">
       ${p.image?`<img src="${p.image}" class="pdv-card-img">`:`<div class="pdv-card-no-img">${getCategoryEmoji(p.category)}</div>`}
@@ -1650,7 +1716,33 @@ function renderPDVGrid() {
       <div class="pdv-card-price">${fmt(p.price)}</div>
       <div class="pdv-card-stock">Estoque: ${p.stock}${oos?' · <span style="color:var(--danger)">Esgotado</span>':''}</div>
     </div>`;
-  }).join('');
+  });
+  const menuCards = menus.map(m => `
+    <div class="pdv-card" onclick="addMenuItemToCart('${m.id}')" style="border-color:#e0f2fe">
+      ${m.image?`<img src="${m.image}" class="pdv-card-img">`:`<div class="pdv-card-no-img">${getCategoryEmoji(m.category)}</div>`}
+      <div class="pdv-card-name">${m.name}</div>
+      <div class="pdv-card-price">${fmt(m.price)}</div>
+      <div class="pdv-card-stock" style="color:var(--info)">🍽️ Cardápio</div>
+    </div>`);
+  const all = [...prodCards, ...menuCards];
+  if (!all.length) { g.innerHTML = '<div style="grid-column:1/-1;text-align:center;padding:40px;color:var(--gray)">Nenhum produto encontrado</div>'; return; }
+  g.innerHTML = all.join('');
+}
+function addMenuItemToCart(mid) {
+  const c = currentCompany;
+  const m = (c.menuItems||[]).find(m=>m.id===mid); if(!m) return;
+  const globalAdds = c.globalAdditionals||[];
+  const cartKey = 'menu_'+mid;
+  if (globalAdds.length > 0) {
+    showAddToCartModal(mid, true);
+  } else {
+    const item = cart.find(i=>i.id===cartKey && !(i.additionals&&i.additionals.length));
+    if (item) item.qty++;
+    else cart.push({id:cartKey, name:m.name, price:m.price, qty:1, additionals:[], fromMenu:true});
+    renderCart();
+    showToast(`${m.name} adicionado!`,'success');
+    if (window.innerWidth<=768) switchPDVTab('carrinho');
+  }
 }
 function addToCart(pid) {
   const c = currentCompany;
@@ -1680,7 +1772,8 @@ function showAddToCartModal(pid) {
       <span style="color:var(--primary);font-weight:700;white-space:nowrap">+ ${fmt(a.price)}</span>
     </div>`).join('');
   showModal(`<i class="fa-solid fa-plus-circle"></i> ${p.name}`,
-    `<div style="font-size:20px;font-weight:900;color:var(--primary);margin-bottom:14px">${fmt(p.price)}</div>
+    `<input type="hidden" id="atc-from-menu" value="${fromMenu?'1':'0'}">
+    <div style="font-size:20px;font-weight:900;color:var(--primary);margin-bottom:14px">${fmt(p.price)}</div>
     ${addList?`<div style="margin-bottom:16px"><div style="font-size:12px;font-weight:700;color:var(--gray);text-transform:uppercase;letter-spacing:.3px;margin-bottom:8px">Adicionais disponíveis</div>${addList}</div>`:''}
     <div class="form-group mt-3"><label>Quantidade</label>
       <div class="flex items-center gap-3">
@@ -1804,6 +1897,7 @@ function updateSplitResult(total) {
 async function completeSale() {
   if (!cart.length) { showToast('Adicione produtos ao carrinho','warning'); return; }
   if (!selectedPayment) { showToast('Selecione a forma de pagamento','warning'); return; }
+  const pdvCustomerName = document.getElementById('pdv-customer-name')?.value.trim() || '';
   const subtotalCart = cart.reduce((s,i)=>s+i.price*i.qty, 0);
   const deliveryCart = pdvDeliveryFee > 0 && cart.length > 0 ? pdvDeliveryFee : 0;
   const total = subtotalCart + deliveryCart;
@@ -1822,13 +1916,13 @@ async function completeSale() {
     cart.forEach(item => { const p=c.products.find(p=>p.id===item.id); if(p) p.stock=Math.max(0,p.stock-item.qty); });
     await db.collection('companies').doc(currentCompanyId).update({ products: c.products });
     const osNum = genOSNumber();
-    const sale = { companyId:currentCompanyId, items:[...cart], total, subtotal:subtotalCart, deliveryTotal:deliveryCart, paymentMethod:selectedPayment, valorPago, troco, date:now.toISOString(), yearMonth:ym, orderNumber:osNum };
+    const sale = { companyId:currentCompanyId, items:[...cart], total, subtotal:subtotalCart, deliveryTotal:deliveryCart, paymentMethod:selectedPayment, valorPago, troco, date:now.toISOString(), yearMonth:ym, orderNumber:osNum, customerName:pdvCustomerName };
     await db.collection('sales').add(sale);
     // Registra também em 'orders' para aparecer na seção Pedidos em tempo real
     await db.collection('orders').add({
       companyId: currentCompanyId,
       customerId: null,
-      customerName: 'Balcão (Caixa)',
+      customerName: pdvCustomerName || 'Balcão (Caixa)',
       customerEmail: '',
       address: '',
       houseNumber: '',
@@ -1847,7 +1941,7 @@ async function completeSale() {
     hideLoading();
     const payNames = {dinheiro:'Dinheiro',cartao:'Cartão',pix:'Pix'};
     // Store for reprint
-    lastSaleData = { items:[...cart], total, subtotal:subtotalCart, deliveryTotal:deliveryCart, paymentMethod:selectedPayment, valorPago, troco, date:now.toISOString(), orderNumber:osNum };
+    lastSaleData = { items:[...cart], total, subtotal:subtotalCart, deliveryTotal:deliveryCart, paymentMethod:selectedPayment, valorPago, troco, date:now.toISOString(), orderNumber:osNum, customerName:pdvCustomerName };
     showModal('<i class="fa-solid fa-check-circle" style="color:var(--success)"></i> Venda Registrada!',
       `<div class="text-center" style="padding:12px 0">
         <div style="font-size:48px;margin-bottom:10px">✅</div>
@@ -1867,6 +1961,7 @@ async function completeSale() {
     cart=[]; selectedPayment=null;
     document.querySelectorAll('.pay-btn').forEach(b=>b.classList.remove('selected'));
     document.getElementById('troco-box').style.display='none';
+    const custField = document.getElementById('pdv-customer-name'); if(custField) custField.value='';
     renderCart(); renderPDVGrid();
   } catch(e) { hideLoading(); showToast('Erro ao registrar venda: '+e.message,'danger'); }
 }
@@ -1879,6 +1974,8 @@ function printOS(data) {
   if (!data) { showToast('Nenhuma venda registrada para imprimir','warning'); return; }
   const c = currentCompany || {};
   const payNames = {dinheiro:'Dinheiro',cartao:'Cartão / Débito',pix:'PIX'};
+  const customerName = data.customerName || '';
+  const logoUrl = adminLogoUrl || '';
   const dateObj = new Date(data.date);
   const dateStr = dateObj.toLocaleDateString('pt-BR');
   const timeStr = dateObj.toLocaleTimeString('pt-BR',{hour:'2-digit',minute:'2-digit',second:'2-digit'});
@@ -1943,6 +2040,7 @@ function printOS(data) {
 <body>
 
   <!-- CABEÇALHO -->
+  ${logoUrl ? `<div class="center" style="margin-bottom:8px"><img src="${logoUrl}" style="max-width:130px;max-height:90px;object-fit:contain" onerror="this.style.display='none'"></div>` : ''}
   <div class="center bold big">${c.companyName||'ESTABELECIMENTO'}</div>
   ${c.cnpj ? `<div class="center small">CNPJ: ${c.cnpj}</div>` : ''}
   ${c.address ? `<div class="center small">${c.address}</div>` : ''}
@@ -1953,6 +2051,7 @@ function printOS(data) {
   <!-- OS / DATA -->
   <div class="center bold" style="font-size:13px;letter-spacing:1px">${data.orderNumber}</div>
   <div class="center small">${dateStr} &nbsp;|&nbsp; ${timeStr}</div>
+  ${customerName ? `<div class="center bold" style="margin-top:4px;font-size:12px">Cliente: ${customerName}</div>` : ''}
 
   <div class="dashed"></div>
 
@@ -2028,6 +2127,55 @@ function printOS(data) {
 // Formata valor para impressão (sem emoji do R$, usando R$)
 function fmtPrint(v) {
   return 'R$ ' + Number(v||0).toLocaleString('pt-BR',{minimumFractionDigits:2,maximumFractionDigits:2});
+}
+
+// ============================================================
+// DAILY SALES HISTORY
+// ============================================================
+async function showDailyHistory() {
+  showLoading('Carregando histórico...');
+  try {
+    const today = new Date();
+    const ym = ymFromDate(today);
+    const snap = await db.collection('sales')
+      .where('companyId','==',currentCompanyId)
+      .where('yearMonth','==',ym)
+      .get();
+    const todayStr = today.toDateString();
+    const sales = snap.docs.map(d=>({id:d.id,...d.data()}))
+      .filter(s => new Date(s.date).toDateString() === todayStr)
+      .sort((a,b) => new Date(b.date) - new Date(a.date));
+    hideLoading();
+    if (!sales.length) { showToast('Nenhuma venda hoje ainda.','info'); return; }
+    const payIcons = {dinheiro:'💵',cartao:'💳',pix:'📱'};
+    showModal('<i class="fa-solid fa-clock-rotate-left"></i> Histórico de Vendas — Hoje',
+      `<div style="max-height:65vh;overflow-y:auto">
+        <div style="font-size:13px;color:var(--gray);margin-bottom:10px">${sales.length} venda(s) hoje · Total: <strong style="color:var(--success)">${fmt(sales.reduce((s,x)=>s+x.total,0))}</strong></div>
+        ${sales.map((s,i) => {
+          const t = new Date(s.date);
+          const timeStr = t.toLocaleTimeString('pt-BR',{hour:'2-digit',minute:'2-digit'});
+          return `<div style="background:#f8fafc;border-radius:10px;padding:12px;margin-bottom:8px;border:1px solid var(--border)">
+            <div style="display:flex;align-items:center;justify-content:space-between;margin-bottom:6px">
+              <div>
+                <div style="font-size:11px;font-family:monospace;font-weight:700;color:var(--primary)">${s.orderNumber||s.id}</div>
+                <div style="font-size:11px;color:var(--gray)">${timeStr}${s.customerName?' · '+s.customerName:''}</div>
+              </div>
+              <div style="text-align:right">
+                <div style="font-size:15px;font-weight:900;color:var(--success)">${fmt(s.total)}</div>
+                <div style="font-size:11px;color:var(--gray)">${payIcons[s.paymentMethod]||''} ${s.paymentMethod||''}</div>
+              </div>
+            </div>
+            <div style="font-size:11px;color:var(--dark3);margin-bottom:8px">${(s.items||[]).map(i=>`${i.qty}x ${i.name}`).join(', ')}</div>
+            <button class="btn btn-sm btn-ghost w-full" onclick="printOS(${JSON.stringify(s).replace(/"/g,'&quot;')})">
+              <i class="fa-solid fa-print"></i> Reimprimir OS
+            </button>
+          </div>`;
+        }).join('')}
+      </div>`,
+      `<button class="btn btn-primary w-full" onclick="closeModal()">Fechar</button>`,
+      false
+    );
+  } catch(e) { hideLoading(); showToast('Erro: '+e.message,'danger'); }
 }
 
 // ============================================================
@@ -2139,6 +2287,7 @@ function showAddStockModal() {
         <div class="form-group"><label>Quantidade Inicial</label><input type="number" id="nsi-stock" class="form-control" value="0" min="0"></div>
       </div>
       <div class="form-group"><label>Estoque Mínimo</label><input type="number" id="nsi-minstock" class="form-control" value="5" min="0"></div>
+      <div class="form-group"><label>Imagem (URL)</label><input type="text" id="nsi-img" class="form-control" placeholder="https://..."></div>
       <button class="btn btn-primary w-full" onclick="doAddNewStockItem()"><i class="fa-solid fa-save"></i> Cadastrar e Adicionar</button>
     </div>`,
     `<button class="btn btn-ghost w-full" onclick="closeModal()">Fechar</button>`,
@@ -2158,10 +2307,11 @@ async function doAddNewStockItem() {
   const cat=document.getElementById('nsi-cat').value.trim();
   const stock=parseInt(document.getElementById('nsi-stock').value)||0;
   const minStock=parseInt(document.getElementById('nsi-minstock').value)||5;
+  const img=document.getElementById('nsi-img')?.value.trim()||'';
   if (!name||!price) { showToast('Nome e preço são obrigatórios','warning'); return; }
   const c = currentCompany;
   c.products = c.products||[];
-  c.products.push({id:genId(),name,price,cost,category:cat,stock,minStock,image:'',createdAt:new Date().toISOString(),additionals:[]});
+  c.products.push({id:genId(),name,price,cost,category:cat,stock,minStock,image:img,createdAt:new Date().toISOString(),additionals:[]});
   showLoading('Salvando...');
   try { await db.collection('companies').doc(currentCompanyId).update({products:c.products}); hideLoading(); closeModal(); renderStock(); showToast(`"${name}" cadastrado com sucesso!`,'success'); }
   catch(e) { hideLoading(); showToast('Erro: '+e.message,'danger'); }
@@ -2323,6 +2473,55 @@ function copyMenuLink() {
   const url = window.location.href.split('?')[0]+'?cardapio='+currentCompanyId;
   navigator.clipboard.writeText(url).then(()=>showToast('Link copiado!','success')).catch(()=>showToast('Não foi possível copiar','warning'));
 }
+// ============================================================
+// GLOBAL ADDITIONALS MANAGER
+// ============================================================
+function showGlobalAdditionalsModal() {
+  const c = currentCompany;
+  const adds = c.globalAdditionals||[];
+  const addsHtml = adds.map((a,idx)=>`
+    <div class="flex items-center gap-2 mb-2" id="gl-add-row-${a.id}">
+      <input type="text" class="form-control" id="gl-add-name-${a.id}" value="${a.name}" placeholder="Ex: Bacon extra" style="flex:2">
+      <input type="number" class="form-control" id="gl-add-price-${a.id}" value="${a.price}" step="0.01" min="0" placeholder="R$" style="flex:1">
+      <button class="btn btn-sm btn-danger" onclick="document.getElementById('gl-add-row-${a.id}').remove()"><i class="fa-solid fa-times"></i></button>
+    </div>`).join('');
+  showModal('<i class="fa-solid fa-list-check"></i> Adicionais Globais',
+    `<p style="color:var(--gray);font-size:13px;margin-bottom:14px">Estes adicionais aparecem para o cliente ao adicionar <strong>qualquer produto</strong> ao carrinho, tanto no PDV quanto no cardápio online.</p>
+    <div id="gl-adds-container">${addsHtml}</div>
+    <button type="button" class="btn btn-ghost btn-sm mt-2 w-full" onclick="addGlobalAdditionalRow()"><i class="fa-solid fa-plus"></i> Adicionar Opção</button>`,
+    `<button class="btn btn-ghost" onclick="closeModal()">Cancelar</button>
+     <button class="btn btn-primary" onclick="saveGlobalAdditionals()"><i class="fa-solid fa-save"></i> Salvar Adicionais</button>`,
+    false
+  );
+}
+let _glAddCount = 500;
+function addGlobalAdditionalRow() {
+  const id = 'new_'+(++_glAddCount);
+  const container = document.getElementById('gl-adds-container'); if(!container) return;
+  const row = document.createElement('div');
+  row.className = 'flex items-center gap-2 mb-2';
+  row.id = `gl-add-row-${id}`;
+  row.innerHTML = `<input type="text" class="form-control" id="gl-add-name-${id}" placeholder="Ex: Queijo extra" style="flex:2"><input type="number" class="form-control" id="gl-add-price-${id}" step="0.01" min="0" placeholder="R$" style="flex:1"><button class="btn btn-sm btn-danger" onclick="this.parentElement.remove()"><i class="fa-solid fa-times"></i></button>`;
+  container.appendChild(row);
+}
+async function saveGlobalAdditionals() {
+  const c = currentCompany;
+  const additionals = [];
+  document.querySelectorAll('#gl-adds-container [id^="gl-add-row-"]').forEach(row => {
+    const rid = row.id.replace('gl-add-row-','');
+    const nm = document.getElementById(`gl-add-name-${rid}`)?.value.trim();
+    const pr = parseFloat(document.getElementById(`gl-add-price-${rid}`)?.value)||0;
+    if (nm) additionals.push({id:rid.startsWith('new_')?genId():rid, name:nm, price:pr});
+  });
+  showLoading('Salvando adicionais...');
+  try {
+    await db.collection('companies').doc(currentCompanyId).update({globalAdditionals:additionals});
+    c.globalAdditionals = additionals;
+    hideLoading(); closeModal();
+    showToast(additionals.length?`${additionals.length} adicional(is) salvos!`:'Adicionais removidos.','success');
+  } catch(e) { hideLoading(); showToast('Erro: '+e.message,'danger'); }
+}
+
 function showMenuItemModal(iid) {
   const c = currentCompany;
   const item = iid ? (c.menuItems||[]).find(i=>i.id===iid) : null;
@@ -2997,7 +3196,9 @@ function addPubCart(iid) {
 }
 function showPubItemModal(iid) {
   const item=(pubCompany.menuItems||[]).find(i=>i.id===iid); if(!item) return;
-  const addsHtml = (item.additionals||[]).map(a=>`
+  const globalAdds = pubCompany.globalAdditionals||[];
+  const addsSource = globalAdds.length > 0 ? globalAdds : (item.additionals||[]);
+  const addsHtml = addsSource.map(a=>`
     <div class="flex items-center justify-between" style="padding:8px 0;border-bottom:1px solid #f1f5f9">
       <label style="display:flex;align-items:center;gap:8px;cursor:pointer;font-weight:600;flex:1">
         <input type="checkbox" class="pub-add-check" data-id="${a.id}" data-name="${a.name}" data-price="${a.price}" style="width:18px;height:18px;cursor:pointer">
@@ -3009,7 +3210,7 @@ function showPubItemModal(iid) {
     `${item.image?`<img src="${item.image}" style="width:100%;height:160px;object-fit:cover;border-radius:10px;margin-bottom:14px">`:``}
     <div style="font-size:20px;font-weight:900;color:var(--primary);margin-bottom:4px">${fmt(item.price)}</div>
     ${item.description?`<div style="font-size:13px;color:var(--gray);margin-bottom:12px">${item.description}</div>`:''}
-    ${addsHtml?`<div style="margin-bottom:16px"><div style="font-size:12px;font-weight:700;color:var(--gray);text-transform:uppercase;letter-spacing:.3px;margin-bottom:8px">Adicionar ao pedido:</div>${addsHtml}</div>`:''}
+    ${addsSource.length?`<div style="margin-bottom:16px"><div style="font-size:12px;font-weight:700;color:var(--gray);text-transform:uppercase;letter-spacing:.3px;margin-bottom:8px">Adicionar ao pedido:</div>${addsHtml}</div>`:''}
     <div class="form-group mt-3"><label>Quantidade</label>
       <div class="flex items-center gap-3">
         <button class="btn btn-ghost btn-sm" onclick="document.getElementById('pub-atc-qty').value=Math.max(1,+document.getElementById('pub-atc-qty').value-1)">−</button>
