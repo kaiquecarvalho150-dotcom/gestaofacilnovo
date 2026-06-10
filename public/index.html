@@ -493,9 +493,12 @@ table th,table td{padding:7px 8px;font-size:11px}
 <div class="flex items-center gap-3">
 <div style="width:38px;height:38px;background:linear-gradient(135deg,#2563eb,#7c3aed);border-radius:10px;display:flex;align-items:center;justify-content:center;font-size:18px;color:#fff;flex-shrink:0"><i class="fa-solid fa-chart-line"></i></div>
 <h1>Gestão <span>Fácil</span> — <span style="color:#94a3b8;font-size:13px;font-weight:500">Admin</span></h1>
+<button id="admin-mobile-logout" style="display:none;margin-left:auto;background:var(--danger);color:#fff;border:none;border-radius:8px;padding:7px 12px;font-size:12px;font-weight:700;cursor:pointer" onclick="doAdminLogout()"><i class="fa-solid fa-sign-out-alt"></i> Sair</button>
 </div>
 <div class="flex gap-2">
 <button class="btn btn-sm btn-primary" onclick="showCreateCompanyModal()"><i class="fa-solid fa-plus"></i> Nova Empresa</button>
+<button class="btn btn-sm btn-warning" onclick="showZerarReceitasModal()"><i class="fa-solid fa-rotate-left"></i> Zerar</button>
+<button class="btn btn-sm" style="background:rgba(255,255,255,.18);color:#fff" onclick="showAdminConfigModal()"><i class="fa-solid fa-gear"></i> Config</button>
 <button class="btn btn-sm" style="background:rgba(255,255,255,.1);color:#fff" onclick="doAdminLogout()"><i class="fa-solid fa-sign-out-alt"></i> Sair</button>
 </div>
 </div>
@@ -504,10 +507,14 @@ table th,table td{padding:7px 8px;font-size:11px}
 <div class="card">
 <div class="card-header">
 <div class="card-title"><i class="fa-solid fa-building"></i> Empresas Cadastradas</div>
+<div class="flex gap-2">
+<input type="text" id="admin-search" class="form-control" style="width:220px" placeholder="Buscar empresa..." oninput="renderAdminTable()">
+<button class="btn btn-sm btn-primary" onclick="showCreateCompanyModal()"><i class="fa-solid fa-plus"></i> Nova Empresa</button>
+</div>
 </div>
 <div class="table-wrap">
 <table>
-<thead><tr><th>Empresa</th><th>CNPJ</th><th>Plano</th><th>Dias Restantes</th><th>Status</th><th>Ações</th></tr></thead>
+<thead><tr><th>Empresa</th><th>CNPJ</th><th>Plano</th><th>Dias Restantes</th><th>Status</th><th>Senha</th><th>Ações</th></tr></thead>
 <tbody id="admin-table-body"></tbody>
 </table>
 </div>
@@ -1080,7 +1087,7 @@ showPage('page-login');
 }
 
 // ============================================================
-// ADMIN
+// ADMIN LOGIN/LOGOUT
 // ============================================================
 async function doAdminLogin() {
 const email = document.getElementById('adm-email').value.trim();
@@ -1105,36 +1112,49 @@ const total = allCompanies.length;
 const active = allCompanies.filter(c => !c.blocked && getDaysRemaining(c)>0).length;
 const blocked = allCompanies.filter(c => c.blocked).length;
 const expired = allCompanies.filter(c => !c.blocked && getDaysRemaining(c)<=0).length;
+const revenueList = mpRevenueZeroDate ? allCompanies.filter(c => c.createdAt && c.createdAt >= mpRevenueZeroDate) : allCompanies;
+const revenue = revenueList.reduce((s,c)=>s+(c.planPrice||0),0);
+const zeroLabel = mpRevenueZeroDate ? `<div style="font-size:10px;color:var(--gray);margin-top:4px">Desde ${new Date(mpRevenueZeroDate).toLocaleDateString('pt-BR')}</div>` : '';
 document.getElementById('admin-stats').innerHTML = `
-<div class="stat-card"><div class="stat-icon" style="background:#dbeafe;color:var(--primary)"><i class="fa-solid fa-building"></i></div><div class="stat-value">${total}</div><div class="stat-label">Total</div></div>
+<div class="stat-card"><div class="stat-icon" style="background:#dbeafe;color:var(--primary)"><i class="fa-solid fa-building"></i></div><div class="stat-value">${total}</div><div class="stat-label">Total Empresas</div></div>
 <div class="stat-card"><div class="stat-icon" style="background:#dcfce7;color:var(--success)"><i class="fa-solid fa-circle-check"></i></div><div class="stat-value" style="color:var(--success)">${active}</div><div class="stat-label">Ativas</div></div>
 <div class="stat-card"><div class="stat-icon" style="background:#fee2e2;color:var(--danger)"><i class="fa-solid fa-ban"></i></div><div class="stat-value" style="color:var(--danger)">${blocked}</div><div class="stat-label">Bloqueadas</div></div>
-<div class="stat-card"><div class="stat-icon" style="background:#fef3c7;color:var(--warning)"><i class="fa-solid fa-clock"></i></div><div class="stat-value" style="color:var(--warning)">${expired}</div><div class="stat-label">Expiradas</div></div>`;
+<div class="stat-card"><div class="stat-icon" style="background:#fef3c7;color:var(--warning)"><i class="fa-solid fa-clock"></i></div><div class="stat-value" style="color:var(--warning)">${expired}</div><div class="stat-label">Expiradas</div></div>
+<div class="stat-card"><div class="stat-icon" style="background:#f0fdf4;color:var(--success)"><i class="fa-solid fa-dollar-sign"></i></div><div class="stat-value" style="color:var(--success);font-size:20px">${fmt(revenue)}</div><div class="stat-label">Receita Total</div>${zeroLabel}</div>`;
 }
 function renderAdminTable() {
+const q = (document.getElementById('admin-search')?.value||'').toLowerCase();
+let list = allCompanies;
+if (q) list = list.filter(c => c.companyName.toLowerCase().includes(q)||c.cnpj.includes(q)||c.email.toLowerCase().includes(q));
 const tb = document.getElementById('admin-table-body');
-if (!allCompanies.length) { tb.innerHTML = '<tr><td colspan="6" class="text-center" style="padding:32px;color:var(--gray)">Nenhuma empresa</td></tr>'; return; }
-tb.innerHTML = allCompanies.map(c => {
+if (!list.length) { tb.innerHTML = '<tr><td colspan="7" class="text-center" style="padding:32px;color:var(--gray)">Nenhuma empresa cadastrada</td></tr>'; return; }
+tb.innerHTML = list.map(c => {
 const days = getDaysRemaining(c); const dc = getDayColor(days);
 return `<tr>
-<td><div style="font-weight:700">${c.companyName}</div><div style="font-size:11px;color:var(--gray)">${c.email}</div></td>
+<td><div style="font-weight:700">${c.companyName}</div><div style="font-size:11px;color:var(--gray)">${c.ownerName} · ${c.email}</div></td>
 <td style="font-family:monospace;font-size:12px">${c.cnpj}</td>
-<td><span class="badge badge-${c.plan==='trial'?'warning':(c.plan==='starter'?'primary':'secondary')}">${c.plan==='trial'?'Trial':(c.plan==='starter'?'Starter':'Pro')}</span></td>
-<td><span class="badge badge-${dc}">${days} dias</span></td>
+<td><span class="badge badge-${c.plan==='trial'?'warning':(c.plan==='mensal'||c.plan==='starter'?'primary':'secondary')}">${c.plan==='trial'?'Trial':(c.plan==='mensal'||c.plan==='starter'?'Starter':'Pro')}</span><div style="font-size:11px;color:var(--gray);margin-top:3px">${fmt(c.planPrice)}</div></td>
+<td><span class="badge badge-${dc}">${days} dias</span><div style="font-size:11px;color:var(--gray);margin-top:3px">Início: ${fmtDate(c.startDate)}</div></td>
 <td>${c.blocked?'<span class="badge badge-danger">Bloqueado</span>':days>0?'<span class="badge badge-success">Ativo</span>':'<span class="badge badge-warning">Expirado</span>'}</td>
-<td><button class="btn btn-sm btn-${c.blocked?'success':'warning'}" onclick="toggleBlock('${c.id}')"><i class="fa-solid fa-${c.blocked?'unlock':'lock'}"></i></button></td>
+<td><button class="btn btn-sm btn-ghost" onclick="showPasswordModal('${c.id}')"><i class="fa-solid fa-eye"></i></button></td>
+<td><div class="flex gap-1 flex-wrap">
+<button class="btn btn-sm btn-info" onclick="manageDaysModal('${c.id}')"><i class="fa-solid fa-calendar-plus"></i></button>
+<button class="btn btn-sm btn-primary" onclick="editCompanyModal('${c.id}')"><i class="fa-solid fa-edit"></i></button>
+<button class="btn btn-sm btn-${c.blocked?'success':'warning'}" onclick="toggleBlock('${c.id}')"><i class="fa-solid fa-${c.blocked?'unlock':'lock'}"></i></button>
+<button class="btn btn-sm btn-danger" onclick="deleteCompany('${c.id}')"><i class="fa-solid fa-trash"></i></button>
+</div></td>
 </tr>`;
 }).join('');
 }
 function showCreateCompanyModal() {
 showModal('<i class="fa-solid fa-plus-circle"></i> Criar Novo Cadastro',
-`<div class="form-row"><div class="form-group"><label>Nome da Empresa *</label><input type="text" id="nc-company" class="form-control"></div>
-<div class="form-group"><label>Proprietário *</label><input type="text" id="nc-owner" class="form-control"></div></div>
-<div class="form-row"><div class="form-group"><label>CNPJ *</label><input type="text" id="nc-cnpj" class="form-control" oninput="maskCNPJ(this)"></div>
+`<div class="form-row"><div class="form-group"><label>Nome da Empresa *</label><input type="text" id="nc-company" class="form-control" placeholder="Nome"></div>
+<div class="form-group"><label>Proprietário *</label><input type="text" id="nc-owner" class="form-control" placeholder="Nome completo"></div></div>
+<div class="form-row"><div class="form-group"><label>CNPJ *</label><input type="text" id="nc-cnpj" class="form-control" oninput="maskCNPJ(this)" placeholder="00.000.000/0000-00"></div>
 <div class="form-group"><label>Telefone</label><input type="text" id="nc-phone" class="form-control" oninput="maskPhone(this)"></div></div>
 <div class="form-group"><label>Endereço</label><input type="text" id="nc-address" class="form-control"></div>
 <div class="form-row"><div class="form-group"><label>E-mail *</label><input type="email" id="nc-email" class="form-control"></div>
-<div class="form-group"><label>Senha *</label><input type="password" id="nc-password" class="form-control"></div></div>
+<div class="form-group"><label>Senha *</label><div class="pwd-wrap"><input type="password" id="nc-password" class="form-control"><button class="pwd-toggle" type="button" onclick="togglePwd('nc-password','eye-ncpwd')"><i class="fa-solid fa-eye" id="eye-ncpwd"></i></button></div></div></div>
 <div class="form-row"><div class="form-group"><label>Plano *</label><select id="nc-plan" class="form-control"><option value="trial">Trial (14 dias)</option><option value="starter">Starter (R$ 49,90)</option><option value="professional">Professional (R$ 99,90)</option></select></div>
 <div class="form-group"><label>Dias de Acesso *</label><input type="number" id="nc-days" class="form-control" value="14" min="1"></div></div>`,
 `<button class="btn btn-ghost" onclick="closeModal()">Cancelar</button><button class="btn btn-primary" onclick="createCompanyAdmin()"><i class="fa-solid fa-save"></i> Criar</button>`, true);
@@ -1148,11 +1168,52 @@ const snap = await db.collection('companies').where('email','==',em).get();
 if (!snap.empty) { hideLoading(); showToast('E-mail já cadastrado','danger'); return; }
 const id = genId();
 const prices = {trial:0, starter:49.90, professional:99.90};
-const company = { companyName:co, ownerName:own, cnpj, phone:ph, address:addr, email:em, password:pw, plan, planPrice:prices[plan]||0, accessDays:days, startDate:new Date().toISOString(), createdAt:new Date().toISOString(), blocked:false, products:[], menuItems:[], employees:[], expenses:[], globalAdditionals:[], comandas:[] };
+const company = { companyName:co, ownerName:own, cnpj, phone:ph, address:addr, email:em, password:pw, plan, planPrice:prices[plan]||0, accessDays:days, startDate:new Date().toISOString(), createdAt:new Date().toISOString(), blocked:false, products:[], menuItems:[], employees:[], expenses:[] };
 await db.collection('companies').doc(id).set(company);
 allCompanies.push({ id, ...company });
-hideLoading(); closeModal(); showToast('Empresa criada!','success'); renderAdminStats(); renderAdminTable();
+hideLoading(); closeModal(); showToast('Empresa criada com sucesso!','success'); renderAdminStats(); renderAdminTable();
 } catch(e) { hideLoading(); showToast('Erro: '+e.message,'danger'); }
+}
+function editCompanyModal(id) {
+const c = allCompanies.find(x => x.id===id); if(!c) return;
+showModal('<i class="fa-solid fa-edit"></i> Editar Empresa',
+`<div class="form-row"><div class="form-group"><label>Nome</label><input type="text" id="ec-company" class="form-control" value="${c.companyName}"></div>
+<div class="form-group"><label>Proprietário</label><input type="text" id="ec-owner" class="form-control" value="${c.ownerName}"></div></div>
+<div class="form-row"><div class="form-group"><label>CNPJ</label><input type="text" id="ec-cnpj" class="form-control" value="${c.cnpj}"></div>
+<div class="form-group"><label>Telefone</label><input type="text" id="ec-phone" class="form-control" value="${c.phone||''}"></div></div>
+<div class="form-group"><label>Endereço</label><input type="text" id="ec-address" class="form-control" value="${c.address||''}"></div>
+<div class="form-row"><div class="form-group"><label>E-mail</label><input type="email" id="ec-email" class="form-control" value="${c.email}"></div>
+<div class="form-group"><label>Nova Senha</label><div class="pwd-wrap"><input type="password" id="ec-password" class="form-control" placeholder="Em branco = manter"><button class="pwd-toggle" type="button" onclick="togglePwd('ec-password','eye-ecpwd')"><i class="fa-solid fa-eye" id="eye-ecpwd"></i></button></div></div></div>
+<div class="form-row"><div class="form-group"><label>Plano</label><select id="ec-plan" class="form-control"><option value="trial" ${c.plan==='trial'?'selected':''}>Trial</option><option value="starter" ${c.plan==='starter'?'selected':''}>Starter</option><option value="professional" ${c.plan==='professional'?'selected':''}>Professional</option></select></div>
+<div class="form-group"><label>Dias de Acesso</label><input type="number" id="ec-days" class="form-control" value="${c.accessDays}" min="0"></div></div>`,
+`<button class="btn btn-ghost" onclick="closeModal()">Cancelar</button><button class="btn btn-primary" onclick="saveEditCompany('${id}')"><i class="fa-solid fa-save"></i> Salvar</button>`, true);
+}
+async function saveEditCompany(id) {
+const c = allCompanies.find(x=>x.id===id); if(!c) return;
+const prices = {trial:0, starter:49.90, professional:99.90};
+const updates = { companyName:document.getElementById('ec-company').value.trim()||c.companyName, ownerName:document.getElementById('ec-owner').value.trim()||c.ownerName, cnpj:document.getElementById('ec-cnpj').value.trim()||c.cnpj, phone:document.getElementById('ec-phone').value.trim(), address:document.getElementById('ec-address').value.trim(), email:document.getElementById('ec-email').value.trim()||c.email, plan:document.getElementById('ec-plan').value, accessDays:parseInt(document.getElementById('ec-days').value)||c.accessDays };
+updates.planPrice = prices[updates.plan] || 0;
+const pw = document.getElementById('ec-password').value.trim(); if(pw) updates.password = pw;
+showLoading('Salvando...');
+try { await db.collection('companies').doc(id).update(updates); Object.assign(c, updates); hideLoading(); closeModal(); showToast('Empresa atualizada!','success'); renderAdminStats(); renderAdminTable(); }
+catch(e) { hideLoading(); showToast('Erro: '+e.message,'danger'); }
+}
+function manageDaysModal(id) {
+const c = allCompanies.find(x=>x.id===id); if(!c) return;
+const days = getDaysRemaining(c);
+showModal('<i class="fa-solid fa-calendar"></i> Gerenciar Dias de Acesso',
+`<div class="text-center mb-4"><div style="font-size:13px;color:var(--gray);margin-bottom:4px">Empresa: <strong>${c.companyName}</strong></div><div class="badge badge-${getDayColor(days)}" style="font-size:16px;padding:8px 20px">${days} dias restantes</div><div style="font-size:12px;color:var(--gray);margin-top:6px">Total configurado: ${c.accessDays} dias</div></div>
+<div class="form-group"><label>Quantidade de Dias</label><input type="number" id="md-days" class="form-control" value="30" min="1"></div>
+<div class="form-row"><button class="btn btn-success w-full" onclick="adjustDays('${id}',1)"><i class="fa-solid fa-plus"></i> Adicionar</button><button class="btn btn-danger w-full" onclick="adjustDays('${id}',-1)"><i class="fa-solid fa-minus"></i> Remover</button></div>`,
+`<button class="btn btn-ghost w-full" onclick="closeModal()">Fechar</button>`, false);
+}
+async function adjustDays(id, sign) {
+const c = allCompanies.find(x=>x.id===id); if(!c) return;
+const n = parseInt(document.getElementById('md-days').value)||0;
+const newDays = Math.max(0, c.accessDays + sign*n);
+showLoading('Atualizando...');
+try { await db.collection('companies').doc(id).update({ accessDays: newDays }); c.accessDays = newDays; hideLoading(); closeModal(); showToast(sign>0?`${n} dias adicionados!`:`${n} dias removidos!`,sign>0?'success':'warning'); renderAdminStats(); renderAdminTable(); }
+catch(e) { hideLoading(); showToast('Erro: '+e.message,'danger'); }
 }
 async function toggleBlock(id) {
 const c = allCompanies.find(x=>x.id===id); if(!c) return;
@@ -1160,6 +1221,82 @@ const blocked = !c.blocked;
 showLoading(blocked?'Bloqueando...':'Desbloqueando...');
 try { await db.collection('companies').doc(id).update({ blocked }); c.blocked=blocked; hideLoading(); showToast(blocked?'Empresa bloqueada!':'Empresa desbloqueada!',blocked?'warning':'success'); renderAdminStats(); renderAdminTable(); }
 catch(e) { hideLoading(); showToast('Erro: '+e.message,'danger'); }
+}
+function deleteCompany(id) {
+const c = allCompanies.find(x=>x.id===id); if(!c) return;
+showModal('<i class="fa-solid fa-trash" style="color:var(--danger)"></i> Excluir Empresa',
+`<div class="alert alert-danger"><i class="fa-solid fa-exclamation-triangle"></i> Esta ação é irreversível!</div><p>Excluir <strong>${c.companyName}</strong> e todos os seus dados?</p>`,
+`<button class="btn btn-ghost" onclick="closeModal()">Cancelar</button><button class="btn btn-danger" onclick="confirmDeleteCompany('${id}')"><i class="fa-solid fa-trash"></i> Excluir</button>`, false);
+}
+async function confirmDeleteCompany(id) {
+showLoading('Excluindo...');
+try {
+await db.collection('companies').doc(id).delete();
+const oSnap = await db.collection('orders').where('companyId','==',id).get();
+await Promise.all(oSnap.docs.map(d => d.ref.delete()));
+const sSnap = await db.collection('sales').where('companyId','==',id).get();
+await Promise.all(sSnap.docs.map(d => d.ref.delete()));
+allCompanies = allCompanies.filter(c=>c.id!==id);
+hideLoading(); closeModal(); showToast('Empresa excluída!','success'); renderAdminStats(); renderAdminTable();
+} catch(e) { hideLoading(); showToast('Erro: '+e.message,'danger'); }
+}
+function showPasswordModal(id) {
+const c = allCompanies.find(x=>x.id===id); if(!c) return;
+showModal('<i class="fa-solid fa-key"></i> Credenciais de Acesso',
+`<div class="alert alert-warning"><i class="fa-solid fa-shield-alt"></i> Informação confidencial — repasse apenas ao titular</div>
+<div class="form-group"><label>Empresa</label><input class="form-control" value="${c.companyName}" disabled></div>
+<div class="form-group"><label>E-mail de Login</label><input class="form-control" value="${c.email}" id="pv-email" readonly></div>
+<div class="form-group"><label>Senha</label><div class="pwd-wrap"><input class="form-control" type="password" value="${c.password}" id="pv-pwd" readonly><button class="pwd-toggle" type="button" onclick="togglePwd('pv-pwd','eye-pvpwd')"><i class="fa-solid fa-eye" id="eye-pvpwd"></i></button></div></div>`,
+`<button class="btn btn-ghost" onclick="closeModal()">Fechar</button><button class="btn btn-primary" onclick="navigator.clipboard.writeText('Email: '+document.getElementById('pv-email').value+' | Senha: '+document.getElementById('pv-pwd').value);showToast('Copiado!','success')"><i class="fa-solid fa-copy"></i> Copiar Credenciais</button>`, false);
+}
+function showAdminConfigModal() {
+showModal('<i class="fa-solid fa-gear"></i> Configurações do Sistema',
+`<div class="form-group">
+<label><i class="fa-brands fa-whatsapp" style="color:#25d366"></i> WhatsApp para Contato de Planos *</label>
+<input type="text" id="cfg-whatsapp" class="form-control" value="${adminWhatsApp}" placeholder="5511999999999 (com DDI e DDD, sem espaços)">
+<div style="font-size:11px;color:var(--gray);margin-top:4px">Ex: 5511999999999 — Quando cliente clicar em um plano, será redirecionado para este WhatsApp.</div>
+</div>
+<div style="border-top:1px solid var(--border);margin:14px 0;padding-top:14px">
+<div style="font-size:12px;font-weight:700;color:var(--gray);text-transform:uppercase;margin-bottom:8px">Mercado Pago (opcional)</div>
+<div class="form-group">
+<label>Access Token (Produção)</label>
+<div class="pwd-wrap">
+<input type="password" id="cfg-mp-token" class="form-control" value="${mpAccessToken}" placeholder="APP_USR-XXXXXXXXX...">
+<button class="pwd-toggle" type="button" onclick="togglePwd('cfg-mp-token','eye-cfgmp')"><i class="fa-solid fa-eye" id="eye-cfgmp"></i></button>
+</div>
+<div style="font-size:11px;color:var(--gray);margin-top:4px">Para verificação automática de pagamentos futuros.</div>
+</div>
+</div>`,
+`<button class="btn btn-ghost" onclick="closeModal()">Cancelar</button>
+<button class="btn btn-primary" onclick="saveAdminConfig()"><i class="fa-solid fa-save"></i> Salvar</button>`, false);
+}
+async function saveAdminConfig() {
+const wa = document.getElementById('cfg-whatsapp').value.trim().replace(/\D/g,'');
+const token = document.getElementById('cfg-mp-token').value.trim();
+showLoading('Salvando...');
+try {
+await db.collection('admin_config').doc('settings').set({ adminWhatsApp: wa, mpAccessToken: token }, { merge: true });
+adminWhatsApp = wa; mpAccessToken = token;
+hideLoading(); closeModal(); showToast('Configurações salvas! ✅','success');
+} catch(e) { hideLoading(); showToast('Erro: '+e.message,'danger'); }
+}
+function showZerarReceitasModal() {
+const zeroDate = mpRevenueZeroDate ? new Date(mpRevenueZeroDate).toLocaleDateString('pt-BR') : 'nunca zerada';
+showModal('<i class="fa-solid fa-rotate-left" style="color:var(--warning)"></i> Zerar Contagem de Receitas',
+`<div class="alert alert-warning"><i class="fa-solid fa-exclamation-triangle"></i> Esta ação reinicia a contagem de receita do painel.</div>
+<p style="margin-bottom:8px">O painel mostrará <strong>R$ 0,00</strong> e começará a contar apenas as novas assinaturas a partir de hoje.</p>
+<p style="font-size:13px;color:var(--gray)">Última zeragem: <strong>${zeroDate}</strong></p>`,
+`<button class="btn btn-ghost" onclick="closeModal()">Cancelar</button>
+<button class="btn btn-warning" onclick="confirmZerarReceitas()"><i class="fa-solid fa-rotate-left"></i> Confirmar Zeragem</button>`, false);
+}
+async function confirmZerarReceitas() {
+showLoading('Zerando receitas...');
+const zeroDate = new Date().toISOString();
+try {
+await db.collection('admin_config').doc('settings').set({ revenueZeroDate: zeroDate }, { merge: true });
+mpRevenueZeroDate = zeroDate;
+hideLoading(); closeModal(); showToast('Receitas zeradas! Nova contagem iniciada.','success'); renderAdminStats();
+} catch(e) { hideLoading(); showToast('Erro: '+e.message,'danger'); }
 }
 
 // ============================================================
