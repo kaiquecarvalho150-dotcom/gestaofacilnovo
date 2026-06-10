@@ -1,0 +1,543 @@
+<!DOCTYPE html>
+<html lang="pt-BR">
+<head>
+<meta charset="UTF-8">
+<meta name="viewport" content="width=device-width, initial-scale=1.0">
+<title>Gestão Fácil — App do Funcionário</title>
+<script src="https://www.gstatic.com/firebasejs/10.7.0/firebase-app-compat.js"></script>
+<script src="https://www.gstatic.com/firebasejs/10.7.0/firebase-firestore-compat.js"></script>
+<link href="https://fonts.googleapis.com/css2?family=Inter:wght@300;400;500;600;700;800;900&display=swap" rel="stylesheet">
+<link rel="stylesheet" href="https://cdnjs.cloudflare.com/ajax/libs/font-awesome/6.5.0/css/all.min.css">
+<style>
+*{margin:0;padding:0;box-sizing:border-box}
+:root{--primary:#2563eb;--primary-dark:#1d4ed8;--primary-light:#dbeafe;--secondary:#7c3aed;--success:#16a34a;--danger:#dc2626;--warning:#d97706;--info:#0891b2;--dark:#0f172a;--dark2:#1e293b;--dark3:#334155;--gray:#64748b;--gray-light:#94a3b8;--light:#f8fafc;--border:#e2e8f0}
+body{font-family:'Inter',sans-serif;background:var(--light);color:var(--dark);font-size:14px;line-height:1.5}
+.hidden{display:none!important}
+.flex{display:flex}.items-center{align-items:center}.justify-between{justify-content:space-between}
+.gap-1{gap:4px}.gap-2{gap:8px}.gap-3{gap:12px}
+.mt-2{margin-top:8px}.mt-3{margin-top:12px}.mt-4{margin-top:16px}
+.mb-2{margin-bottom:8px}.mb-3{margin-bottom:12px}
+.text-center{text-align:center}.text-gray{color:var(--gray)}.w-full{width:100%}
+.btn{display:inline-flex;align-items:center;justify-content:center;gap:6px;padding:10px 18px;border-radius:8px;border:none;cursor:pointer;font-size:13px;font-weight:600;font-family:'Inter',sans-serif;transition:all .2s;text-decoration:none;white-space:nowrap}
+.btn:hover{transform:translateY(-1px);box-shadow:0 4px 12px rgba(0,0,0,.15)}.btn:active{transform:none}
+.btn-primary{background:var(--primary);color:#fff}.btn-primary:hover{background:var(--primary-dark)}
+.btn-secondary{background:var(--secondary);color:#fff}
+.btn-success{background:var(--success);color:#fff}.btn-success:hover{background:#15803d}
+.btn-danger{background:var(--danger);color:#fff}.btn-danger:hover{background:#b91c1c}
+.btn-warning{background:var(--warning);color:#fff}
+.btn-info{background:var(--info);color:#fff}
+.btn-outline{background:transparent;color:var(--primary);border:2px solid var(--primary)}.btn-outline:hover{background:var(--primary);color:#fff}
+.btn-ghost{background:#f1f5f9;color:var(--dark3)}.btn-ghost:hover{background:#e2e8f0}
+.btn-sm{padding:6px 12px;font-size:12px;border-radius:6px}
+.btn-lg{padding:14px 28px;font-size:15px;border-radius:10px}
+.form-group{margin-bottom:14px}
+.form-group label{display:block;font-size:12px;font-weight:600;color:var(--dark3);margin-bottom:5px;text-transform:uppercase;letter-spacing:.3px}
+.form-control{width:100%;padding:10px 13px;border:2px solid var(--border);border-radius:8px;font-size:14px;font-family:'Inter',sans-serif;color:var(--dark);background:#fff;transition:border-color .2s;outline:none}
+.form-control:focus{border-color:var(--primary);box-shadow:0 0 0 3px rgba(37,99,235,.1)}
+.card{background:#fff;border-radius:12px;padding:20px;border:1px solid var(--border);box-shadow:0 1px 3px rgba(0,0,0,.06)}
+.badge{display:inline-flex;align-items:center;padding:3px 10px;border-radius:20px;font-size:11px;font-weight:700}
+.badge-success{background:#dcfce7;color:var(--success)}.badge-danger{background:#fee2e2;color:var(--danger)}
+.badge-warning{background:#fef3c7;color:var(--warning)}.badge-primary{background:#dbeafe;color:var(--primary)}
+.badge-gray{background:#f1f5f9;color:var(--gray)}.badge-info{background:#e0f2fe;color:var(--info)}
+.badge-secondary{background:#ede9fe;color:var(--secondary)}
+#modal-overlay{position:fixed;inset:0;background:rgba(0,0,0,.55);z-index:9000;display:flex;align-items:center;justify-content:center;padding:16px;backdrop-filter:blur(4px)}
+.modal{background:#fff;border-radius:16px;padding:28px;width:100%;max-width:520px;max-height:92vh;overflow-y:auto;position:relative;box-shadow:0 25px 60px rgba(0,0,0,.3);animation:modalIn .2s ease}
+@keyframes modalIn{from{opacity:0;transform:translateY(-20px)}to{opacity:1;transform:translateY(0)}}
+.modal-header{display:flex;align-items:center;justify-content:space-between;margin-bottom:20px;padding-bottom:16px;border-bottom:1px solid var(--border)}
+.modal-title{font-size:18px;font-weight:700;color:var(--dark)}
+.modal-close{background:none;border:none;cursor:pointer;font-size:18px;color:var(--gray);width:32px;height:32px;display:flex;align-items:center;justify-content:center;border-radius:6px}
+.modal-close:hover{background:#f1f5f9;color:var(--dark)}
+.modal-footer{display:flex;justify-content:flex-end;gap:10px;margin-top:20px;padding-top:16px;border-top:1px solid var(--border)}
+#toast-container{position:fixed;bottom:24px;right:24px;z-index:10000;display:flex;flex-direction:column;gap:8px}
+.toast{display:flex;align-items:center;gap:10px;padding:12px 18px;border-radius:10px;font-size:13px;font-weight:600;min-width:280px;box-shadow:0 8px 25px rgba(0,0,0,.2);animation:toastIn .3s ease}
+@keyframes toastIn{from{opacity:0;transform:translateX(100%)}to{opacity:1;transform:translateX(0)}}
+.toast-success{background:var(--success);color:#fff}.toast-danger{background:var(--danger);color:#fff}
+.toast-warning{background:var(--warning);color:#fff}.toast-info{background:var(--info);color:#fff}
+#loading-overlay{position:fixed;inset:0;background:rgba(15,23,42,.7);z-index:8000;display:flex;flex-direction:column;align-items:center;justify-content:center;gap:14px;backdrop-filter:blur(4px)}
+.loading-spinner{width:48px;height:48px;border:4px solid rgba(255,255,255,.2);border-top-color:#fff;border-radius:50%;animation:spin .7s linear infinite}
+@keyframes spin{to{transform:rotate(360deg)}}
+#loading-overlay p{color:#fff;font-weight:600;font-size:15px}
+.alert{padding:12px 16px;border-radius:8px;font-size:13px;font-weight:500;margin-bottom:12px;display:flex;align-items:flex-start;gap:8px}
+.alert-success{background:#dcfce7;color:var(--success);border:1px solid #86efac}
+.alert-danger{background:#fee2e2;color:var(--danger);border:1px solid #fca5a5}
+.alert-warning{background:#fef3c7;color:var(--warning);border:1px solid #fcd34d}
+.alert-info{background:#dbeafe;color:var(--primary);border:1px solid #93c5fd}
+
+/* LOGIN */
+#page-login{min-height:100vh;background:linear-gradient(135deg,#0f172a 0%,#1a3058 50%,#0f172a 100%);display:flex;align-items:center;justify-content:center;padding:20px;position:relative;overflow:hidden}
+#page-login::before{content:'';position:absolute;inset:0;background:radial-gradient(circle at 30% 40%,rgba(37,99,235,.15) 0%,transparent 50%),radial-gradient(circle at 70% 60%,rgba(124,58,237,.15) 0%,transparent 50%)}
+.login-box{background:#fff;border-radius:24px;padding:40px;width:100%;max-width:400px;box-shadow:0 30px 80px rgba(0,0,0,.4);position:relative;z-index:1}
+.login-logo{text-align:center;margin-bottom:32px}
+.login-logo-icon{width:64px;height:64px;background:linear-gradient(135deg,var(--primary),var(--secondary));border-radius:18px;margin:0 auto 12px;display:flex;align-items:center;justify-content:center;font-size:28px;color:#fff;box-shadow:0 8px 24px rgba(37,99,235,.35)}
+.login-logo h1{font-size:24px;font-weight:900;color:var(--dark)}
+.login-logo p{font-size:13px;color:var(--gray);margin-top:4px}
+
+/* APP */
+#page-app{min-height:100vh;display:flex;flex-direction:column}
+.app-header{background:linear-gradient(135deg,var(--primary),var(--secondary));color:#fff;padding:16px 20px;box-shadow:0 4px 12px rgba(37,99,235,.2)}
+.app-header-top{display:flex;justify-content:space-between;align-items:center}
+.app-company{font-size:18px;font-weight:800}
+.app-employee{font-size:13px;opacity:.9;margin-top:2px}
+.app-datetime{font-size:12px;opacity:.8;margin-top:4px}
+.app-content{padding:20px;flex:1}
+.tables-grid{display:grid;grid-template-columns:repeat(auto-fill,minmax(140px,1fr));gap:12px;margin-bottom:20px}
+.table-card{background:#fff;border-radius:14px;padding:20px;text-align:center;cursor:pointer;border:2px solid var(--border);transition:all .2s}
+.table-card:hover{border-color:var(--primary);transform:translateY(-2px);box-shadow:0 4px 12px rgba(37,99,235,.1)}
+.table-card.occupied{background:#fef3c7;border-color:var(--warning)}
+.table-card.open{background:#dcfce7;border-color:var(--success)}
+.table-number{font-size:28px;font-weight:900;color:var(--primary)}
+.table-status{font-size:11px;color:var(--gray);margin-top:4px}
+.table-total{font-size:16px;font-weight:800;color:var(--success);margin-top:8px}
+.table-employee{font-size:10px;color:var(--gray);margin-top:4px}
+
+/* CART */
+.cart-item{display:flex;align-items:center;gap:10px;padding:10px;background:#f8fafc;border-radius:10px;margin-bottom:8px;border:1px solid var(--border)}
+.cart-item-name{flex:1;font-weight:600;font-size:13px}
+.cart-item-price{font-weight:700;color:var(--primary);font-size:14px}
+.qty-controls{display:flex;align-items:center;gap:6px}
+.qty-btn{width:28px;height:28px;border-radius:6px;background:#f1f5f9;border:none;cursor:pointer;font-weight:700;font-size:14px;display:flex;align-items:center;justify-content:center;transition:all .15s}
+.qty-btn:hover{background:var(--primary);color:#fff}
+
+/* PRODUCTS GRID */
+.products-grid{display:grid;grid-template-columns:repeat(auto-fill,minmax(120px,1fr));gap:10px}
+.product-card{background:#fff;border-radius:10px;padding:12px;text-align:center;cursor:pointer;border:2px solid var(--border);transition:all .2s}
+.product-card:hover{border-color:var(--primary);transform:translateY(-2px)}
+.product-card-name{font-size:13px;font-weight:700;margin-bottom:4px;color:var(--dark)}
+.product-card-price{font-size:14px;font-weight:800;color:var(--primary)}
+.product-card-stock{font-size:11px;color:var(--gray);margin-top:2px}
+
+/* SPLIT */
+.split-item{display:flex;align-items:center;gap:10px;padding:10px;background:#f8fafc;border-radius:10px;margin-bottom:8px;border:1px solid var(--border);cursor:pointer;transition:all .2s}
+.split-item:hover{border-color:var(--primary)}
+.split-item.selected{background:var(--primary-light);border-color:var(--primary)}
+.split-item-check{width:20px;height:20px;cursor:pointer}
+.split-item-info{flex:1}
+.split-item-name{font-size:13px;font-weight:600}
+.split-item-qty{font-size:12px;color:var(--gray)}
+.split-item-price{font-size:14px;font-weight:700;color:var(--primary)}
+
+@media(max-width:768px){
+.tables-grid{grid-template-columns:repeat(2,1fr)}
+.products-grid{grid-template-columns:repeat(2,1fr)}
+}
+</style>
+</head>
+<body>
+<div id="loading-overlay" class="hidden"><div class="loading-spinner"></div><p id="loading-msg">Carregando...</p></div>
+<div id="toast-container"></div>
+
+<!-- MODAL -->
+<div id="modal-overlay" class="hidden" onclick="if(event.target===this)closeModal()">
+<div class="modal" id="modal-box" onclick="event.stopPropagation()">
+<div class="modal-header"><div class="modal-title" id="modal-title"></div><button class="modal-close" onclick="closeModal()"><i class="fa-solid fa-times"></i></button></div>
+<div id="modal-body"></div>
+<div class="modal-footer" id="modal-footer"></div>
+</div>
+</div>
+
+<!-- PAGE: LOGIN -->
+<div id="page-login">
+<div class="login-box">
+<div class="login-logo">
+<div class="login-logo-icon"><i class="fa-solid fa-mobile-alt"></i></div>
+<h1>Gestão Fácil</h1>
+<p>App do Funcionário</p>
+</div>
+<div class="form-group">
+<label>E-mail do Funcionário</label>
+<input type="email" id="login-email" class="form-control" placeholder="funcionario@empresa.com">
+</div>
+<div class="form-group">
+<label>Senha</label>
+<input type="password" id="login-password" class="form-control" placeholder="••••••••">
+</div>
+<button class="btn btn-primary w-full btn-lg" onclick="doLogin()"><i class="fa-solid fa-sign-in-alt"></i> Entrar</button>
+</div>
+</div>
+
+<!-- PAGE: APP -->
+<div id="page-app" class="hidden">
+<div class="app-header">
+<div class="app-header-top">
+<div>
+<div class="app-company" id="app-company-name">—</div>
+<div class="app-employee" id="app-employee-name">—</div>
+<div class="app-datetime" id="app-datetime">—</div>
+</div>
+<button class="btn btn-sm" style="background:rgba(255,255,255,.2);color:#fff" onclick="doLogout()"><i class="fa-solid fa-sign-out-alt"></i> Sair</button>
+</div>
+</div>
+<div class="app-content">
+<div class="flex items-center justify-between mb-3">
+<h2 style="font-size:18px;font-weight:800"><i class="fa-solid fa-chair"></i> Mesas</h2>
+<button class="btn btn-primary btn-sm" onclick="showNewTableModal()"><i class="fa-solid fa-plus"></i> Nova Mesa</button>
+</div>
+<div class="tables-grid" id="tables-grid"></div>
+</div>
+</div>
+
+<script>
+// ============================================================
+// FIREBASE INIT
+// ============================================================
+const firebaseConfig = {
+apiKey: "AIzaSyACWjKTOzcxc0dt2TAeizKuQs-3_CdlhYE",
+authDomain: "gestaofacil-154f5.firebaseapp.com",
+projectId: "gestaofacil-154f5",
+storageBucket: "gestaofacil-154f5.firebasestorage.app",
+messagingSenderId: "367774228995",
+appId: "1:367774228995:web:240e91ede2c6b12110a436"
+};
+firebase.initializeApp(firebaseConfig);
+const db = firebase.firestore();
+
+// ============================================================
+// STATE
+// ============================================================
+let currentCompany = null;
+let currentEmployee = null;
+let companyId = null;
+let employeeId = null;
+let tables = [];
+let currentTable = null;
+let cart = [];
+let selectedPayment = null;
+let allProducts = [];
+
+// ============================================================
+// UTILITY
+// ============================================================
+function genId() { return Date.now().toString(36) + Math.random().toString(36).slice(2,7); }
+function genOSNumber() {
+const now = new Date();
+const dd = String(now.getDate()).padStart(2,'0');
+const mm = String(now.getMonth()+1).padStart(2,'0');
+const yyyy = now.getFullYear();
+const rand = Math.random().toString(36).substring(2,7).toUpperCase();
+return `OS-${dd}/${mm}/${yyyy}-${rand}`;
+}
+function fmt(v) { return 'R$ ' + Number(v||0).toLocaleString('pt-BR',{minimumFractionDigits:2,maximumFractionDigits:2}); }
+function showToast(msg, type='success') {
+const t = document.createElement('div');
+t.className = `toast toast-${type}`;
+t.innerHTML = `<i class="fa-solid fa-${type==='success'?'check-circle':type==='danger'?'exclamation-circle':'info-circle'}"></i><span>${msg}</span>`;
+document.getElementById('toast-container').appendChild(t);
+setTimeout(()=>t.remove(), 3000);
+}
+function showLoading(msg='Carregando...') { document.getElementById('loading-msg').textContent=msg; document.getElementById('loading-overlay').classList.remove('hidden'); }
+function hideLoading() { document.getElementById('loading-overlay').classList.add('hidden'); }
+function showModal(title, body, footer) {
+document.getElementById('modal-title').textContent = title;
+document.getElementById('modal-body').innerHTML = body;
+document.getElementById('modal-footer').innerHTML = footer || '';
+document.getElementById('modal-overlay').classList.remove('hidden');
+}
+function closeModal() { document.getElementById('modal-overlay').classList.add('hidden'); }
+
+// ============================================================
+// LOGIN
+// ============================================================
+async function doLogin() {
+const email = document.getElementById('login-email').value.trim();
+const pass = document.getElementById('login-password').value.trim();
+if (!email||!pass) { showToast('Preencha e-mail e senha','warning'); return; }
+showLoading('Verificando credenciais...');
+try {
+const companiesSnap = await db.collection('companies').get();
+let found = false;
+for (const doc of companiesSnap.docs) {
+const co = { id: doc.id, ...doc.data() };
+const emp = (co.employees||[]).find(e => e.appEmail === email && e.appPassword === pass);
+if (emp) {
+currentCompany = co;
+currentEmployee = emp;
+companyId = co.id;
+employeeId = emp.id;
+allProducts = co.products || [];
+found = true;
+break;
+}
+}
+if (!found) { hideLoading(); showToast('E-mail ou senha incorretos','danger'); return; }
+hideLoading();
+document.getElementById('page-login').classList.add('hidden');
+document.getElementById('page-app').classList.remove('hidden');
+document.getElementById('app-company-name').textContent = currentCompany.companyName;
+document.getElementById('app-employee-name').textContent = currentEmployee.name;
+updateDateTime();
+setInterval(updateDateTime, 1000);
+setupRealtimeListener();
+showToast(`Bem-vindo(a), ${currentEmployee.name}!`,'success');
+} catch(e) { hideLoading(); showToast('Erro: '+e.message,'danger'); }
+}
+
+function updateDateTime() {
+const now = new Date();
+const dateStr = now.toLocaleDateString('pt-BR',{weekday:'long',day:'2-digit',month:'long'});
+const timeStr = now.toLocaleTimeString('pt-BR',{hour:'2-digit',minute:'2-digit',second:'2-digit'});
+document.getElementById('app-datetime').textContent = `${dateStr} · ${timeStr}`;
+}
+
+function doLogout() {
+if (!confirm('Deseja realmente sair?')) return;
+currentCompany = null;
+currentEmployee = null;
+companyId = null;
+employeeId = null;
+tables = [];
+currentTable = null;
+cart = [];
+selectedPayment = null;
+document.getElementById('page-app').classList.add('hidden');
+document.getElementById('page-login').classList.remove('hidden');
+document.getElementById('login-email').value = '';
+document.getElementById('login-password').value = '';
+}
+
+// ============================================================
+// REALTIME LISTENER
+// ============================================================
+function setupRealtimeListener() {
+db.collection('companies').doc(companyId).onSnapshot(doc => {
+if (doc.exists) {
+const data = doc.data();
+tables = data.comandas || [];
+currentCompany = { ...currentCompany, ...data };
+allProducts = data.products || [];
+renderTables();
+}
+});
+}
+
+// ============================================================
+// TABLES
+// ============================================================
+function renderTables() {
+const el = document.getElementById('tables-grid');
+const myTables = tables.filter(t => t.employeeId === employeeId);
+if (!myTables.length) {
+el.innerHTML = '<div style="grid-column:1/-1;text-align:center;padding:40px;color:var(--gray)"><i class="fa-solid fa-chair" style="font-size:48px;display:block;margin-bottom:12px;color:var(--border)"></i><h3>Nenhuma mesa aberta</h3><p>Clique em "Nova Mesa" para começar</p></div>';
+return;
+}
+el.innerHTML = myTables.map(t => {
+const total = (t.items||[]).reduce((s,i)=>s+i.price*i.qty,0);
+const itemCount = (t.items||[]).length;
+const statusClass = itemCount > 0 ? 'occupied' : 'open';
+const statusText = itemCount > 0 ? `${itemCount} itens` : 'Vazia';
+return `<div class="table-card ${statusClass}" onclick="selectTable('${t.id}')">
+<div class="table-number">Mesa ${t.tableNumber}</div>
+<div class="table-status">${statusText}</div>
+<div class="table-total">${fmt(total)}</div>
+<div class="table-employee">${new Date(t.createdAt).toLocaleTimeString('pt-BR',{hour:'2-digit',minute:'2-digit'})}</div>
+</div>`;
+}).join('');
+}
+
+function showNewTableModal() {
+showModal('Nova Mesa',
+`<div class="form-group"><label>Número da Mesa *</label><input type="number" id="new-table-num" class="form-control" placeholder="Ex: 1, 2, 3..." min="1"></div>`,
+`<button class="btn btn-ghost" onclick="closeModal()">Cancelar</button><button class="btn btn-primary" onclick="createTable()"><i class="fa-solid fa-check"></i> Criar Mesa</button>`);
+setTimeout(() => document.getElementById('new-table-num')?.focus(), 100);
+}
+
+async function createTable() {
+const num = parseInt(document.getElementById('new-table-num').value);
+if (!num || num <= 0) { showToast('Informe um número válido','warning'); return; }
+// Verifica se já existe mesa com esse número
+const existing = tables.find(t => t.tableNumber === num && t.employeeId === employeeId);
+if (existing) { showToast(`Mesa ${num} já está aberta!`,'warning'); return; }
+const table = {
+id: genId(),
+tableNumber: num,
+employeeId: employeeId,
+employeeName: currentEmployee.name,
+items: [],
+status: 'open',
+createdAt: new Date().toISOString()
+};
+tables.push(table);
+await saveTables();
+closeModal();
+showToast(`Mesa ${num} criada!`,'success');
+}
+
+function selectTable(id) {
+currentTable = tables.find(t=>t.id===id);
+if (!currentTable) return;
+cart = [...(currentTable.items||[])];
+showTableDetail();
+}
+
+function showTableDetail() {
+const total = cart.reduce((s,i)=>s+i.price*i.qty,0);
+showModal(`Mesa ${currentTable.tableNumber}`,
+`<div style="margin-bottom:16px">
+<div style="font-size:13px;color:var(--gray);margin-bottom:8px">${cart.length} itens · Total: <strong style="color:var(--success)">${fmt(total)}</strong></div>
+</div>
+<div id="table-cart-items" style="max-height:300px;overflow-y:auto;margin-bottom:16px">
+${cart.length ? cart.map((item,idx)=>`
+<div class="cart-item">
+<div class="cart-item-name">${item.name}</div>
+<div class="qty-controls">
+<button class="qty-btn" onclick="updateItemQty(${idx},-1)">−</button>
+<span style="font-weight:700;min-width:20px;text-align:center">${item.qty}</span>
+<button class="qty-btn" onclick="updateItemQty(${idx},1)">+</button>
+</div>
+<div class="cart-item-price">${fmt(item.price*item.qty)}</div>
+</div>
+`).join('') : '<div class="text-center text-gray" style="padding:20px">Mesa vazia</div>'}
+</div>
+<div style="border-top:1px solid var(--border);padding-top:16px">
+<button class="btn btn-primary w-full mb-2" onclick="showProductsModal()"><i class="fa-solid fa-plus"></i> Adicionar Produtos</button>
+<button class="btn btn-warning w-full mb-2" onclick="leaveTableOpen()"><i class="fa-solid fa-clock"></i> Deixar em Aberto</button>
+<button class="btn btn-success w-full" onclick="showCloseTableModal()"><i class="fa-solid fa-check"></i> Fechar Mesa</button>
+</div>`,
+``);
+}
+
+function updateItemQty(idx, delta) {
+cart[idx].qty += delta;
+if (cart[idx].qty <= 0) cart.splice(idx, 1);
+currentTable.items = [...cart];
+saveTables();
+showTableDetail();
+renderTables();
+}
+
+async function showProductsModal() {
+const prods = allProducts;
+if (!prods.length) {
+showModal('Produtos', '<div class="text-center text-gray" style="padding:20px">Nenhum produto cadastrado</div>', `<button class="btn btn-ghost w-full" onclick="closeModal()">Fechar</button>`);
+return;
+}
+showModal('Adicionar Produtos',
+`<div class="products-grid">
+${prods.map(p=>`
+<div class="product-card" onclick="addProductToTable('${p.id}')">
+<div class="product-card-name">${p.name}</div>
+<div class="product-card-price">${fmt(p.price)}</div>
+<div class="product-card-stock">Estoque: ${p.stock}</div>
+</div>
+`).join('')}
+</div>`,
+`<button class="btn btn-ghost w-full" onclick="closeModal()">Voltar</button>`);
+}
+
+async function addProductToTable(pid) {
+const p = allProducts.find(x=>x.id===pid);
+if (!p || p.stock <= 0) { showToast('Produto sem estoque','warning'); return; }
+const existing = cart.find(i=>i.id===pid);
+if (existing) {
+if (existing.qty >= p.stock) { showToast('Limite de estoque','warning'); return; }
+existing.qty++;
+} else {
+cart.push({id:pid, name:p.name, price:p.price, qty:1});
+}
+currentTable.items = [...cart];
+await saveTables();
+showProductsModal();
+renderTables();
+showToast(`${p.name} adicionado!`,'success');
+}
+
+async function leaveTableOpen() {
+currentTable.items = [...cart];
+currentTable.status = 'open';
+await saveTables();
+closeModal();
+renderTables();
+showToast('Mesa deixada em aberto!','success');
+currentTable = null;
+cart = [];
+}
+
+function showCloseTableModal() {
+if (!cart.length) { showToast('Mesa vazia','warning'); return; }
+const total = cart.reduce((s,i)=>s+i.price*i.qty,0);
+showModal('Fechar Mesa',
+`<div style="text-align:center;margin-bottom:20px">
+<div style="font-size:14px;color:var(--gray)">Total da Mesa ${currentTable.tableNumber}</div>
+<div style="font-size:36px;font-weight:900;color:var(--success)">${fmt(total)}</div>
+</div>
+<div class="form-group"><label>Forma de Pagamento *</label>
+<select id="close-payment" class="form-control" onchange="toggleTroco()">
+<option value="">Selecione...</option>
+<option value="dinheiro">💵 Dinheiro</option>
+<option value="cartao">💳 Cartão</option>
+<option value="pix">📱 Pix</option>
+</select>
+</div>
+<div id="troco-area" class="hidden">
+<div class="form-group"><label>Valor Recebido (R$)</label><input type="number" id="close-valor-pago" class="form-control" step="0.50" min="0" oninput="calcTroco(${total})"></div>
+<div id="troco-result" style="font-size:16px;font-weight:800;color:var(--success);text-align:center;margin-top:8px"></div>
+</div>`,
+`<button class="btn btn-ghost" onclick="closeModal()">Cancelar</button><button class="btn btn-success" onclick="processCloseTable(${total})"><i class="fa-solid fa-check"></i> Confirmar Pagamento</button>`);
+}
+
+function toggleTroco() {
+const pay = document.getElementById('close-payment').value;
+const el = document.getElementById('troco-area');
+if (el) el.classList.toggle('hidden', pay !== 'dinheiro');
+}
+
+function calcTroco(total) {
+const pago = parseFloat(document.getElementById('close-valor-pago').value)||0;
+const troco = pago - total;
+const el = document.getElementById('troco-result');
+if (!el) return;
+if (pago <= 0) { el.textContent = ''; return; }
+if (troco < 0) el.innerHTML = `<span style="color:var(--danger)">Faltam ${fmt(Math.abs(troco))}</span>`;
+else el.innerHTML = `Troco: ${fmt(troco)}`;
+}
+
+async function processCloseTable(total) {
+const payment = document.getElementById('close-payment').value;
+if (!payment) { showToast('Selecione a forma de pagamento','warning'); return; }
+let valorPago = total, troco = 0;
+if (payment === 'dinheiro') {
+valorPago = parseFloat(document.getElementById('close-valor-pago').value)||total;
+troco = Math.max(0, valorPago - total);
+if (valorPago < total) { showToast('Valor insuficiente','danger'); return; }
+}
+showLoading('Fechando mesa...');
+try {
+const now = new Date();
+const ym = `${now.getFullYear()}-${String(now.getMonth()+1).padStart(2,'0')}`;
+const osNum = genOSNumber();
+// Deduz estoque
+cart.forEach(item => {
+const p = currentCompany.products.find(p=>p.id===item.id);
+if (p) p.stock = Math.max(0, p.stock - item.qty);
+});
+await db.collection('companies').doc(companyId).update({ products: currentCompany.products });
+const sale = { companyId, items:[...cart], total, paymentMethod:payment, valorPago, troco, date:now.toISOString(), yearMonth:ym, orderNumber:osNum, customerName:`Mesa ${currentTable.tableNumber}`, employeeName: currentEmployee.name, source: 'funcionario', tableNumber: currentTable.tableNumber };
+await db.collection('sales').add(sale);
+await db.collection('orders').add({ companyId, items:[...cart], total, paymentMethod:payment, valorPago, troco, status:'received', date:now.toISOString(), source:'funcionario', orderNumber:osNum, tableNumber: currentTable.tableNumber, employeeName: currentEmployee.name, customerName:`Mesa ${currentTable.tableNumber}` });
+// Remove mesa
+tables = tables.filter(t=>t.id!==currentTable.id);
+await saveTables();
+hideLoading();
+closeModal();
+renderTables();
+showToast(`Mesa fechada! Total: ${fmt(total)}`,'success');
+currentTable = null;
+cart = [];
+} catch(e) { hideLoading(); showToast('Erro: '+e.message,'danger'); }
+}
+
+async function saveTables() {
+try {
+await db.collection('companies').doc(companyId).update({ comandas: tables });
+} catch(e) { console.error('Erro ao salvar mesas:', e); }
+}
+
+// ============================================================
+// APP INIT
+// ============================================================
+document.addEventListener('DOMContentLoaded', () => {
+document.getElementById('page-login').classList.remove('hidden');
+document.getElementById('page-app').classList.add('hidden');
+});
+</script>
+</body>
+</html>
