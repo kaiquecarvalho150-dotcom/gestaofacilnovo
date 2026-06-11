@@ -2416,9 +2416,13 @@ if (!doc.exists) { hideLoading(); showToast('Cardápio não encontrado', 'danger
 pubCompany = { id: doc.id, ...doc.data() };
 document.getElementById('pub-company-name').textContent = pubCompany.companyName;
 document.getElementById('pub-company-sub').textContent = pubCompany.address || 'Faça seu pedido online';
+
+// ADICIONAR ESTA LINHA:
+showPage('page-public-menu');
+
 const cust = loadPubCustomer();
 if (cust) { currentCustomer = cust; showPubMain(); }
-else { document.getElementById('pub-auth-view').classList.remove('hidden'); document.getElementById('pub-main-view').classList.add('hidden'); }
+else { document.getElementById('pub-auth-view').classList.remove('hidden'); document.getElementById('pub-main-view').classList.add('hidden'); document.getElementById('pub-cart-btn').style.display = 'none'; }
 hideLoading();
 } catch(e) { hideLoading(); showToast('Erro: '+e.message, 'danger'); showPage('page-login'); }
 }
