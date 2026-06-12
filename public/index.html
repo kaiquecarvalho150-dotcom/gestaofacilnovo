@@ -1303,7 +1303,7 @@ hideLoading(); closeModal(); showToast('Receitas zeradas! Nova contagem iniciada
 function initDashboard() {
 const c = currentCompany; if(!c) return;
 pdvDeliveryFee = parseFloat(c.pdvDeliveryFee)||0;
-pubDeliveryFee = parseFloat(c.pubDeliveryFee)||0;
+pubDeliveryFee = parseFloat(c.pubDeliveryFee)||0;  // ← ADICIONE ESTA LINHA
 adminLogoUrl = c.logoUrl || adminLogoUrl;
 document.getElementById('sb-company-name').textContent = c.companyName;
 const days = getDaysRemaining(c);
@@ -2376,10 +2376,28 @@ hideLoading(); renderEmployees(); showToast(emp.paid ? 'Pago!' : 'Desmarcado!', 
 // ============================================================
 // PUBLIC MENU — CUSTOMER AUTH
 // ============================================================
-function savePubCustomer(customer) { localStorage.setItem('pub_customer_'+pubCompanyId, JSON.stringify(customer)); currentCustomer = customer; }
-function loadPubCustomer() { const d = localStorage.getItem('pub_customer_'+pubCompanyId); return d ? JSON.parse(d) : null; }
-function clearPubCustomer() { localStorage.removeItem('pub_customer_'+pubCompanyId); currentCustomer = null; }
-function switchAuthTab(tab) { document.getElementById('tab-login').classList.toggle('active', tab==='login'); document.getElementById('tab-register').classList.toggle('active', tab==='register'); document.getElementById('auth-login-form').classList.toggle('hidden', tab!=='login'); document.getElementById('auth-register-form').classList.toggle('hidden', tab!=='register'); }
+function savePubCustomer(customer) { 
+localStorage.setItem('pub_customer_'+pubCompanyId, JSON.stringify(customer)); 
+currentCustomer = customer; 
+}
+
+function loadPubCustomer() { 
+const d = localStorage.getItem('pub_customer_'+pubCompanyId); 
+return d ? JSON.parse(d) : null; 
+}
+
+function clearPubCustomer() { 
+localStorage.removeItem('pub_customer_'+pubCompanyId); 
+currentCustomer = null; 
+}
+
+function switchAuthTab(tab) { 
+document.getElementById('tab-login').classList.toggle('active', tab==='login'); 
+document.getElementById('tab-register').classList.toggle('active', tab==='register'); 
+document.getElementById('auth-login-form').classList.toggle('hidden', tab!=='login'); 
+document.getElementById('auth-register-form').classList.toggle('hidden', tab!=='register'); 
+}
+
 async function doPubLogin() {
 const email = document.getElementById('pub-login-email').value.trim();
 const pass = document.getElementById('pub-login-password').value.trim();
@@ -2392,9 +2410,11 @@ const cust = { id: snap.docs[0].id, ...snap.docs[0].data() };
 if (cust.password !== pass) { hideLoading(); showToast('E-mail ou senha incorretos', 'danger'); return; }
 currentCustomer = cust;
 savePubCustomer(cust);
-hideLoading(); showPubMain();
+hideLoading(); 
+showPubMain();
 } catch(e) { hideLoading(); showToast('Erro: '+e.message, 'danger'); }
 }
+
 async function doPubRegister() {
 const name = document.getElementById('pub-reg-name').value.trim();
 const email = document.getElementById('pub-reg-email').value.trim();
@@ -2409,23 +2429,45 @@ const cust = { id, companyId: pubCompanyId, name, email, password: pass, phone: 
 await db.collection('pub_customers').doc(id).set(cust);
 currentCustomer = cust;
 savePubCustomer(cust);
-hideLoading(); showPubMain(); showToast('Conta criada com sucesso!', 'success');
+hideLoading(); 
+showPubMain(); 
+showToast('Conta criada com sucesso!', 'success');
 } catch(e) { hideLoading(); showToast('Erro: '+e.message, 'danger'); }
 }
-function doPubLogout() { clearPubCustomer(); pubCart = []; updatePubCartCount(); document.getElementById('pub-auth-view').classList.remove('hidden'); document.getElementById('pub-main-view').classList.add('hidden'); document.getElementById('pub-cart-btn').style.display = 'none'; }
-function showPubMain() { document.getElementById('pub-auth-view').classList.add('hidden'); document.getElementById('pub-main-view').classList.remove('hidden'); renderPublicMenu(); }
-function showPubTab(tab) { pubActiveTab = tab; document.getElementById('pnt-menu').classList.toggle('active', tab==='menu'); document.getElementById('pnt-orders').classList.toggle('active', tab==='orders'); document.getElementById('pub-tab-menu').classList.toggle('hidden', tab!=='menu'); document.getElementById('pub-tab-orders').classList.toggle('hidden', tab!=='orders'); if (tab==='orders') setupCustomerOrdersListener(); }
+
+function doPubLogout() { 
+clearPubCustomer(); 
+pubCart = []; 
+pubDeliveryFee = 0;
+updatePubCartCount(); 
+document.getElementById('pub-auth-view').classList.remove('hidden'); 
+document.getElementById('pub-main-view').classList.add('hidden'); 
+document.getElementById('pub-cart-btn').style.display = 'none'; 
+}
+
+function showPubMain() { 
+document.getElementById('pub-auth-view').classList.add('hidden'); 
+document.getElementById('pub-main-view').classList.remove('hidden'); 
+renderPublicMenu(); 
+}
+
+function showPubTab(tab) { 
+pubActiveTab = tab; 
+document.getElementById('pnt-menu').classList.toggle('active', tab==='menu'); 
+document.getElementById('pnt-orders').classList.toggle('active', tab==='orders'); 
+document.getElementById('pub-tab-menu').classList.toggle('hidden', tab!=='menu'); 
+document.getElementById('pub-tab-orders').classList.toggle('hidden', tab!=='orders'); 
+if (tab==='orders') setupCustomerOrdersListener(); 
+}
+
 function setupCustomerOrdersListener() {
 if (!currentCustomer || !pubCompanyId) return;
 if (customerOrdersUnsubscribe) customerOrdersUnsubscribe();
-
-// Query simplificada sem orderBy composto
 customerOrdersUnsubscribe = db.collection('orders')
 .where('companyId','==',pubCompanyId)
 .where('customerId','==',currentCustomer.id)
 .onSnapshot(snap => {
 let orders = snap.docs.map(d => ({id:d.id, ...d.data()}));
-// Ordena no cliente em vez do servidor
 orders.sort((a,b) => new Date(b.date) - new Date(a.date));
 renderMyOrders(orders);
 }, error => {
@@ -2433,6 +2475,7 @@ console.error('Erro ao ouvir pedidos:', error);
 showToast('Erro ao carregar pedidos','danger');
 });
 }
+
 async function showPublicMenu(cid) {
 pubCompanyId = cid;
 showLoading('Carregando cardápio...');
@@ -2440,18 +2483,21 @@ try {
 const doc = await db.collection('companies').doc(cid).get();
 if (!doc.exists) { hideLoading(); showToast('Cardápio não encontrado', 'danger'); showPage('page-login'); return; }
 pubCompany = { id: doc.id, ...doc.data() };
+pubDeliveryFee = parseFloat(pubCompany.pubDeliveryFee)||0;
 document.getElementById('pub-company-name').textContent = pubCompany.companyName;
 document.getElementById('pub-company-sub').textContent = pubCompany.address || 'Faça seu pedido online';
-
-// ADICIONAR ESTA LINHA:
 showPage('page-public-menu');
-
 const cust = loadPubCustomer();
 if (cust) { currentCustomer = cust; showPubMain(); }
-else { document.getElementById('pub-auth-view').classList.remove('hidden'); document.getElementById('pub-main-view').classList.add('hidden'); document.getElementById('pub-cart-btn').style.display = 'none'; }
+else { 
+document.getElementById('pub-auth-view').classList.remove('hidden'); 
+document.getElementById('pub-main-view').classList.add('hidden'); 
+document.getElementById('pub-cart-btn').style.display = 'none'; 
+}
 hideLoading();
 } catch(e) { hideLoading(); showToast('Erro: '+e.message, 'danger'); showPage('page-login'); }
 }
+
 function renderPublicMenu() {
 const items = pubCompany.menuItems || [];
 const cats = ['Todos', ...new Set(items.map(p=>p.category).filter(Boolean))];
@@ -2472,7 +2518,9 @@ ${oos ? '<div style="color:var(--danger);font-size:11px;font-weight:700">Esgotad
 </div>`;
 }).join('');
 }
+
 function setPubCat(cat) { pubActiveCat = cat; renderPublicMenu(); }
+
 function showPubItemModal(iid) {
 const p = (pubCompany.menuItems || []).find(x => x.id === iid);
 if (!p) return;
@@ -2499,6 +2547,7 @@ ${globalAdds.length ? `<div style="margin-bottom:12px"><div style="font-size:12p
 </div>`,
 `<button class="btn btn-ghost" onclick="closeModal()">Cancelar</button><button class="btn btn-success" onclick="confirmPubAddCart('${p.id}', ${p.price})"><i class="fa-solid fa-cart-plus"></i> Adicionar</button>`, false);
 }
+
 function confirmPubAddCart(iid, basePrice) {
 const qty = parseInt(document.getElementById('pub-qty').value) || 1;
 const selected = [...document.querySelectorAll('.pub-add-check:checked')].map(cb => ({ id: cb.dataset.id, name: cb.dataset.name, price: parseFloat(cb.dataset.price) || 0 }));
@@ -2509,9 +2558,17 @@ const sigKey = iid + '|' + selected.map(a=>a.id).sort().join(',');
 const existing = pubCart.find(i => i._sigKey === sigKey);
 if (existing) existing.qty += qty;
 else pubCart.push({ id: iid, name, price: basePrice + addPrice, qty, additionals: selected, _sigKey: sigKey });
-closeModal(); updatePubCartCount(); showToast('Adicionado ao carrinho!', 'success');
+closeModal(); 
+updatePubCartCount(); 
+showToast('Adicionado ao carrinho!', 'success');
 }
-function updatePubCartCount() { const count = pubCart.reduce((s, i) => s + i.qty, 0); document.getElementById('pub-cart-count').textContent = count; document.getElementById('pub-cart-btn').style.display = count > 0 ? 'flex' : 'none'; }
+
+function updatePubCartCount() { 
+const count = pubCart.reduce((s, i) => s + i.qty, 0); 
+document.getElementById('pub-cart-count').textContent = count; 
+document.getElementById('pub-cart-btn').style.display = count > 0 ? 'flex' : 'none'; 
+}
+
 function showPubCartModal() {
 if (!pubCart.length) { showToast('Carrinho vazio','warning'); return; }
 
@@ -2561,7 +2618,7 @@ showModal('<i class="fa-solid fa-shopping-cart"></i> Seu Carrinho',
 <div class="form-group"><label>Complemento</label><input type="text" id="pub-order-comp" class="form-control"></div>
 </div>
 <div class="form-group"><label>Forma de Pagamento *</label>
-<select id="pub-order-pay" class="form-control">
+<select id="pub-order-pay" class="form-control" onchange="togglePubTroco()">
 <option value="pix">Pix</option><option value="cartao">Cartão</option><option value="dinheiro">Dinheiro</option>
 </select>
 </div>
@@ -2572,11 +2629,16 @@ showModal('<i class="fa-solid fa-shopping-cart"></i> Seu Carrinho',
 </div>`,
 `<button class="btn btn-ghost" onclick="closeModal()">Fechar</button><button class="btn btn-success w-full" onclick="placePubOrder()"><i class="fa-solid fa-check"></i> Finalizar Pedido</button>`, true);
 
-document.getElementById('pub-order-pay').addEventListener('change', function() {
-const tb = document.getElementById('pub-troco-box');
-if (this.value === 'dinheiro') tb.classList.remove('hidden'); else tb.classList.add('hidden');
-});
+document.getElementById('pub-order-pay').addEventListener('change', togglePubTroco);
 }
+
+function togglePubTroco() {
+const pay = document.getElementById('pub-order-pay')?.value;
+const tb = document.getElementById('pub-troco-box');
+if (pay === 'dinheiro' && tb) tb.classList.remove('hidden');
+else if (tb) tb.classList.add('hidden');
+}
+
 function calcPubTroco(total) {
 const pago = parseFloat(document.getElementById('pub-troco-input').value) || 0;
 const troco = pago - total;
@@ -2585,6 +2647,13 @@ if (pago <= 0) { el.textContent = ''; return; }
 if (troco < 0) el.innerHTML = `<span style="color:var(--danger)">Valor insuficiente</span>`;
 else el.innerHTML = `Troco: <strong>${fmt(troco)}</strong>`;
 }
+
+function removePubCartItem(iid) {
+pubCart = pubCart.filter(i => i.id !== iid);
+updatePubCartCount();
+showPubCartModal();
+}
+
 async function placePubOrder() {
 if (!pubCart.length) { showToast('Carrinho vazio','warning'); return; }
 if (!currentCustomer) { showToast('Faça login para continuar','warning'); return; }
@@ -2657,13 +2726,7 @@ showToast('Erro ao enviar pedido: ' + e.message,'danger');
 console.error(e);
 }
 }
-function renderPubCartItems() {
-// Atualiza o carrinho se estiver aberto
-const modalBody = document.getElementById('modal-body');
-if (modalBody && modalBody.querySelector('#pub-order-name')) {
-showPubCartModal();
-}
-}
+
 function renderMyOrders(orders) {
 const el = document.getElementById('my-orders-list');
 if (!el) return;
@@ -2719,25 +2782,12 @@ ${o.address ? `<div style="font-size:11px;color:var(--gray)"><i class="fa-solid 
 `;
 }).join('');
 }
-// FUNÇÕES DO CARDÁPIO PÚBLICO QUE FALTAVAM
+
 function renderPubCartItems() {
 const modalBody = document.getElementById('modal-body');
 if (modalBody && modalBody.querySelector('#pub-order-name')) {
 showPubCartModal();
 }
-}
-
-function togglePubTroco() {
-const pay = document.getElementById('pub-order-pay')?.value;
-const tb = document.getElementById('pub-troco-box');
-if (pay === 'dinheiro' && tb) tb.classList.remove('hidden');
-else if (tb) tb.classList.add('hidden');
-}
-
-function removePubCartItem(iid) {
-pubCart = pubCart.filter(i => i.id !== iid);
-updatePubCartCount();
-showPubCartModal();
 }
 
 function addPubCart(iid) {
