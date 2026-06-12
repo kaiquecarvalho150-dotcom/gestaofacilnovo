@@ -2400,11 +2400,21 @@ function doPubLogout() { clearPubCustomer(); pubCart = []; updatePubCartCount();
 function showPubMain() { document.getElementById('pub-auth-view').classList.add('hidden'); document.getElementById('pub-main-view').classList.remove('hidden'); renderPublicMenu(); }
 function showPubTab(tab) { pubActiveTab = tab; document.getElementById('pnt-menu').classList.toggle('active', tab==='menu'); document.getElementById('pnt-orders').classList.toggle('active', tab==='orders'); document.getElementById('pub-tab-menu').classList.toggle('hidden', tab!=='menu'); document.getElementById('pub-tab-orders').classList.toggle('hidden', tab!=='orders'); if (tab==='orders') setupCustomerOrdersListener(); }
 function setupCustomerOrdersListener() {
-if (!currentCustomer) return;
+if (!currentCustomer || !pubCompanyId) return;
 if (customerOrdersUnsubscribe) customerOrdersUnsubscribe();
-customerOrdersUnsubscribe = db.collection('orders').where('companyId','==',pubCompanyId).where('customerId','==',currentCustomer.id).orderBy('date','desc').onSnapshot(snap => {
-const orders = snap.docs.map(d => ({id:d.id, ...d.data()}));
+
+// Query simplificada sem orderBy composto
+customerOrdersUnsubscribe = db.collection('orders')
+.where('companyId','==',pubCompanyId)
+.where('customerId','==',currentCustomer.id)
+.onSnapshot(snap => {
+let orders = snap.docs.map(d => ({id:d.id, ...d.data()}));
+// Ordena no cliente em vez do servidor
+orders.sort((a,b) => new Date(b.date) - new Date(a.date));
 renderMyOrders(orders);
+}, error => {
+console.error('Erro ao ouvir pedidos:', error);
+showToast('Erro ao carregar pedidos','danger');
 });
 }
 async function showPublicMenu(cid) {
@@ -2539,68 +2549,133 @@ if (troco < 0) el.innerHTML = `<span style="color:var(--danger)">Valor insuficie
 else el.innerHTML = `Troco: <strong>${fmt(troco)}</strong>`;
 }
 async function placePubOrder() {
-if (!pubCart.length) return;
+if (!pubCart.length) { showToast('Carrinho vazio','warning'); return; }
+if (!currentCustomer) { showToast('Faça login para continuar','warning'); return; }
+
 const name = document.getElementById('pub-order-name').value.trim();
 const phone = document.getElementById('pub-order-phone').value.trim();
 const address = document.getElementById('pub-order-address').value.trim();
 const house = document.getElementById('pub-order-house').value.trim();
+const comp = document.getElementById('pub-order-comp').value.trim();
 const pay = document.getElementById('pub-order-pay').value;
-if (!name || !phone || !address) { showToast('Preencha nome, telefone e endereço', 'warning'); return; }
-let valorPago = pubCart.reduce((s, i) => s + (i.price * i.qty), 0);
-let troco = 0;
-if (pay === 'dinheiro') {
-valorPago = parseFloat(document.getElementById('pub-troco-input').value) || valorPago;
-troco = Math.max(0, valorPago - pubCart.reduce((s, i) => s + (i.price * i.qty), 0));
-if (valorPago < pubCart.reduce((s, i) => s + (i.price * i.qty), 0)) { showToast('Valor recebido menor que o total', 'danger'); return; }
+
+if (!name || !phone || !address) { 
+showToast('Preencha nome, telefone e endereço','warning'); 
+return; 
 }
+
+const total = pubCart.reduce((s, i) => s + (i.price * i.qty), 0);
+let valorPago = total;
+let troco = 0;
+
+if (pay === 'dinheiro') {
+valorPago = parseFloat(document.getElementById('pub-troco-input').value) || total;
+troco = Math.max(0, valorPago - total);
+if (valorPago < total) { 
+showToast('Valor recebido menor que o total','danger'); 
+return; 
+}
+}
+
 showLoading('Enviando pedido...');
 try {
 const now = new Date();
 const osNum = genOSNumber();
+
 await db.collection('orders').add({
 companyId: pubCompanyId,
-customerId: currentCustomer?.id || null,
+customerId: currentCustomer.id,
 customerName: name,
-customerEmail: currentCustomer?.email || '',
-address, houseNumber: house, phone,
+customerEmail: currentCustomer.email || '',
+address: address,
+houseNumber: house,
+complement: comp,
+phone: phone,
 items: [...pubCart],
-total: valorPago,
-subtotal: pubCart.reduce((s, i) => s + (i.price * i.qty), 0),
+total: total,
+subtotal: total,
 deliveryTotal: 0,
 paymentMethod: pay,
-valorPago, troco,
+valorPago: valorPago,
+troco: troco,
 status: 'pending',
 date: now.toISOString(),
-notes: document.getElementById('pub-order-comp').value.trim(),
+notes: comp,
 orderNumber: osNum,
 source: 'pub_menu'
 });
-hideLoading(); closeModal();
-pubCart = []; updatePubCartCount();
-showToast('Pedido enviado com sucesso!', 'success');
+
+hideLoading();
+closeModal();
+pubCart = [];
+updatePubCartCount();
+showToast('Pedido enviado com sucesso!','success');
+
+// Recarrega os pedidos
+if (customerOrdersUnsubscribe) {
+setupCustomerOrdersListener();
+}
 showPubTab('orders');
-} catch(e) { hideLoading(); showToast('Erro: ' + e.message, 'danger'); }
+} catch(e) { 
+hideLoading(); 
+showToast('Erro ao enviar pedido: ' + e.message,'danger'); 
+console.error(e);
+}
 }
 function renderMyOrders(orders) {
 const el = document.getElementById('my-orders-list');
-if (!orders.length) { el.innerHTML = '<div style="text-align:center;padding:40px;color:var(--gray)">Nenhum pedido ainda</div>'; return; }
+if (!el) return;
+
+if (!orders || orders.length === 0) { 
+el.innerHTML = '<div style="text-align:center;padding:40px;color:var(--gray)"><i class="fa-solid fa-receipt" style="font-size:48px;display:block;margin-bottom:12px;opacity:0.3"></i><p>Nenhum pedido realizado ainda</p><p style="font-size:13px;margin-top:8px">Faça seu primeiro pedido!</p></div>'; 
+return; 
+}
+
 const sLabel = {pending:'Aguardando Pagamento',paid:'Pago',cancelled:'Cancelado'};
 const sColor = {pending:'warning',paid:'success',cancelled:'danger'};
-el.innerHTML = orders.map(o => `
+const pLabel = {dinheiro:'💵 Dinheiro',cartao:'💳 Cartão',pix:'📱 Pix'};
+
+el.innerHTML = orders.map(o => {
+const dateObj = new Date(o.date);
+const dateStr = dateObj.toLocaleDateString('pt-BR');
+const timeStr = dateObj.toLocaleTimeString('pt-BR',{hour:'2-digit',minute:'2-digit'});
+
+return `
 <div class="my-order-card">
-<div class="flex justify-between items-center mb-2">
+<div class="flex justify-between items-start mb-3">
+<div>
 <div class="order-id">${o.orderNumber || o.id}</div>
-<span class="badge badge-${sColor[o.status]}">${sLabel[o.status]}</span>
+<div style="font-size:12px;color:var(--gray);margin-top:4px">
+<i class="fa-solid fa-calendar"></i> ${dateStr} às ${timeStr}
 </div>
-<div style="font-size:12px;color:var(--gray);margin-bottom:8px">${new Date(o.date).toLocaleString('pt-BR')}</div>
+</div>
+<span class="badge badge-${sColor[o.status] || 'gray'}">${sLabel[o.status] || 'Desconhecido'}</span>
+</div>
+
 <div class="order-items-list">
-${(o.items||[]).map(i => `<div class="order-item-line"><span>${i.qty}x ${i.name}</span><span>${fmt(i.price*i.qty)}</span></div>`).join('')}
+${(o.items||[]).map(i => `
+<div class="order-item-line">
+<span>${i.qty}x ${i.name}</span>
+<span>${fmt(i.price*i.qty)}</span>
 </div>
-<div class="flex justify-between items-center mt-2" style="font-size:16px;font-weight:900;color:var(--primary)">
-<span>Total</span><span>${fmt(o.total)}</span>
+`).join('')}
+</div>
+
+<div class="flex justify-between items-center mt-3 pt-3" style="border-top:1px solid #f1f5f9">
+<div>
+<div style="font-size:12px;color:var(--gray);margin-bottom:4px">
+${pLabel[o.paymentMethod] || 'Pagamento pendente'}
+</div>
+${o.address ? `<div style="font-size:11px;color:var(--gray)"><i class="fa-solid fa-location-dot"></i> ${o.address}, ${o.houseNumber || ''}</div>` : ''}
+</div>
+<div style="text-align:right">
+<div style="font-size:11px;color:var(--gray);margin-bottom:2px">Total</div>
+<div style="font-size:18px;font-weight:900;color:var(--primary)">${fmt(o.total)}</div>
 </div>
 </div>
-`).join('');
+</div>
+`;
+}).join('');
 }
 
 // ============================================================
