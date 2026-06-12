@@ -818,6 +818,7 @@ let pendingPaymentId = null;
 let adminWhatsApp = '';
 let adminLogoUrl = '';
 let pdvDeliveryFee = 0;
+let pubDeliveryFee = 0;
 let lastSaleData = null;
 let speechUnlocked = false;
 let sharedAudioCtx = null;
@@ -1062,6 +1063,7 @@ if (days <= 0) { hideLoading(); showToast('Plano expirado. Renove seu plano para
 currentCompanyId = co.id;
 currentCompany = co;
 pdvDeliveryFee = parseFloat(co.pdvDeliveryFee)||0;
+pubDeliveryFee = parseFloat(c.pubDeliveryFee)||0;
 hideLoading();
 initDashboard();
 } catch(e) { hideLoading(); showToast('Erro de conexão: '+e.message,'danger'); }
@@ -1301,6 +1303,7 @@ hideLoading(); closeModal(); showToast('Receitas zeradas! Nova contagem iniciada
 function initDashboard() {
 const c = currentCompany; if(!c) return;
 pdvDeliveryFee = parseFloat(c.pdvDeliveryFee)||0;
+pubDeliveryFee = parseFloat(c.pubDeliveryFee)||0;
 adminLogoUrl = c.logoUrl || adminLogoUrl;
 document.getElementById('sb-company-name').textContent = c.companyName;
 const days = getDaysRemaining(c);
@@ -1646,15 +1649,28 @@ if (!prodPanel || !cartPanel) return;
 if (tab === 'produtos') { prodPanel.classList.remove('pdv-tab-hidden'); cartPanel.classList.remove('pdv-tab-active'); tabProd?.classList.add('active'); tabCart?.classList.remove('active'); }
 else { prodPanel.classList.add('pdv-tab-hidden'); cartPanel.classList.add('pdv-tab-active'); tabCart?.classList.add('active'); tabProd?.classList.remove('active'); }
 }
-function showSetDeliveryFeeModal() {
-showModal('<i class="fa-solid fa-truck" style="color:var(--warning)"></i> Taxa de Entrega', `<p style="color:var(--gray);margin-bottom:14px;font-size:13px">Defina a taxa de entrega que será cobrada nesta venda.</p><div class="form-group"><label>Valor da Taxa de Entrega (R$)</label><input type="number" id="modal-delivery-fee" class="form-control" value="${pdvDeliveryFee||0}" step="0.50" min="0" placeholder="0,00" style="font-size:20px;font-weight:700;text-align:center"></div><div class="flex gap-2 mt-2"><button class="btn btn-ghost flex-1" onclick="setDeliveryFee(0)"><i class="fa-solid fa-times"></i> Remover</button></div>`, `<button class="btn btn-ghost" onclick="closeModal()">Cancelar</button><button class="btn btn-warning" onclick="setDeliveryFee()"><i class="fa-solid fa-check"></i> Confirmar Taxa</button>`, false);
-setTimeout(() => document.getElementById('modal-delivery-fee')?.focus(), 100);
+async function saveDeliveryFees() {
+const pdvFee = parseFloat(document.getElementById('modal-pdv-fee')?.value) || 0;
+const pubFee = parseFloat(document.getElementById('modal-pub-fee')?.value) || 0;
+
+pdvDeliveryFee = pdvFee;
+pubDeliveryFee = pubFee;
+
+const c = currentCompany;
+if (c) {
+try {
+await db.collection('companies').doc(currentCompanyId).update({
+pdvDeliveryFee: pdvFee,
+pubDeliveryFee: pubFee
+});
+c.pdvDeliveryFee = pdvFee;
+c.pubDeliveryFee = pubFee;
+} catch(e) {}
 }
-async function setDeliveryFee(forceValue) {
-const val = forceValue !== undefined ? forceValue : parseFloat(document.getElementById('modal-delivery-fee')?.value)||0;
-pdvDeliveryFee = val; const c = currentCompany;
-if (c) { c.pdvDeliveryFee = val; try { await db.collection('companies').doc(currentCompanyId).update({ pdvDeliveryFee: val }); } catch(e) {} }
-closeModal(); renderCart(); showToast(val > 0 ? `Taxa de entrega: ${fmt(val)}` : 'Taxa de entrega removida.', val > 0 ? 'success' : 'info');
+
+closeModal();
+renderCart();
+showToast(`Taxas salvas! PDV: ${fmt(pdvFee)} | Online: ${fmt(pubFee)}`, 'success');
 }
 
 // ============================================================
@@ -2497,10 +2513,14 @@ closeModal(); updatePubCartCount(); showToast('Adicionado ao carrinho!', 'succes
 }
 function updatePubCartCount() { const count = pubCart.reduce((s, i) => s + i.qty, 0); document.getElementById('pub-cart-count').textContent = count; document.getElementById('pub-cart-btn').style.display = count > 0 ? 'flex' : 'none'; }
 function showPubCartModal() {
-if (!pubCart.length) { showToast('Carrinho vazio', 'warning'); return; }
+if (!pubCart.length) { showToast('Carrinho vazio','warning'); return; }
+
 const html = pubCart.map((item, idx) => `
 <div class="flex items-center gap-2" style="padding:10px 0;border-bottom:1px solid #f1f5f9">
-<div style="flex:1"><div style="font-weight:700;font-size:13px">${item.name}</div><div style="font-size:12px;color:var(--gray)">${fmt(item.price)} un</div></div>
+<div style="flex:1">
+<div style="font-weight:700;font-size:13px">${item.name}</div>
+<div style="font-size:12px;color:var(--gray)">${fmt(item.price)} un</div>
+</div>
 <div class="qty-controls">
 <button class="qty-btn" onclick="pubCart[${idx}].qty=Math.max(1,pubCart[${idx}].qty-1);updatePubCartCount();showPubCartModal()">−</button>
 <span class="qty-num">${item.qty}</span>
@@ -2510,12 +2530,29 @@ const html = pubCart.map((item, idx) => `
 <button class="btn btn-sm btn-ghost" onclick="pubCart.splice(${idx},1);updatePubCartCount();showPubCartModal()"><i class="fa-solid fa-trash" style="color:var(--danger)"></i></button>
 </div>
 `).join('');
-const total = pubCart.reduce((s, i) => s + (i.price * i.qty), 0);
+
+const subtotal = pubCart.reduce((s, i) => s + (i.price * i.qty), 0);
+const deliveryFee = pubDeliveryFee || 0;
+const total = subtotal + deliveryFee;
+
 showModal('<i class="fa-solid fa-shopping-cart"></i> Seu Carrinho',
-`<div style="max-height:50vh;overflow-y:auto">${html}</div>
-<div style="margin-top:16px;padding-top:12px;border-top:2px solid var(--border);display:flex;justify-content:space-between;font-size:18px;font-weight:900;color:var(--primary)">
-<span>Total</span><span>${fmt(total)}</span>
+`<div style="max-height:45vh;overflow-y:auto">${html}</div>
+
+<div style="margin-top:16px;padding-top:12px;border-top:2px solid var(--border)">
+<div class="flex justify-between items-center mb-2">
+<span style="color:var(--gray)">Subtotal:</span>
+<span style="font-weight:700">${fmt(subtotal)}</span>
 </div>
+<div class="flex justify-between items-center mb-3" style="padding:10px;background:#f0fdf4;border-radius:8px;border:1px solid #86efac">
+<span style="color:#166534"><i class="fa-solid fa-truck"></i> Taxa de Entrega:</span>
+<span style="font-weight:700;color:#166534">${fmt(deliveryFee)}</span>
+</div>
+<div class="flex justify-between items-center" style="font-size:18px;font-weight:900;color:var(--primary)">
+<span>Total:</span>
+<span>${fmt(total)}</span>
+</div>
+</div>
+
 <div class="form-group mt-3"><label>Nome para o Pedido *</label><input type="text" id="pub-order-name" class="form-control" value="${currentCustomer?.name || ''}"></div>
 <div class="form-group"><label>Telefone *</label><input type="text" id="pub-order-phone" class="form-control" value="${currentCustomer?.phone || ''}" oninput="maskPhone(this)"></div>
 <div class="form-group"><label>Endereço de Entrega *</label><input type="text" id="pub-order-address" class="form-control" placeholder="Rua, número, bairro"></div>
@@ -2564,7 +2601,10 @@ showToast('Preencha nome, telefone e endereço','warning');
 return; 
 }
 
-const total = pubCart.reduce((s, i) => s + (i.price * i.qty), 0);
+const subtotal = pubCart.reduce((s, i) => s + (i.price * i.qty), 0);
+const deliveryFee = pubDeliveryFee || 0;
+const total = subtotal + deliveryFee;
+
 let valorPago = total;
 let troco = 0;
 
@@ -2593,8 +2633,8 @@ complement: comp,
 phone: phone,
 items: [...pubCart],
 total: total,
-subtotal: total,
-deliveryTotal: 0,
+subtotal: subtotal,
+deliveryTotal: deliveryFee,
 paymentMethod: pay,
 valorPago: valorPago,
 troco: troco,
@@ -2610,16 +2650,18 @@ closeModal();
 pubCart = [];
 updatePubCartCount();
 showToast('Pedido enviado com sucesso!','success');
-
-// Recarrega os pedidos
-if (customerOrdersUnsubscribe) {
-setupCustomerOrdersListener();
-}
 showPubTab('orders');
 } catch(e) { 
 hideLoading(); 
 showToast('Erro ao enviar pedido: ' + e.message,'danger'); 
 console.error(e);
+}
+}
+function renderPubCartItems() {
+// Atualiza o carrinho se estiver aberto
+const modalBody = document.getElementById('modal-body');
+if (modalBody && modalBody.querySelector('#pub-order-name')) {
+showPubCartModal();
 }
 }
 function renderMyOrders(orders) {
@@ -2676,6 +2718,30 @@ ${o.address ? `<div style="font-size:11px;color:var(--gray)"><i class="fa-solid 
 </div>
 `;
 }).join('');
+}
+// FUNÇÕES DO CARDÁPIO PÚBLICO QUE FALTAVAM
+function renderPubCartItems() {
+const modalBody = document.getElementById('modal-body');
+if (modalBody && modalBody.querySelector('#pub-order-name')) {
+showPubCartModal();
+}
+}
+
+function togglePubTroco() {
+const pay = document.getElementById('pub-order-pay')?.value;
+const tb = document.getElementById('pub-troco-box');
+if (pay === 'dinheiro' && tb) tb.classList.remove('hidden');
+else if (tb) tb.classList.add('hidden');
+}
+
+function removePubCartItem(iid) {
+pubCart = pubCart.filter(i => i.id !== iid);
+updatePubCartCount();
+showPubCartModal();
+}
+
+function addPubCart(iid) {
+showPubItemModal(iid);
 }
 
 // ============================================================
