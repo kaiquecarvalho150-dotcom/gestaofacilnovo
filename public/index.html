@@ -329,17 +329,17 @@ table th,table td{padding:7px 8px;font-size:11px}
 }
 .home-clock{display:inline-flex;align-items:center;gap:8px;background:linear-gradient(135deg,var(--primary),var(--secondary));color:#fff;padding:7px 16px;border-radius:20px;font-size:20px;font-weight:900;font-family:'Inter',monospace;letter-spacing:2px;box-shadow:0 4px 14px rgba(37,99,235,.3)}
 .home-clock-sec{font-size:14px;opacity:.8;font-weight:400}
-.products-grid{display:grid;grid-template-columns:repeat(auto-fill,minmax(280px,1fr));gap:16px}
-.product-card{background:#fff;border-radius:12px;overflow:hidden;border:1px solid var(--border);transition:all .2s}
-.product-card:hover{box-shadow:0 8px 20px rgba(0,0,0,.1);transform:translateY(-2px)}
-.product-card-img{width:100%;height:180px;object-fit:cover}
-.product-card-no-img{width:100%;height:180px;background:linear-gradient(135deg,#dbeafe,#ede9fe);display:flex;align-items:center;justify-content:center;font-size:64px}
-.product-card-body{padding:16px}
-.product-card-name{font-size:15px;font-weight:700;color:var(--dark);margin-bottom:4px}
-.product-card-cat{font-size:12px;color:var(--gray);margin-bottom:6px}
-.product-card-price{font-size:18px;font-weight:900;color:var(--primary);margin-bottom:8px}
-.product-card-actions{display:flex;gap:8px;margin-top:12px}
-.product-card-actions .btn{flex:1}
+.products-grid{display:grid;grid-template-columns:repeat(auto-fill,minmax(220px,1fr));gap:12px}
+.product-card{background:#fff;border-radius:8px;overflow:hidden;border:1px solid var(--border);transition:all .2s}
+.product-card:hover{box-shadow:0 4px 12px rgba(0,0,0,.1);transform:translateY(-2px)}
+.product-card-img{width:100%;height:120px;object-fit:cover}
+.product-card-no-img{width:100%;height:120px;background:linear-gradient(135deg,#dbeafe,#ede9fe);display:flex;align-items:center;justify-content:center;font-size:48px}
+.product-card-body{padding:10px}
+.product-card-name{font-size:13px;font-weight:700;color:var(--dark);margin-bottom:3px}
+.product-card-cat{font-size:11px;color:var(--gray);margin-bottom:4px}
+.product-card-price{font-size:16px;font-weight:900;color:var(--primary);margin-bottom:6px}
+.product-card-actions{display:flex;gap:6px;margin-top:8px}
+.product-card-actions .btn{flex:1;font-size:11px;padding:6px 8px}
 </style>
 </head>
 <body>
@@ -616,8 +616,7 @@ table th,table td{padding:7px 8px;font-size:11px}
 <div class="troco-result" id="troco-result"></div>
 </div>
 <div class="flex gap-2 mt-2 mb-2">
-<button class="btn btn-info flex-1" onclick="showSplitItemsModal()"><i class="fa-solid fa-divide"></i> Dividir Conta</button>
-<button class="btn btn-warning flex-1" onclick="savePendingOS()"><i class="fa-regular fa-clock"></i> Aguardar Pagamento</button>
+    <button class="btn btn-info flex-1" onclick="showSplitItemsModal()"><i class="fa-solid fa-divide"></i> Dividir Conta</button>
 </div>
 <button class="btn btn-success w-full" onclick="completeSale()"><i class="fa-solid fa-check"></i> Finalizar Venda</button>
 </div>
@@ -770,6 +769,20 @@ table th,table td{padding:7px 8px;font-size:11px}
 <i class="fa-solid fa-shopping-cart"></i> Ver Carrinho
 <span class="cart-count" id="pub-cart-count">0</span>
 </button>
+</div>
+<div class="flex items-center justify-between mb-4 flex-wrap gap-3">
+    <div style="font-size:15px;font-weight:700">Pedidos Recebidos</div>
+    <div class="flex gap-2 flex-wrap items-center">
+        <button class="btn btn-sm btn-ghost" onclick="showOrderHistory()">
+            <i class="fa-solid fa-history"></i> Histórico
+        </button>
+        <div class="filter-chip active" onclick="filterOrders(this,'all')">Todos</div>
+        <div class="filter-chip" onclick="filterOrders(this,'pending')">Aguardando Pagto</div>
+        <div class="filter-chip" onclick="filterOrders(this,'paid')">Pagos</div>
+        <button class="btn btn-sm btn-danger" onclick="deleteAllOrders()">
+            <i class="fa-solid fa-trash"></i> Excluir Todos
+        </button>
+    </div>
 </div>
 
 <script>
@@ -1317,17 +1330,31 @@ upgradeBtn.classList.add('hidden');
 trialBanner.classList.add('hidden');
 }
 if (ordersUnsubscribe) ordersUnsubscribe();
-ordersUnsubscribe = db.collection('orders').where('companyId','==',currentCompanyId).onSnapshot(snap => {
-allCompanyOrders = snap.docs.map(d => ({ id:d.id, ...d.data() })).sort((a,b) => new Date(b.date)-new Date(a.date));
-const pending = allCompanyOrders.filter(o => o.status==='pending').length;
-if (pending > prevPendingCount) { playNotificationSound(); }
-prevPendingCount = pending;
-document.getElementById('nb-orders').textContent = pending;
-const ordSec = document.getElementById('section-orders');
-if (ordSec?.classList.contains('active')) renderOrdersFromData(allCompanyOrders);
-const homeSec = document.getElementById('section-home');
-if (homeSec?.classList.contains('active')) renderHome();
-});
+ordersUnsubscribe = db.collection('orders')
+    .where('companyId','==',currentCompanyId)
+    .onSnapshot(snap => {
+        const newOrders = snap.docs.map(d => ({ id:d.id, ...d.data() })).sort((a,b) => new Date(b.date)-new Date(a.date));
+        
+        // Verificar se há novos pedidos e tocar som
+        newOrders.forEach(order => {
+            const prevOrder = allCompanyOrders.find(o => o.id === order.id);
+            if (!prevOrder && order.orderStatus === 'novo') {
+                playOrderSound();
+            }
+        });
+        
+        allCompanyOrders = newOrders;
+        const pending = allCompanyOrders.filter(o => o.status==='pending').length;
+        if (pending > prevPendingCount) { 
+            playNotificationSound(); 
+        }
+        prevPendingCount = pending;
+        document.getElementById('nb-orders').textContent = pending;
+        const ordSec = document.getElementById('section-orders');
+        if (ordSec?.classList.contains('active')) renderOrdersFromData(allCompanyOrders);
+        const homeSec = document.getElementById('section-home');
+        if (homeSec?.classList.contains('active')) renderHome();
+    });
 showPage('page-dashboard');
 showSection('home');
 if (dashboardInterval) clearInterval(dashboardInterval);
@@ -1357,6 +1384,37 @@ osc.start(sharedAudioCtx.currentTime);
 osc.stop(sharedAudioCtx.currentTime + 0.6);
 }
 } catch(e) {}
+}
+
+// Tocar som de novo pedido
+function playOrderSound() {
+    try {
+        unlockAudio();
+        if ('speechSynthesis' in window) {
+            window.speechSynthesis.cancel();
+            const u = new SpeechSynthesisUtterance('Novo pedido recebido');
+            u.lang = 'pt-BR';
+            u.rate = 0.9;
+            u.pitch = 1;
+            u.volume = 1;
+            window.speechSynthesis.speak(u);
+        }
+        if (sharedAudioCtx) {
+            const osc = sharedAudioCtx.createOscillator();
+            const gn = sharedAudioCtx.createGain();
+            osc.connect(gn);
+            gn.connect(sharedAudioCtx.destination);
+            osc.frequency.setValueAtTime(880, sharedAudioCtx.currentTime);
+            osc.frequency.setValueAtTime(1100, sharedAudioCtx.currentTime + 0.15);
+            osc.type = 'sine';
+            gn.gain.setValueAtTime(0.5, sharedAudioCtx.currentTime);
+            gn.gain.exponentialRampToValueAtTime(0.001, sharedAudioCtx.currentTime + 0.6);
+            osc.start(sharedAudioCtx.currentTime);
+            osc.stop(sharedAudioCtx.currentTime + 0.6);
+        }
+    } catch(e) {
+        console.error('Erro ao tocar som:', e);
+    }
 }
 
 // ============================================================
@@ -1596,11 +1654,32 @@ await db.collection('companies').doc(currentCompanyId).update({ menuItems: c.men
 const osNum = genOSNumber();
 const sale = { companyId:currentCompanyId, items:[...cart], total, subtotal:subtotalCart, deliveryTotal:deliveryCart, paymentMethod:selectedPayment, valorPago, troco, date:now.toISOString(), yearMonth:ym, orderNumber:osNum, customerName:pdvCustomerName };
 await db.collection('sales').add(sale);
-await db.collection('orders').add({ companyId: currentCompanyId, customerId: null, customerName: pdvCustomerName || 'Balcão (Caixa)', customerEmail: '', address: '', houseNumber: '', phone: '', items: [...cart], total: total, paymentMethod: selectedPayment, valorPago: valorPago, troco: troco, status: 'paid', date: now.toISOString(), notes: '', source: 'pdv', orderNumber: osNum });
+await db.collection('orders').add({ 
+    companyId: currentCompanyId, 
+    customerId: null, 
+    customerName: pdvCustomerName || 'Balcão (Caixa)', 
+    customerEmail: '', 
+    address: '', 
+    houseNumber: '', 
+    phone: '', 
+    items: [...cart], 
+    total: total, 
+    paymentMethod: selectedPayment, 
+    valorPago: valorPago, 
+    troco: troco, 
+    status: 'paid', 
+    date: now.toISOString(), 
+    notes: '', 
+    source: 'pdv', 
+    orderNumber: osNum,
+    orderStatus: 'novo'  // NOVO: status do pedido (novo, preparando, finalizado)
+});
 hideLoading();
 const payNames = {dinheiro:'Dinheiro',cartao:'Cartão',pix:'Pix'};
 lastSaleData = { items:[...cart], total, subtotal:subtotalCart, deliveryTotal:deliveryCart, paymentMethod:selectedPayment, valorPago, troco, date:now.toISOString(), orderNumber:osNum, customerName:pdvCustomerName };
 showModal('<i class="fa-solid fa-check-circle" style="color:var(--success)"></i> Venda Registrada!', `<div class="text-center" style="padding:12px 0"><div style="font-size:48px;margin-bottom:10px">✅</div><div style="font-size:12px;color:var(--gray);font-family:monospace;font-weight:700;margin-bottom:4px">${osNum}</div><div style="font-size:11px;color:var(--gray);margin-bottom:10px">${now.toLocaleString('pt-BR')}</div><div style="font-size:28px;font-weight:900;color:var(--success)">${fmt(total)}</div><div style="color:var(--gray);margin-top:6px">${cart.length} item(s) · ${payNames[selectedPayment]}</div>${deliveryCart>0?`<div style="font-size:13px;color:var(--warning);font-weight:700;margin-top:6px"><i class="fa-solid fa-truck"></i> Taxa de Entrega: ${fmt(deliveryCart)}</div>`:''}${troco>0?`<div class="alert alert-success mt-3" style="justify-content:center"><i class="fa-solid fa-money-bill-wave"></i> Troco para o cliente: <strong>${fmt(troco)}</strong></div>`:''}</div>`, `<div class="flex gap-2 w-full"><button class="btn btn-outline flex-1" onclick="printOS()"><i class="fa-solid fa-print"></i> Imprimir OS</button><button class="btn btn-primary flex-1" onclick="closeModal()"><i class="fa-solid fa-plus"></i> Nova Venda</button></div>`, false);
+// Tocar som de novo pedido
+playOrderSound();
 clearCart();
 renderPDVGrid();
 } catch(e) { hideLoading(); showToast('Erro ao registrar venda: '+e.message,'danger'); }
@@ -1807,16 +1886,121 @@ async function deleteMenuItem(iid) { const c = currentCompany; const item = (c.m
 // ORDERS
 // ============================================================
 function renderOrdersFromData(orders) {
-const pending = orders.filter(o=>o.status==='pending').length;
-document.getElementById('nb-orders').textContent = pending;
-const filtered = orderFilter==='all' ? orders : orders.filter(o=>o.status===orderFilter);
-const el = document.getElementById('orders-list');
-if(!el) return;
-if (!filtered.length) { el.innerHTML=`<div class="text-center" style="padding:60px;color:var(--gray)"><i class="fa-solid fa-receipt" style="font-size:48px;display:block;margin-bottom:12px;color:var(--border)"></i><h3>Nenhum pedido ${orderFilter==='all'?'registrado':(orderFilter==='pending'?'aguardando pagamento':'pago')}</h3></div>`; return; }
-const sLabel={pending:'Aguardando Pagamento',paid:'Pago',cancelled:'Cancelado'};
-const sColor={pending:'warning',paid:'success',cancelled:'danger'};
-const pLabel={dinheiro:'💵 Dinheiro',cartao:'💳 Cartão',pix:'📱 Pix'};
-el.innerHTML = filtered.map(o=>`<div class="order-card"><div class="order-top"><div><div class="order-id">${o.orderNumber||o.id}</div><div style="font-size:12px;color:var(--gray);margin-top:2px"><i class="fa-solid fa-clock"></i> ${new Date(o.date).toLocaleString('pt-BR')}</div><div style="margin-top:6px;font-size:13px;color:var(--dark3)"><i class="fa-solid fa-user"></i> <strong>${o.customerName}</strong>${o.source==='pdv'?'<span class="badge badge-info" style="margin-left:6px">PDV Caixa</span>':(o.address?` · <i class="fa-solid fa-location-dot"></i> ${o.address}, nº ${o.houseNumber}`:'')}</div>${(!o.source||o.source!=='pdv')&&o.phone?`<div style="font-size:12px;color:var(--gray)"><i class="fa-solid fa-phone"></i> ${o.phone}</div>`:''}</div><span class="badge badge-${sColor[o.status]}">${sLabel[o.status]}</span></div><div class="order-items-list">${o.items.map(i=>`<div class="order-item-line"><span>${i.qty}x ${i.name}</span><span>${fmt(i.price*i.qty)}</span></div>`).join('')}</div><div class="order-meta"><div><div style="font-size:12px;color:var(--gray);margin-bottom:2px">Total da Venda</div><div class="order-total-val">${fmt(o.total)}</div><div style="font-size:12px;color:var(--gray);margin-top:2px">${o.paymentMethod?pLabel[o.paymentMethod]||o.paymentMethod:'Pagamento pendente'}</div>${o.paymentMethod==='dinheiro'&&o.troco>0?`<div style="font-size:12px;color:var(--success);font-weight:700;margin-top:2px"><i class="fa-solid fa-money-bill-wave"></i> Troco: ${fmt(o.troco)}</div>`:''}${o.notes?`<div style="font-size:12px;color:var(--gray);margin-top:2px;font-style:italic">📝 ${o.notes}</div>`:''}</div><div class="flex gap-2 flex-wrap">${o.status==='pending'?`<button class="btn btn-sm btn-success" onclick="finalizePendingPayment('${o.id}')"><i class="fa-solid fa-credit-card"></i> Finalizar Pagamento</button>`:''}${o.status!=='cancelled'?`<button class="btn btn-sm btn-danger" onclick="updateOrderStatus('${o.id}','cancelled')"><i class="fa-solid fa-times"></i> Cancelar</button>`:''}</div></div></div>`).join('');
+    const pending = orders.filter(o => o.status === 'pending').length;
+    document.getElementById('nb-orders').textContent = pending;
+    
+    // Filtrar apenas pedidos que NÃO estão finalizados
+    const activeOrders = orders.filter(o => o.orderStatus !== 'finalizado');
+    const filtered = orderFilter === 'all' ? activeOrders : activeOrders.filter(o => o.status === orderFilter);
+    
+    const el = document.getElementById('orders-list');
+    if (!el) return;
+    
+    if (!filtered.length) {
+        el.innerHTML = `<div class="text-center" style="padding:60px;color:var(--gray)"><i class="fa-solid fa-receipt" style="font-size:48px;display:block;margin-bottom:12px;color:var(--border)"></i><h3>Nenhum pedido ${orderFilter==='all'?'ativo':'aguardando pagamento'}</h3><p style="font-size:13px;margin-top:8px">Os pedidos finalizados aparecem no Histórico</p></div>`;
+        return;
+    }
+    
+    const sLabel = {pending:'Aguardando Pagamento',paid:'Pago',cancelled:'Cancelado'};
+    const sColor = {pending:'warning',paid:'success',cancelled:'danger'};
+    const pLabel = {dinheiro:'💵 Dinheiro',cartao:'💳 Cartão',pix:'📱 Pix'};
+    
+    el.innerHTML = filtered.map(o => {
+        const orderStatus = o.orderStatus || 'novo';
+        let statusBadge = '';
+        let statusButtons = '';
+        
+        // Badge de status do pedido
+        if (orderStatus === 'novo') {
+            statusBadge = '<span class="badge badge-info"><i class="fa-solid fa-paper-plane"></i> Novo</span>';
+        } else if (orderStatus === 'preparando') {
+            statusBadge = '<span class="badge badge-warning"><i class="fa-solid fa-fire"></i> Preparando</span>';
+        } else if (orderStatus === 'finalizado') {
+            statusBadge = '<span class="badge badge-success"><i class="fa-solid fa-check-circle"></i> Finalizado</span>';
+        }
+        
+        // Botões de ação baseados no status
+        if (orderStatus === 'novo') {
+            statusButtons = `
+                <button class="btn btn-sm btn-primary" onclick="updateOrderStatus('${o.id}', 'preparando')">
+                    <i class="fa-solid fa-play"></i> Iniciar Preparo
+                </button>
+            `;
+        } else if (orderStatus === 'preparando') {
+            statusButtons = `
+                <button class="btn btn-sm btn-success" onclick="updateOrderStatus('${o.id}', 'finalizado')">
+                    <i class="fa-solid fa-check"></i> Finalizar Pedido
+                </button>
+            `;
+        }
+        
+        // Botão de pagamento (se pendente)
+        const paymentButton = o.status === 'pending' ? `
+            <button class="btn btn-sm btn-ghost" onclick="finalizePendingPayment('${o.id}')">
+                <i class="fa-solid fa-credit-card"></i> Pagamento
+            </button>
+        ` : '';
+        
+        return `
+        <div class="order-card">
+            <div class="order-top">
+                <div>
+                    <div class="order-id">${o.orderNumber || o.id}</div>
+                    <div style="font-size:12px;color:var(--gray);margin-top:2px">
+                        <i class="fa-solid fa-clock"></i> ${new Date(o.date).toLocaleString('pt-BR')}
+                    </div>
+                    <div style="margin-top:6px;font-size:13px;color:var(--dark3)">
+                        <i class="fa-solid fa-user"></i> <strong>${o.customerName}</strong>
+                        ${o.source === 'pdv' ? '<span class="badge badge-info" style="margin-left:6px">PDV</span>' : 
+                          o.source === 'pub_menu' ? '<span class="badge badge-success" style="margin-left:6px">Cardápio Online</span>' : ''}
+                    </div>
+                    ${!o.source || o.source !== 'pdv' ? `
+                        ${o.phone ? `<div style="font-size:12px;color:var(--gray)"><i class="fa-solid fa-phone"></i> ${o.phone}</div>` : ''}
+                        ${o.address ? `<div style="font-size:12px;color:var(--gray)"><i class="fa-solid fa-location-dot"></i> ${o.address}, nº ${o.houseNumber || ''} ${o.complement ? '- ' + o.complement : ''}</div>` : ''}
+                    ` : ''}
+                </div>
+                <div style="display:flex;gap:6px;align-items:center">
+                    ${statusBadge}
+                    <span class="badge badge-${sColor[o.status]}">${sLabel[o.status]}</span>
+                </div>
+            </div>
+            
+            <div class="order-items-list">
+                ${o.items.map(i => `
+                    <div class="order-item-line">
+                        <span>${i.qty}x ${i.name}</span>
+                        <span>${fmt(i.price * i.qty)}</span>
+                    </div>
+                `).join('')}
+            </div>
+            
+            <div class="order-meta">
+                <div>
+                    <div style="font-size:12px;color:var(--gray);margin-bottom:2px">Total da Venda</div>
+                    <div class="order-total-val">${fmt(o.total)}</div>
+                    <div style="font-size:12px;color:var(--gray);margin-top:2px">
+                        ${o.paymentMethod ? pLabel[o.paymentMethod] || o.paymentMethod : 'Pagamento pendente'}
+                    </div>
+                    ${o.paymentMethod === 'dinheiro' && o.troco > 0 ? `
+                        <div style="font-size:12px;color:var(--success);font-weight:700;margin-top:2px">
+                            <i class="fa-solid fa-money-bill-wave"></i> Troco: ${fmt(o.troco)}
+                        </div>
+                    ` : ''}
+                    ${o.notes ? `
+                        <div style="font-size:12px;color:var(--gray);margin-top:2px;font-style:italic">
+                            📝 ${o.notes}
+                        </div>
+                    ` : ''}
+                </div>
+                
+                <div class="flex gap-2 flex-wrap">
+                    ${statusButtons}
+                    ${paymentButton}
+                </div>
+            </div>
+        </div>
+        `;
+    }).join('');
 }
 function filterOrders(el, filter) { orderFilter = filter; document.querySelectorAll('#section-orders .filter-chip').forEach(c=>c.classList.remove('active')); el.classList.add('active'); renderOrdersFromData(allCompanyOrders); }
 async function deleteOrder(oid) { if (!confirm('Excluir este pedido permanentemente?')) return; showLoading('Excluindo pedido...'); try { await db.collection('orders').doc(oid).delete(); hideLoading(); showToast('Pedido excluído!','success'); } catch(e) { hideLoading(); showToast('Erro: '+e.message,'danger'); } }
@@ -2603,26 +2787,27 @@ try {
 const now = new Date();
 const osNum = genOSNumber();
 await db.collection('orders').add({
-companyId: pubCompanyId,
-customerId: currentCustomer.id,
-customerName: name,
-customerEmail: currentCustomer.email || '',
-address: address,
-houseNumber: house,
-complement: comp,
-phone: phone,
-items: [...pubCart],
-total: total,
-subtotal: subtotal,
-deliveryTotal: deliveryFee,
-paymentMethod: pay,
-valorPago: valorPago,
-troco: troco,
-status: 'pending',
-date: now.toISOString(),
-notes: comp,
-orderNumber: osNum,
-source: 'pub_menu'
+    companyId: pubCompanyId,
+    customerId: currentCustomer.id,
+    customerName: name,
+    customerEmail: currentCustomer.email || '',
+    address: address,
+    houseNumber: house,
+    complement: comp,
+    phone: phone,
+    items: [...pubCart],
+    total: total,
+    subtotal: subtotal,
+    deliveryTotal: deliveryFee,
+    paymentMethod: pay,
+    valorPago: valorPago,
+    troco: troco,
+    status: 'pending',
+    date: now.toISOString(),
+    notes: comp,
+    orderNumber: osNum,
+    source: 'pub_menu',
+    orderStatus: 'novo'  // NOVO
 });
 hideLoading();
 closeModal();
@@ -2693,6 +2878,183 @@ showPubCartModal();
 }
 function addPubCart(iid) {
 showPubItemModal(iid);
+}
+
+// Atualizar status do pedido
+async function updateOrderStatus(oid, newStatus) {
+    try {
+        await db.collection('orders').doc(oid).update({ 
+            orderStatus: newStatus,
+            updatedAt: new Date().toISOString()
+        });
+        
+        // Se finalizado, atualizar status para 'paid' se for pendente
+        if (newStatus === 'finalizado') {
+            const order = allCompanyOrders.find(o => o.id === oid);
+            if (order && order.status === 'pending') {
+                await db.collection('orders').doc(oid).update({ status: 'paid' });
+            }
+        }
+        
+        showToast(`Pedido marcado como: ${newStatus}`, 'success');
+        renderOrdersFromData(allCompanyOrders);
+    } catch(e) {
+        showToast('Erro: ' + e.message, 'danger');
+    }
+}
+
+// Imprimir pedido do histórico
+function printOrderFromHistory(order) {
+    const data = {
+        items: order.items,
+        total: order.total,
+        subtotal: order.subtotal || order.total,
+        deliveryTotal: order.deliveryTotal || 0,
+        paymentMethod: order.paymentMethod,
+        valorPago: order.valorPago || order.total,
+        troco: order.troco || 0,
+        date: order.date,
+        orderNumber: order.orderNumber,
+        customerName: order.customerName
+    };
+    printOS(data);
+}
+
+// Mostrar histórico de pedidos
+async function showOrderHistory() {
+    showLoading('Carregando histórico...');
+    try {
+        const snap = await db.collection('orders')
+            .where('companyId', '==', currentCompanyId)
+            .orderBy('date', 'desc')
+            .limit(100)
+            .get();
+        
+        const orders = snap.docs.map(d => ({ id: d.id, ...d.data() }));
+        const finalizedOrders = orders.filter(o => o.orderStatus === 'finalizado');
+        
+        hideLoading();
+        
+        if (!finalizedOrders.length) {
+            showToast('Nenhum pedido finalizado ainda', 'info');
+            return;
+        }
+        
+        const html = finalizedOrders.map(o => {
+            const dateObj = new Date(o.date);
+            const dateStr = dateObj.toLocaleDateString('pt-BR');
+            const timeStr = dateObj.toLocaleTimeString('pt-BR', {hour:'2-digit', minute:'2-digit'});
+            
+            return `
+            <div class="order-card">
+                <div class="order-top">
+                    <div>
+                        <div class="order-id">${o.orderNumber || o.id}</div>
+                        <div style="font-size:12px;color:var(--gray);margin-top:2px">
+                            <i class="fa-solid fa-clock"></i> ${dateStr} às ${timeStr}
+                        </div>
+                        <div style="margin-top:6px;font-size:13px;color:var(--dark3)">
+                            <i class="fa-solid fa-user"></i> <strong>${o.customerName}</strong>
+                            ${o.source === 'pdv' ? '<span class="badge badge-info" style="margin-left:6px">PDV</span>' : 
+                              o.source === 'pub_menu' ? '<span class="badge badge-success" style="margin-left:6px">Cardápio Online</span>' : ''}
+                        </div>
+                    </div>
+                    <span class="badge badge-success">Finalizado</span>
+                </div>
+                <div class="order-items-list">
+                    ${o.items.map(i => `
+                        <div class="order-item-line">
+                            <span>${i.qty}x ${i.name}</span>
+                            <span>${fmt(i.price * i.qty)}</span>
+                        </div>
+                    `).join('')}
+                </div>
+                <div class="order-meta">
+                    <div>
+                        <div style="font-size:12px;color:var(--gray);margin-bottom:2px">Total</div>
+                        <div class="order-total-val">${fmt(o.total)}</div>
+                    </div>
+                    <button class="btn btn-sm btn-primary" onclick="printOrderFromHistory(${JSON.stringify(o).replace(/"/g, '&quot;')})">
+                        <i class="fa-solid fa-print"></i> Imprimir
+                    </button>
+                </div>
+            </div>
+            `;
+        }).join('');
+        
+        showModal(
+            '<i class="fa-solid fa-history"></i> Histórico de Pedidos Finalizados',
+            `<div style="max-height:70vh;overflow-y:auto">${html}</div>`,
+            `<button class="btn btn-ghost w-full" onclick="closeModal()">Fechar</button>`,
+            true
+        );
+    } catch(e) {
+        hideLoading();
+        showToast('Erro: ' + e.message, 'danger');
+    }
+}
+// Obter texto do status do pedido
+function getOrderStatusText(status) {
+    const statusMap = {
+        'novo': { text: 'Pedido Enviado', class: 'badge-info', icon: 'fa-paper-plane' },
+        'preparando': { text: 'Preparando', class: 'badge-warning', icon: 'fa-fire' },
+        'finalizado': { text: 'Finalizado', class: 'badge-success', icon: 'fa-check-circle' }
+    };
+    return statusMap[status] || { text: status, class: 'badge-gray', icon: 'fa-clock' };
+}
+
+// Atualizar renderMyOrders para mostrar status
+function renderMyOrders(orders) {
+    const el = document.getElementById('my-orders-list');
+    if (!el) return;
+    if (!orders || orders.length === 0) {
+        el.innerHTML = '<div style="text-align:center;padding:40px;color:var(--gray)"><i class="fa-solid fa-receipt" style="font-size:48px;display:block;margin-bottom:12px;opacity:0.3"></i><p>Nenhum pedido realizado ainda</p><p style="font-size:13px;margin-top:8px">Faça seu primeiro pedido!</p></div>';
+        return;
+    }
+    const sLabel = {pending:'Aguardando Pagamento',paid:'Pago',cancelled:'Cancelado'};
+    const sColor = {pending:'warning',paid:'success',cancelled:'danger'};
+    const pLabel = {dinheiro:'💵 Dinheiro',cartao:'💳 Cartão',pix:'📱 Pix'};
+    el.innerHTML = orders.map(o => {
+        const dateObj = new Date(o.date);
+        const dateStr = dateObj.toLocaleDateString('pt-BR');
+        const timeStr = dateObj.toLocaleTimeString('pt-BR',{hour:'2-digit',minute:'2-digit'});
+        const statusInfo = getOrderStatusText(o.orderStatus || 'novo');
+        return `
+        <div class="my-order-card">
+            <div class="flex justify-between items-start mb-3">
+                <div>
+                    <div class="order-id">${o.orderNumber || o.id}</div>
+                    <div style="font-size:12px;color:var(--gray);margin-top:4px">
+                        <i class="fa-solid fa-calendar"></i> ${dateStr} às ${timeStr}
+                    </div>
+                </div>
+                <span class="badge ${statusInfo.class}">
+                    <i class="fa-solid ${statusInfo.icon}"></i> ${statusInfo.text}
+                </span>
+            </div>
+            <div class="order-items-list">
+                ${(o.items||[]).map(i => `
+                    <div class="order-item-line">
+                        <span>${i.qty}x ${i.name}</span>
+                        <span>${fmt(i.price*i.qty)}</span>
+                    </div>
+                `).join('')}
+            </div>
+            <div class="flex justify-between items-center mt-3 pt-3" style="border-top:1px solid #f1f5f9">
+                <div>
+                    <div style="font-size:12px;color:var(--gray);margin-bottom:4px">
+                        ${pLabel[o.paymentMethod] || 'Pagamento pendente'}
+                    </div>
+                    ${o.address ? `<div style="font-size:11px;color:var(--gray)"><i class="fa-solid fa-location-dot"></i> ${o.address}, ${o.houseNumber || ''}</div>` : ''}
+                </div>
+                <div style="text-align:right">
+                    <div style="font-size:11px;color:var(--gray);margin-bottom:2px">Total</div>
+                    <div style="font-size:18px;font-weight:900;color:var(--primary)">${fmt(o.total)}</div>
+                </div>
+            </div>
+        </div>
+        `;
+    }).join('');
 }
 
 // ============================================================
