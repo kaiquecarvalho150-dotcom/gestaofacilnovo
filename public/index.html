@@ -658,6 +658,9 @@ table th,table td{padding:7px 8px;font-size:11px}
 <div class="flex items-center justify-between mb-4 flex-wrap gap-3">
 <div style="font-size:15px;font-weight:700">Pedidos Recebidos</div>
 <div class="flex gap-2 flex-wrap items-center">
+<button class="btn btn-sm btn-ghost" onclick="showOrderHistoryModal()">
+<i class="fa-solid fa-history"></i> Histórico
+</button>
 <div class="filter-chip active" onclick="filterOrders(this,'all')">Todos</div>
 <div class="filter-chip" onclick="filterOrders(this,'pending')">Aguardando Pagto</div>
 <div class="filter-chip" onclick="filterOrders(this,'paid')">Pagos</div>
@@ -1876,8 +1879,19 @@ function renderOrdersFromData(orders) {
 document.getElementById('nb-orders').textContent = pending;
     
     // Filtrar apenas pedidos que NÃO estão finalizados
-    const activeOrders = orders.filter(o => o.orderStatus !== 'finalizado');
-    const filtered = orderFilter === 'all' ? activeOrders : activeOrders.filter(o => o.status === orderFilter);
+    let filtered;
+if (orderFilter === 'all') {
+    // Mostra apenas pedidos ativos (não finalizados)
+    filtered = orders.filter(o => o.orderStatus !== 'finalizado');
+} else if (orderFilter === 'paid') {
+    // Mostra pedidos pagos (contabilizados no relatório)
+    filtered = orders.filter(o => o.status === 'paid');
+} else if (orderFilter === 'pending') {
+    // Mostra pedidos pendentes
+    filtered = orders.filter(o => o.status === 'pending' && o.orderStatus !== 'finalizado');
+} else {
+    filtered = orders.filter(o => o.orderStatus !== 'finalizado');
+}
     
     const el = document.getElementById('orders-list');
     if (!el) return;
@@ -2111,19 +2125,42 @@ showToast('Erro ao carregar relatórios: ' + e.message, 'danger');
 hideLoading();
 }
 async function clearReportData() {
-if (!confirm('Limpar todas as vendas e despesas deste mês? Esta ação não pode ser desfeita.')) return;
-showLoading('Limpando dados...');
-try {
-const ym = selectedReportYM;
-const sSnap = await db.collection('sales').where('companyId','==',currentCompanyId).where('yearMonth','==',ym).get();
-const batch = db.batch();
-sSnap.docs.forEach(doc => batch.delete(doc.ref));
-await batch.commit();
-const c = currentCompany;
-c.expenses = (c.expenses || []).filter(e => e.yearMonth !== ym);
-await db.collection('companies').doc(currentCompanyId).update({ expenses: c.expenses });
-hideLoading(); loadReports(); showToast('Dados do mês limpos!', 'success');
-} catch(e) { hideLoading(); showToast('Erro: ' + e.message, 'danger'); }
+    if (!confirm('Limpar todas as vendas e despesas deste mês? Esta ação não pode ser desfeita.')) return;
+    showLoading('Limpando dados...');
+    try {
+        const ym = selectedReportYM;
+        
+        // Limpar vendas da coleção 'sales'
+        const sSnap = await db.collection('sales').where('companyId','==',currentCompanyId).where('yearMonth','==',ym).get();
+        const batch = db.batch();
+        sSnap.docs.forEach(doc => batch.delete(doc.ref));
+        await batch.commit();
+        
+        // Limpar pedidos pagos (status 'paid') do mesmo período
+        const paidOrders = allCompanyOrders.filter(o => {
+            const d = new Date(o.date);
+            const orderYM = `${d.getFullYear()}-${String(d.getMonth()+1).padStart(2,'0')}`;
+            return o.status === 'paid' && orderYM === ym;
+        });
+        
+        if (paidOrders.length > 0) {
+            const orderBatch = db.batch();
+            paidOrders.forEach(o => orderBatch.delete(db.collection('orders').doc(o.id)));
+            await orderBatch.commit();
+        }
+        
+        // Limpar despesas
+        const c = currentCompany;
+        c.expenses = (c.expenses || []).filter(e => e.yearMonth !== ym);
+        await db.collection('companies').doc(currentCompanyId).update({ expenses: c.expenses });
+        
+        hideLoading(); 
+        loadReports(); 
+        showToast('Dados do mês limpos! Pedidos pagos também foram removidos.', 'success');
+    } catch(e) { 
+        hideLoading(); 
+        showToast('Erro: ' + e.message, 'danger'); 
+    }
 }
 function renderReportData(sales, expenses, totalSalary) {
 const totalRevenue = sales.reduce((s, x) => s + (x.total || 0), 0);
@@ -3027,6 +3064,99 @@ ${(o.deliveryTotal || 0) > 0 ? `
     } catch(e) {
         hideLoading();
         showToast('Erro: ' + e.message, 'danger');
+    }
+}
+async function showOrderHistoryModal() {
+    const today = new Date();
+    const todayStr = today.toISOString().split('T')[0];
+    
+    showModal(
+        '<i class="fa-solid fa-history"></i> Histórico de OS',
+        `<div class="form-row mb-3">
+            <div class="form-group">
+                <label>Data Início</label>
+                <input type="date" id="hist-date-start" class="form-control" value="${todayStr}">
+            </div>
+            <div class="form-group">
+                <label>Data Fim</label>
+                <input type="date" id="hist-date-end" class="form-control" value="${todayStr}">
+            </div>
+        </div>
+        <button class="btn btn-primary btn-sm mb-3" onclick="loadOrderHistory()">
+            <i class="fa-solid fa-search"></i> Buscar
+        </button>
+        <div id="hist-orders-list" style="max-height:60vh;overflow-y:auto">
+            <div class="text-center" style="padding:40px;color:var(--gray)">
+                <i class="fa-solid fa-calendar-day" style="font-size:48px;display:block;margin-bottom:12px;color:var(--border)"></i>
+                <p>Selecione o período e clique em Buscar</p>
+            </div>
+        </div>`,
+        `<button class="btn btn-ghost w-full" onclick="closeModal()">Fechar</button>`,
+        true
+    );
+    
+    // Carregar automaticamente o dia atual
+    setTimeout(() => loadOrderHistory(), 200);
+}
+
+async function loadOrderHistory() {
+    const startDate = document.getElementById('hist-date-start').value;
+    const endDate = document.getElementById('hist-date-end').value;
+    
+    if (!startDate || !endDate) {
+        showToast('Selecione as datas', 'warning');
+        return;
+    }
+    
+    const start = new Date(startDate + 'T00:00:00');
+    const end = new Date(endDate + 'T23:59:59');
+    
+    const el = document.getElementById('hist-orders-list');
+    el.innerHTML = '<div class="text-center" style="padding:20px"><div class="loading-spinner" style="width:32px;height:32px;margin:0 auto"></div></div>';
+    
+    try {
+        // Buscar todas as OS do período
+        const allOrders = allCompanyOrders.filter(o => {
+            const d = new Date(o.date);
+            return d >= start && d <= end;
+        });
+        
+        if (!allOrders.length) {
+            el.innerHTML = '<div class="text-center" style="padding:40px;color:var(--gray)"><i class="fa-solid fa-inbox" style="font-size:48px;display:block;margin-bottom:12px;color:var(--border)"></i><p>Nenhuma OS encontrada neste período</p></div>';
+            return;
+        }
+        
+        const payIcons = {dinheiro:'💵',cartao:'💳',pix:'📱'};
+        const statusLabels = {novo:'Novo',preparando:'Preparando',finalizado:'Finalizado'};
+        const statusColors = {novo:'info',preparando:'warning',finalizado:'success'};
+        
+        el.innerHTML = `<div style="font-size:13px;color:var(--gray);margin-bottom:12px">${allOrders.length} OS encontrada(s) · Total: <strong style="color:var(--success)">${fmt(allOrders.reduce((s,o)=>s+o.total,0))}</strong></div>` +
+            allOrders.map(o => {
+                const t = new Date(o.date);
+                const timeStr = t.toLocaleTimeString('pt-BR',{hour:'2-digit',minute:'2-digit'});
+                const dateStr = t.toLocaleDateString('pt-BR');
+                const os = o.orderStatus || 'novo';
+                return `<div style="background:#f8fafc;border-radius:10px;padding:12px;margin-bottom:8px;border:1px solid var(--border)">
+                    <div style="display:flex;align-items:center;justify-content:space-between;margin-bottom:6px">
+                        <div>
+                            <div style="font-size:11px;font-family:monospace;font-weight:700;color:var(--primary)">${o.orderNumber||o.id}</div>
+                            <div style="font-size:11px;color:var(--gray)">${dateStr} ${timeStr} · ${o.customerName||''}</div>
+                        </div>
+                        <div style="text-align:right">
+                            <div style="font-size:15px;font-weight:900;color:var(--success)">${fmt(o.total)}</div>
+                            <span class="badge badge-${statusColors[os]||'gray'}">${statusLabels[os]||os}</span>
+                        </div>
+                    </div>
+                    <div style="font-size:11px;color:var(--dark3);margin-bottom:8px">${(o.items||[]).map(i=>`${i.qty}x ${i.name}`).join(', ')}</div>
+                    <div style="display:flex;gap:6px;flex-wrap:wrap">
+                        ${o.paymentMethod?`<span style="font-size:11px;color:var(--gray)">${payIcons[o.paymentMethod]||''} ${o.paymentMethod}</span>`:''}
+                        ${o.source==='pdv'?'<span class="badge badge-info" style="font-size:10px">PDV</span>':''}
+                        ${o.source==='pub_menu'?'<span class="badge badge-success" style="font-size:10px">Online</span>':''}
+                    </div>
+                </div>`;
+            }).join('');
+    } catch(e) {
+        el.innerHTML = '<div class="alert alert-danger"><i class="fa-solid fa-exclamation-triangle"></i> Erro: '+e.message+'</div>';
     }
 }
 // Obter texto do status do pedido
