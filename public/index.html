@@ -770,20 +770,6 @@ table th,table td{padding:7px 8px;font-size:11px}
 <span class="cart-count" id="pub-cart-count">0</span>
 </button>
 </div>
-<div class="flex items-center justify-between mb-4 flex-wrap gap-3">
-    <div style="font-size:15px;font-weight:700">Pedidos Recebidos</div>
-    <div class="flex gap-2 flex-wrap items-center">
-        <button class="btn btn-sm btn-ghost" onclick="showOrderHistory()">
-            <i class="fa-solid fa-history"></i> Histórico
-        </button>
-        <div class="filter-chip active" onclick="filterOrders(this,'all')">Todos</div>
-        <div class="filter-chip" onclick="filterOrders(this,'pending')">Aguardando Pagto</div>
-        <div class="filter-chip" onclick="filterOrders(this,'paid')">Pagos</div>
-        <button class="btn btn-sm btn-danger" onclick="deleteAllOrders()">
-            <i class="fa-solid fa-trash"></i> Excluir Todos
-        </button>
-    </div>
-</div>
 
 <script>
 // ============================================================
@@ -1344,12 +1330,12 @@ ordersUnsubscribe = db.collection('orders')
         });
         
         allCompanyOrders = newOrders;
-        const pending = allCompanyOrders.filter(o => o.status==='pending').length;
-        if (pending > prevPendingCount) { 
-            playNotificationSound(); 
-        }
-        prevPendingCount = pending;
-        document.getElementById('nb-orders').textContent = pending;
+        const pending = allCompanyOrders.filter(o => o.orderStatus === 'novo').length;
+if (pending > prevPendingCount) {
+    playNotificationSound();
+}
+prevPendingCount = pending;
+document.getElementById('nb-orders').textContent = pending;
         const ordSec = document.getElementById('section-orders');
         if (ordSec?.classList.contains('active')) renderOrdersFromData(allCompanyOrders);
         const homeSec = document.getElementById('section-home');
@@ -1886,8 +1872,8 @@ async function deleteMenuItem(iid) { const c = currentCompany; const item = (c.m
 // ORDERS
 // ============================================================
 function renderOrdersFromData(orders) {
-    const pending = orders.filter(o => o.status === 'pending').length;
-    document.getElementById('nb-orders').textContent = pending;
+    const pending = orders.filter(o => o.orderStatus === 'novo').length;
+document.getElementById('nb-orders').textContent = pending;
     
     // Filtrar apenas pedidos que NÃO estão finalizados
     const activeOrders = orders.filter(o => o.orderStatus !== 'finalizado');
@@ -1910,14 +1896,15 @@ function renderOrdersFromData(orders) {
         let statusBadge = '';
         let statusButtons = '';
         
-        // Badge de status do pedido
-        if (orderStatus === 'novo') {
-            statusBadge = '<span class="badge badge-info"><i class="fa-solid fa-paper-plane"></i> Novo</span>';
-        } else if (orderStatus === 'preparando') {
-            statusBadge = '<span class="badge badge-warning"><i class="fa-solid fa-fire"></i> Preparando</span>';
-        } else if (orderStatus === 'finalizado') {
-            statusBadge = '<span class="badge badge-success"><i class="fa-solid fa-check-circle"></i> Finalizado</span>';
-        }
+        // Badge de status do pedido — apenas o de pagamento (remove badge "Novo" duplicado)
+if (orderStatus === 'preparando') {
+    statusBadge = '<span class="badge badge-warning"><i class="fa-solid fa-fire"></i> Preparando</span>';
+} else if (orderStatus === 'finalizado') {
+    statusBadge = '<span class="badge badge-success"><i class="fa-solid fa-check-circle"></i> Finalizado</span>';
+} else {
+    // orderStatus === 'novo' → não exibe badge de status, apenas o de pagamento
+    statusBadge = '';
+}
         
         // Botões de ação baseados no status
         if (orderStatus === 'novo') {
@@ -1934,12 +1921,8 @@ function renderOrdersFromData(orders) {
             `;
         }
         
-        // Botão de pagamento (se pendente)
-        const paymentButton = o.status === 'pending' ? `
-            <button class="btn btn-sm btn-ghost" onclick="finalizePendingPayment('${o.id}')">
-                <i class="fa-solid fa-credit-card"></i> Pagamento
-            </button>
-        ` : '';
+        //  Botão de pagamento removido — pedidos já chegam com status definido
+const paymentButton = '';
         
         return `
         <div class="order-card">
@@ -1966,14 +1949,24 @@ function renderOrdersFromData(orders) {
             </div>
             
             <div class="order-items-list">
-                ${o.items.map(i => `
-                    <div class="order-item-line">
-                        <span>${i.qty}x ${i.name}</span>
-                        <span>${fmt(i.price * i.qty)}</span>
-                    </div>
-                `).join('')}
-            </div>
-            
+${o.items.map(i => `
+<div class="order-item-line">
+<span>${i.qty}x ${i.name}</span>
+<span>${fmt(i.price * i.qty)}</span>
+</div>
+`).join('')}
+</div>
+${(o.deliveryTotal || 0) > 0 ? `
+<div style="padding:8px 12px;background:#fef3c7;border-radius:6px;margin:8px 0;font-size:12px;color:#92400e;display:flex;justify-content:space-between;align-items:center;border:1px solid #fcd34d">
+<span><i class="fa-solid fa-truck"></i> Taxa de Entrega:</span>
+<span style="font-weight:700">${fmt(o.deliveryTotal || 0)}</span>
+</div>
+` : `
+<div style="padding:8px 12px;background:#f1f5f9;border-radius:6px;margin:8px 0;font-size:12px;color:var(--gray);display:flex;justify-content:space-between;align-items:center;border:1px solid #e2e8f0">
+<span><i class="fa-solid fa-truck"></i> Taxa de Entrega:</span>
+<span style="font-weight:600">R$ 0,00</span>
+</div>
+`}
             <div class="order-meta">
                 <div>
                     <div style="font-size:12px;color:var(--gray);margin-bottom:2px">Total da Venda</div>
@@ -2854,6 +2847,12 @@ ${(o.items||[]).map(i => `
 </div>
 `).join('')}
 </div>
+<div style="padding:10px;background:${(o.deliveryTotal||0)>0?'#fef3c7':'#f8fafc'};border-radius:8px;margin:10px 0;font-size:13px;border:1px solid ${(o.deliveryTotal||0)>0?'#fcd34d':'#e2e8f0'}">
+<div style="display:flex;justify-content:space-between;align-items:center">
+<span style="color:var(--gray)"><i class="fa-solid fa-truck"></i> Taxa de Entrega:</span>
+<span style="font-weight:700;color:${(o.deliveryTotal||0)>0?'var(--warning)':'var(--gray)'}">${fmt(o.deliveryTotal || 0)}</span>
+</div>
+</div>
 <div class="flex justify-between items-center mt-3 pt-3" style="border-top:1px solid #f1f5f9">
 <div>
 <div style="font-size:12px;color:var(--gray);margin-bottom:4px">
@@ -2883,19 +2882,45 @@ showPubItemModal(iid);
 // Atualizar status do pedido
 async function updateOrderStatus(oid, newStatus) {
     try {
-        await db.collection('orders').doc(oid).update({ 
+        await db.collection('orders').doc(oid).update({
             orderStatus: newStatus,
             updatedAt: new Date().toISOString()
         });
-        
-        // Se finalizado, atualizar status para 'paid' se for pendente
         if (newStatus === 'finalizado') {
             const order = allCompanyOrders.find(o => o.id === oid);
-            if (order && order.status === 'pending') {
-                await db.collection('orders').doc(oid).update({ status: 'paid' });
+            if (order) {
+                // Marca como pago se ainda estiver pendente
+                if (order.status === 'pending') {
+                    await db.collection('orders').doc(oid).update({ status: 'paid' });
+                }
+                // ✅ Cria registro na coleção 'sales' para aparecer nos relatórios
+                // (igual ao que o PDV-Caixa faz ao finalizar venda)
+                const salesSnap = await db.collection('sales')
+                    .where('companyId', '==', currentCompanyId)
+                    .where('orderNumber', '==', order.orderNumber)
+                    .limit(1)
+                    .get();
+                if (salesSnap.empty) {
+                    const now = new Date();
+                    const ym = ymFromDate(now);
+                    await db.collection('sales').add({
+                        companyId: currentCompanyId,
+                        items: order.items || [],
+                        total: order.total || 0,
+                        subtotal: order.subtotal || order.total || 0,
+                        deliveryTotal: order.deliveryTotal || 0,
+                        paymentMethod: order.paymentMethod || 'dinheiro',
+                        valorPago: order.valorPago || order.total || 0,
+                        troco: order.troco || 0,
+                        date: order.date || now.toISOString(),
+                        yearMonth: ym,
+                        orderNumber: order.orderNumber,
+                        customerName: order.customerName || '',
+                        source: order.source || 'pdv'
+                    });
+                }
             }
         }
-        
         showToast(`Pedido marcado como: ${newStatus}`, 'success');
         renderOrdersFromData(allCompanyOrders);
     } catch(e) {
@@ -2962,13 +2987,24 @@ async function showOrderHistory() {
                     <span class="badge badge-success">Finalizado</span>
                 </div>
                 <div class="order-items-list">
-                    ${o.items.map(i => `
-                        <div class="order-item-line">
-                            <span>${i.qty}x ${i.name}</span>
-                            <span>${fmt(i.price * i.qty)}</span>
-                        </div>
-                    `).join('')}
-                </div>
+${o.items.map(i => `
+<div class="order-item-line">
+<span>${i.qty}x ${i.name}</span>
+<span>${fmt(i.price * i.qty)}</span>
+</div>
+`).join('')}
+</div>
+${(o.deliveryTotal || 0) > 0 ? `
+<div style="padding:8px 12px;background:#fef3c7;border-radius:6px;margin:8px 0;font-size:12px;color:#92400e;display:flex;justify-content:space-between;align-items:center">
+<span><i class="fa-solid fa-truck"></i> Taxa de Entrega:</span>
+<span style="font-weight:700">${fmt(o.deliveryTotal || 0)}</span>
+</div>
+` : `
+<div style="padding:8px 12px;background:#f1f5f9;border-radius:6px;margin:8px 0;font-size:12px;color:var(--gray);display:flex;justify-content:space-between;align-items:center">
+<span><i class="fa-solid fa-truck"></i> Taxa de Entrega:</span>
+<span style="font-weight:600">R$ 0,00</span>
+</div>
+`}
                 <div class="order-meta">
                     <div>
                         <div style="font-size:12px;color:var(--gray);margin-bottom:2px">Total</div>
@@ -3033,14 +3069,20 @@ function renderMyOrders(orders) {
                 </span>
             </div>
             <div class="order-items-list">
-                ${(o.items||[]).map(i => `
-                    <div class="order-item-line">
-                        <span>${i.qty}x ${i.name}</span>
-                        <span>${fmt(i.price*i.qty)}</span>
-                    </div>
-                `).join('')}
-            </div>
-            <div class="flex justify-between items-center mt-3 pt-3" style="border-top:1px solid #f1f5f9">
+${(o.items||[]).map(i => `
+<div class="order-item-line">
+<span>${i.qty}x ${i.name}</span>
+<span>${fmt(i.price*i.qty)}</span>
+</div>
+`).join('')}
+</div>
+<div style="padding:10px;background:${(o.deliveryTotal||0)>0?'#fef3c7':'#f8fafc'};border-radius:8px;margin:10px 0;font-size:13px;border:1px solid ${(o.deliveryTotal||0)>0?'#fcd34d':'#e2e8f0'}">
+<div style="display:flex;justify-content:space-between;align-items:center">
+<span style="color:var(--gray)"><i class="fa-solid fa-truck"></i> Taxa de Entrega:</span>
+<span style="font-weight:700;color:${(o.deliveryTotal||0)>0?'var(--warning)':'var(--gray)'}">${fmt(o.deliveryTotal || 0)}</span>
+</div>
+</div>
+<div class="flex justify-between items-center mt-3 pt-3" style="border-top:1px solid #f1f5f9">
                 <div>
                     <div style="font-size:12px;color:var(--gray);margin-bottom:4px">
                         ${pLabel[o.paymentMethod] || 'Pagamento pendente'}
