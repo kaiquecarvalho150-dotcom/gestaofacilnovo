@@ -345,6 +345,24 @@ table th,table td{padding:7px 8px;font-size:11px}
 .admin-topbar>.flex:first-child{width:100%;justify-content:space-between}
 #admin-mobile-logout{display:flex!important}
 }
+/* Botão Carrinho - Mobile Responsivo */
+@media(max-width:768px) {
+    .hidden-sm { display: none !important; }
+    #btn-open-cart { padding: 8px 12px !important; }
+    #btn-open-cart i { margin-right: 0; }
+    
+    /* Drawer do carrinho em tela cheia no mobile */
+    .cart-drawer { width: 100% !important; max-width: 100vw !important; }
+    .cart-drawer-body { max-height: calc(100vh - 200px) !important; }
+    
+    /* Botão flutuante maior no mobile */
+    .pdv-cart-float { 
+        bottom: 20px !important; 
+        right: 20px !important; 
+        padding: 12px 18px !important;
+        font-size: 14px !important;
+    }
+}
 .home-clock{display:inline-flex;align-items:center;gap:8px;background:linear-gradient(135deg,var(--primary),var(--secondary));color:#fff;padding:7px 16px;border-radius:20px;font-size:20px;font-weight:900;font-family:'Inter',monospace;letter-spacing:2px;box-shadow:0 4px 14px rgba(37,99,235,.3)}
 .home-clock-sec{font-size:14px;opacity:.8;font-weight:400}
 .products-grid{display:grid;grid-template-columns:repeat(auto-fill,minmax(220px,1fr));gap:12px}
@@ -600,9 +618,10 @@ table th,table td{padding:7px 8px;font-size:11px}
 <div style="font-size:15px;font-weight:700">Produtos</div>
 <div class="flex gap-2 items-center">
 <input type="text" id="pdv-search" class="form-control" style="width:200px" placeholder="Buscar produto..." oninput="renderPDV()">
-<button class="btn btn-sm btn-ghost" onclick="openCartDrawer()" id="btn-open-cart" style="display:none;position:relative">
-<i class="fa-solid fa-shopping-cart"></i> Carrinho
-<span id="btn-cart-count" style="background:var(--danger);color:#fff;font-size:10px;font-weight:800;min-width:18px;height:18px;border-radius:10px;display:inline-flex;align-items:center;justify-content:center;padding:0 5px;margin-left:4px">0</span>
+<button class="btn btn-sm btn-ghost" onclick="openCartDrawer()" id="btn-open-cart" style="position:relative">
+    <i class="fa-solid fa-shopping-cart"></i> 
+    <span class="hidden-sm">Carrinho</span>
+    <span id="btn-cart-count" style="background:var(--danger);color:#fff;font-size:10px;font-weight:800;min-width:18px;height:18px;border-radius:10px;display:inline-flex;align-items:center;justify-content:center;padding:0 5px;margin-left:4px">0</span>
 </button>
 </div>
 </div>
@@ -1587,8 +1606,8 @@ function closeCartDrawer() {
 }
 function renderCart() {
     const el = document.getElementById('cart-items');
-    if (!cart.length && pendingCartSplit.length===0) { 
-        el.innerHTML='<div class="cart-empty"><i class="fa-solid fa-cart-shopping" style="font-size:32px;color:var(--border);display:block;margin-bottom:8px"></i>Carrinho vazio</div>'; 
+    if (!cart.length && pendingCartSplit.length===0) {
+        el.innerHTML='<div class="cart-empty"><i class="fa-solid fa-cart-shopping" style="font-size:32px;color:var(--border);display:block;margin-bottom:8px"></i>Carrinho vazio</div>';
     } else {
         let html = cart.map(item=>`<div class="cart-item"><div class="cart-item-name">${item.name}</div><div class="qty-controls"><button class="qty-btn" onclick="updateQty('${item.id}',-1)">−</button><span class="qty-num">${item.qty}</span><button class="qty-btn" onclick="updateQty('${item.id}',1)">+</button></div><div class="cart-item-price">${fmt(item.price*item.qty)}</div></div>`).join('');
         if (pendingCartSplit.length) {
@@ -1608,18 +1627,24 @@ function renderCart() {
     const cartCount = cart.reduce((s,i)=>s+i.qty, 0);
     
     // Badge do tab mobile
-    const badge = document.getElementById('pdv-cart-badge'); 
-    if (badge) { badge.textContent = cartCount; badge.style.display = cartCount > 0 ? 'inline-flex' : 'none'; }
+    const badge = document.getElementById('pdv-cart-badge');
+    if (badge) { 
+        badge.textContent = cartCount; 
+        badge.style.display = cartCount > 0 ? 'inline-flex' : 'none'; 
+    }
     
-    // Botão "Carrinho" na barra superior do PDV
+    // Botão "Carrinho" na barra superior do PDV - SEMPRE VISÍVEL
     const btnOpenCart = document.getElementById('btn-open-cart');
     const btnCartCount = document.getElementById('btn-cart-count');
     if (btnOpenCart) {
-        btnOpenCart.style.display = cartCount > 0 ? 'inline-flex' : 'none';
-        if (btnCartCount) btnCartCount.textContent = cartCount;
+        btnOpenCart.style.display = 'inline-flex'; // Sempre visível
+        if (btnCartCount) {
+            btnCartCount.textContent = cartCount;
+            btnCartCount.style.display = cartCount > 0 ? 'inline-flex' : 'none'; // Badge só aparece quando tem itens
+        }
     }
     
-    // Botão flutuante
+    // Botão flutuante - responsivo
     const floatBtn = document.getElementById('pdv-cart-float');
     const floatCount = document.getElementById('pdv-float-count');
     if (floatBtn) {
