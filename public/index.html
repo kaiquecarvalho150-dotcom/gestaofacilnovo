@@ -1357,7 +1357,7 @@ function initDashboard() {
 const c = currentCompany; if(!c) return;
 pdvDeliveryFee = parseFloat(c.pdvDeliveryFee)||0;
 pubDeliveryFee = parseFloat(c.pubDeliveryFee)||0;
-adminLogoUrl = c.logoUrl || adminLogoUrl;
+adminLogoUrl = c.logoUrl || '';
 document.getElementById('sb-company-name').textContent = c.companyName;
 const days = getDaysRemaining(c);
 document.getElementById('sb-plan-info').innerHTML = `<i class="fa-solid fa-calendar-alt"></i> ${c.plan==='trial'?'Trial':(c.plan==='starter'?'Starter':'Professional')} · ${days} dias`;
@@ -1782,7 +1782,7 @@ renderPDVGrid();
 } catch(e) { hideLoading(); showToast('Erro ao registrar venda: '+e.message,'danger'); }
 }
 function printOS(data) {
-    // ✅ Verificar se há empresa logada
+    // Verificar se há empresa logada
     if (!currentCompany || !currentCompanyId) {
         showToast('Nenhuma empresa logada. Faça login novamente.','danger');
         return;
@@ -1794,7 +1794,7 @@ function printOS(data) {
         return;
     }
 
-    // ✅ Sempre usar a empresa logada
+    // Usar SEMPRE a empresa logada
     const c = currentCompany;
     const payNames = {dinheiro:'DINHEIRO', cartao:'CARTÃO', pix:'PIX'};
     const customerName = data.customerName || '';
@@ -1803,31 +1803,26 @@ function printOS(data) {
     const houseNumber = data.houseNumber || '';
     const complement = data.complement || '';
     const source = data.source || 'pdv';
-    const logoUrl = c.logoUrl || ''; // ✅ Usar logo da empresa logada
+    const logoUrl = c.logoUrl || '';
     const dateObj = new Date(data.date);
     const dateStr = dateObj.toLocaleDateString('pt-BR');
     const timeStr = dateObj.toLocaleTimeString('pt-BR', {hour:'2-digit', minute:'2-digit'});
 
-    // Extrair nome base e adicionais separadamente
     const itemsRows = (data.items||[]).map(item => {
         let baseName = item.name;
         let additionalsText = '';
-
         const match = baseName.match(/^(.+?)\s*\(\+(.+?)\)$/);
         if (match) {
             baseName = match[1].trim();
             const adds = match[2].split(',').map(a => a.trim());
             additionalsText = '+' + adds.join(', +');
         }
-
         if (item.additionals && item.additionals.length && !additionalsText) {
             additionalsText = item.additionals.map(a => '+' + a.name).join(', ');
         }
-
         const addDesc = additionalsText
             ? `<tr><td colspan="3" style="font-size:13px;color:#000;padding-left:4px;font-weight:900">${additionalsText}</td></tr>`
             : '';
-
         return `<tr><td style="padding:4px 0;font-size:15px;font-weight:900">${item.qty}x ${baseName}</td><td style="text-align:right;padding:4px 4px;white-space:nowrap;font-size:13px;font-weight:900">${fmtPrint(item.price)}</td><td style="text-align:right;padding:4px 0;white-space:nowrap;font-weight:900;font-size:15px">${fmtPrint(item.price*item.qty)}</td></tr>${addDesc}`;
     }).join('');
 
@@ -1929,12 +1924,11 @@ ${data.troco > 0 ? `<div class="troco-box"><span class="troco-val">TROCO: ${fmtP
 </body>
 </html>`;
 
-    // ✅ Fechar janela anterior se existir
+    // Fechar janela anterior se existir
     if (window.lastPrintWindow && !window.lastPrintWindow.closed) {
         try { window.lastPrintWindow.close(); } catch(e) {}
     }
 
-    // ✅ Abrir nova janela
     let printWindow;
     try {
         printWindow = window.open('', '_blank', 'width=400,height=600,left=100,top=50,scrollbars=yes');
