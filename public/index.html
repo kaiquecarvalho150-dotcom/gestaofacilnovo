@@ -1782,19 +1782,20 @@ renderPDVGrid();
 } catch(e) { hideLoading(); showToast('Erro ao registrar venda: '+e.message,'danger'); }
 }
 function printOS(data) {
-    // Verificar se há empresa logada
+    // ✅ Verificar se há empresa logada
     if (!currentCompany || !currentCompanyId) {
         showToast('Nenhuma empresa logada. Faça login novamente.','danger');
         return;
     }
-    
+
     if (!data) data = lastSaleData;
-    if (!data) { 
-        showToast('Nenhuma venda registrada para imprimir','warning'); 
-        return; 
+    if (!data) {
+        showToast('Nenhuma venda registrada para imprimir','warning');
+        return;
     }
-    
-    const c = currentCompany; // Usar sempre a empresa logada
+
+    // ✅ Sempre usar a empresa logada
+    const c = currentCompany;
     const payNames = {dinheiro:'DINHEIRO', cartao:'CARTÃO', pix:'PIX'};
     const customerName = data.customerName || '';
     const phone = data.phone || '';
@@ -1802,40 +1803,38 @@ function printOS(data) {
     const houseNumber = data.houseNumber || '';
     const complement = data.complement || '';
     const source = data.source || 'pdv';
-    const logoUrl = adminLogoUrl || '';
+    const logoUrl = c.logoUrl || ''; // ✅ Usar logo da empresa logada
     const dateObj = new Date(data.date);
     const dateStr = dateObj.toLocaleDateString('pt-BR');
     const timeStr = dateObj.toLocaleTimeString('pt-BR', {hour:'2-digit', minute:'2-digit'});
-    
+
     // Extrair nome base e adicionais separadamente
     const itemsRows = (data.items||[]).map(item => {
         let baseName = item.name;
         let additionalsText = '';
-        
-        // Remover "(+...)" do nome se existir
+
         const match = baseName.match(/^(.+?)\s*\(\+(.+?)\)$/);
         if (match) {
             baseName = match[1].trim();
             const adds = match[2].split(',').map(a => a.trim());
             additionalsText = '+' + adds.join(', +');
         }
-        
-        // Se tiver additionals no objeto mas não no nome, usar de lá
+
         if (item.additionals && item.additionals.length && !additionalsText) {
             additionalsText = item.additionals.map(a => '+' + a.name).join(', ');
         }
-        
+
         const addDesc = additionalsText
             ? `<tr><td colspan="3" style="font-size:13px;color:#000;padding-left:4px;font-weight:900">${additionalsText}</td></tr>`
             : '';
-        
+
         return `<tr><td style="padding:4px 0;font-size:15px;font-weight:900">${item.qty}x ${baseName}</td><td style="text-align:right;padding:4px 4px;white-space:nowrap;font-size:13px;font-weight:900">${fmtPrint(item.price)}</td><td style="text-align:right;padding:4px 0;white-space:nowrap;font-weight:900;font-size:15px">${fmtPrint(item.price*item.qty)}</td></tr>${addDesc}`;
     }).join('');
-    
+
     const subtotal = data.subtotal ?? data.total;
     const delivery = data.deliveryTotal || 0;
     const isOnlineOrder = source === 'pub_menu';
-    
+
     const html = `<!DOCTYPE html>
 <html lang="pt-BR">
 <head>
@@ -1843,15 +1842,15 @@ function printOS(data) {
 <title>OS ${data.orderNumber}</title>
 <style>
 * { margin:0; padding:0; box-sizing:border-box; }
-body { 
-    font-family: 'Courier New', Courier, monospace; 
-    font-size: 15px; 
-    color: #000; 
-    background: #fff; 
-    width: 58mm; 
-    margin: 0; 
-    padding: 1mm 0.5mm 1mm; 
-    line-height: 1.2; 
+body {
+    font-family: 'Courier New', Courier, monospace;
+    font-size: 15px;
+    color: #000;
+    background: #fff;
+    width: 58mm;
+    margin: 0;
+    padding: 1mm 0.5mm 1mm;
+    line-height: 1.2;
 }
 .center { text-align: center; }
 .right { text-align: right; }
@@ -1872,22 +1871,22 @@ td { vertical-align: top; font-size: 14px; font-weight: 900; }
 .pay-section { font-size: 18px; font-weight: 900; margin: 4px 0; color: #000; }
 .pay-label { font-size: 18px; font-weight: 900; }
 .troco-val { font-size: 20px; font-weight: 900; }
-@media print { 
-    body { width: 58mm; } 
-    @page { size: 58mm auto; margin: 0; } 
-    button { display: none; } 
+@media print {
+    body { width: 58mm; }
+    @page { size: 58mm auto; margin: 0; }
+    button { display: none; }
 }
-.print-btn { 
-    display: block; 
-    width: 100%; 
-    margin-top: 10px; 
-    padding: 10px; 
-    background: #000; 
-    color: #fff; 
-    border: none; 
-    font-size: 16px; 
-    font-weight: 900; 
-    cursor: pointer; 
+.print-btn {
+    display: block;
+    width: 100%;
+    margin-top: 10px;
+    padding: 10px;
+    background: #000;
+    color: #fff;
+    border: none;
+    font-size: 16px;
+    font-weight: 900;
+    cursor: pointer;
 }
 </style>
 </head>
@@ -1930,29 +1929,32 @@ ${data.troco > 0 ? `<div class="troco-box"><span class="troco-val">TROCO: ${fmtP
 </body>
 </html>`;
 
-    // Fechar janela anterior se existir
+    // ✅ Fechar janela anterior se existir
     if (window.lastPrintWindow && !window.lastPrintWindow.closed) {
-        window.lastPrintWindow.close();
+        try { window.lastPrintWindow.close(); } catch(e) {}
     }
-    
-    // Abrir nova janela
-    const printWindow = window.open('', '_blank', 'width=400,height=600,left=100,top=50,scrollbars=yes');
-    
+
+    // ✅ Abrir nova janela
+    let printWindow;
+    try {
+        printWindow = window.open('', '_blank', 'width=400,height=600,left=100,top=50,scrollbars=yes');
+    } catch(e) {
+        showToast('Erro ao abrir janela de impressão. Permita pop-ups.','danger');
+        return;
+    }
+
     if (!printWindow) {
         showToast('Permita pop-ups neste site para imprimir','warning');
         return;
     }
-    
-    // Salvar referência
+
     window.lastPrintWindow = printWindow;
-    
+
     try {
-        // Escrever conteúdo de forma segura
         printWindow.document.open();
         printWindow.document.write(html);
         printWindow.document.close();
-        
-        // Aguardar carregamento e imprimir
+
         printWindow.onload = function() {
             setTimeout(function() {
                 try {
@@ -1960,23 +1962,19 @@ ${data.troco > 0 ? `<div class="troco-box"><span class="troco-val">TROCO: ${fmtP
                     printWindow.print();
                 } catch(e) {
                     console.error('Erro ao imprimir:', e);
-                    showToast('Erro ao imprimir. Tente novamente.','danger');
                 }
             }, 500);
         };
-        
-        // Fallback caso onload não funcione
+
         setTimeout(function() {
             if (printWindow && !printWindow.closed) {
                 try {
                     printWindow.focus();
                     printWindow.print();
-                } catch(e) {
-                    console.error('Erro no fallback de impressão:', e);
-                }
+                } catch(e) {}
             }
         }, 1000);
-        
+
     } catch(e) {
         console.error('Erro ao preparar impressão:', e);
         showToast('Erro ao preparar impressão: ' + e.message,'danger');
@@ -1986,8 +1984,8 @@ ${data.troco > 0 ? `<div class="troco-box"><span class="troco-val">TROCO: ${fmtP
     }
 }
 
-function fmtPrint(v) { 
-    return 'R$ ' + Number(v||0).toLocaleString('pt-BR',{minimumFractionDigits:2,maximumFractionDigits:2}); 
+function fmtPrint(v) {
+    return 'R$ ' + Number(v||0).toLocaleString('pt-BR',{minimumFractionDigits:2,maximumFractionDigits:2});
 }
 async function showDailyHistory() {
 showLoading('Carregando histórico...');
@@ -3373,6 +3371,12 @@ async function updateOrderStatus(oid, newStatus) {
 
 // Imprimir pedido do histórico
 function printOrderFromHistory(order) {
+    // ✅ Verificar se há empresa logada
+    if (!currentCompany || !currentCompanyId) {
+        showToast('Nenhuma empresa logada. Faça login novamente.','danger');
+        return;
+    }
+
     const data = {
         items: order.items,
         total: order.total,
@@ -3383,8 +3387,14 @@ function printOrderFromHistory(order) {
         troco: order.troco || 0,
         date: order.date,
         orderNumber: order.orderNumber,
-        customerName: order.customerName
+        customerName: order.customerName,
+        phone: order.phone || '',
+        address: order.address || '',
+        houseNumber: order.houseNumber || '',
+        complement: order.complement || '',
+        source: order.source || 'pdv'
     };
+
     printOS(data);
 }
 
@@ -3603,9 +3613,17 @@ async function loadOrderHistory() {
 }
 // Imprimir pedido do histórico pelo ID
 function printOrderFromHistoryById(orderId) {
+    if (!currentCompany || !currentCompanyId) {
+        showToast('Nenhuma empresa logada. Faça login novamente.','danger');
+        return;
+    }
+
     const order = allCompanyOrders.find(o => o.id === orderId);
-    if (!order) { showToast('Pedido não encontrado', 'warning'); return; }
-    
+    if (!order) {
+        showToast('Pedido não encontrado', 'warning');
+        return;
+    }
+
     const data = {
         items: order.items,
         total: order.total,
@@ -3623,7 +3641,7 @@ function printOrderFromHistoryById(orderId) {
         complement: order.complement || '',
         source: order.source || 'pdv'
     };
-    
+
     printOS(data);
 }
 // Obter texto do status do pedido
