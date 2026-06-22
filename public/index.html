@@ -2812,74 +2812,162 @@ document.getElementById('pub-cart-count').textContent = count;
 document.getElementById('pub-cart-btn').style.display = count > 0 ? 'flex' : 'none';
 }
 function showPubCartModal() {
-if (!pubCart.length) { showToast('Carrinho vazio','warning'); return; }
-const html = pubCart.map((item, idx) => `
+    if (!pubCart.length) { showToast('Carrinho vazio','warning'); return; }
+    const html = pubCart.map((item, idx) => `
 <div class="flex items-center gap-2" style="padding:10px 0;border-bottom:1px solid #f1f5f9">
-<div style="flex:1">
-<div style="font-weight:700;font-size:13px">${item.name}</div>
-<div style="font-size:12px;color:var(--gray)">${fmt(item.price)} un</div>
-</div>
-<div class="qty-controls">
-<button class="qty-btn" onclick="pubCart[${idx}].qty=Math.max(1,pubCart[${idx}].qty-1);updatePubCartCount();showPubCartModal()">−</button>
-<span class="qty-num">${item.qty}</span>
-<button class="qty-btn" onclick="pubCart[${idx}].qty++;updatePubCartCount();showPubCartModal()">+</button>
-</div>
-<div style="font-weight:700;min-width:70px;text-align:right">${fmt(item.price * item.qty)}</div>
-<button class="btn btn-sm btn-ghost" onclick="pubCart.splice(${idx},1);updatePubCartCount();showPubCartModal()"><i class="fa-solid fa-trash" style="color:var(--danger)"></i></button>
+    <div style="flex:1">
+        <div style="font-weight:700;font-size:13px">${item.name}</div>
+        <div style="font-size:12px;color:var(--gray)">${fmt(item.price)} un</div>
+    </div>
+    <div class="qty-controls">
+        <button class="qty-btn" onclick="pubCart[${idx}].qty=Math.max(1,pubCart[${idx}].qty-1);updatePubCartCount();showPubCartModal()">−</button>
+        <span class="qty-num">${item.qty}</span>
+        <button class="qty-btn" onclick="pubCart[${idx}].qty++;updatePubCartCount();showPubCartModal()">+</button>
+    </div>
+    <div style="font-weight:700;min-width:70px;text-align:right">${fmt(item.price * item.qty)}</div>
+    <button class="btn btn-sm btn-ghost" onclick="pubCart.splice(${idx},1);updatePubCartCount();showPubCartModal()"><i class="fa-solid fa-trash" style="color:var(--danger)"></i></button>
 </div>
 `).join('');
-const subtotal = pubCart.reduce((s, i) => s + (i.price * i.qty), 0);
-const deliveryFee = pubDeliveryFee || 0;
-const total = subtotal + deliveryFee;
-showModal('<i class="fa-solid fa-shopping-cart"></i> Seu Carrinho',
+    const subtotal = pubCart.reduce((s, i) => s + (i.price * i.qty), 0);
+    const baseDeliveryFee = pubDeliveryFee || 0;
+    const total = subtotal + baseDeliveryFee;
+    
+    showModal('<i class="fa-solid fa-shopping-cart"></i> Seu Carrinho',
 `<div style="max-height:45vh;overflow-y:auto">${html}</div>
 <div style="margin-top:16px;padding-top:12px;border-top:2px solid var(--border)">
-<div class="flex justify-between items-center mb-2">
-<span style="color:var(--gray)">Subtotal:</span>
-<span style="font-weight:700">${fmt(subtotal)}</span>
-</div>
-<div class="flex justify-between items-center mb-3" style="padding:10px;background:#f0fdf4;border-radius:8px;border:1px solid #86efac">
-<span style="color:#166534"><i class="fa-solid fa-truck"></i> Taxa de Entrega:</span>
-<span style="font-weight:700;color:#166534">${fmt(deliveryFee)}</span>
-</div>
-<div class="flex justify-between items-center" style="font-size:18px;font-weight:900;color:var(--primary)">
-<span>Total:</span>
-<span>${fmt(total)}</span>
-</div>
+    <div class="flex justify-between items-center mb-2">
+        <span style="color:var(--gray)">Subtotal:</span>
+        <span style="font-weight:700">${fmt(subtotal)}</span>
+    </div>
+    <div class="flex justify-between items-center mb-3" id="pub-delivery-row" style="padding:10px;background:#f0fdf4;border-radius:8px;border:1px solid #86efac;display:${baseDeliveryFee > 0 ? 'flex' : 'none'}">
+        <span style="color:#166534"><i class="fa-solid fa-truck"></i> Taxa de Entrega:</span>
+        <span style="font-weight:700;color:#166534" id="pub-delivery-val">${fmt(baseDeliveryFee)}</span>
+    </div>
+    <div class="flex justify-between items-center" style="font-size:18px;font-weight:900;color:var(--primary)">
+        <span>Total:</span>
+        <span id="pub-total-val">${fmt(total)}</span>
+    </div>
 </div>
 <div class="form-group mt-3"><label>Nome para o Pedido *</label><input type="text" id="pub-order-name" class="form-control" value="${currentCustomer?.name || ''}"></div>
 <div class="form-group"><label>Telefone *</label><input type="text" id="pub-order-phone" class="form-control" value="${currentCustomer?.phone || ''}" oninput="maskPhone(this)"></div>
-<div class="form-group"><label>Endereço de Entrega *</label><input type="text" id="pub-order-address" class="form-control" placeholder="Rua, número, bairro"></div>
-<div class="form-row">
-<div class="form-group"><label>Número</label><input type="text" id="pub-order-house" class="form-control"></div>
-<div class="form-group"><label>Complemento</label><input type="text" id="pub-order-comp" class="form-control"></div>
+<div id="pub-address-fields">
+    <div class="form-group"><label>Endereço de Entrega *</label><input type="text" id="pub-order-address" class="form-control" placeholder="Rua, número, bairro"></div>
+    <div class="form-row">
+        <div class="form-group"><label>Número</label><input type="text" id="pub-order-house" class="form-control"></div>
+        <div class="form-group"><label>Complemento</label><input type="text" id="pub-order-comp" class="form-control"></div>
+    </div>
 </div>
 <div class="form-group"><label>Forma de Pagamento *</label>
-<select id="pub-order-pay" class="form-control" onchange="togglePubTroco()">
-<option value="pix">Pix</option><option value="cartao">Cartão</option><option value="dinheiro">Dinheiro</option>
-</select>
+    <select id="pub-order-pay" class="form-control" onchange="handlePubPaymentChange()">
+        <option value="pix">Pix</option>
+        <option value="cartao">Cartão</option>
+        <option value="dinheiro">Dinheiro</option>
+        <option value="vem-buscar">Vem Buscar</option>
+    </select>
 </div>
-<div id="pub-troco-box" class="hidden troco-box">
-<div style="font-size:12px;font-weight:700;color:var(--success);margin-bottom:6px">Troco para quanto?</div>
-<input type="number" id="pub-troco-input" class="form-control" placeholder="R$" oninput="calcPubTroco(${total})" step="0.50" min="0">
-<div id="pub-troco-result" class="troco-result"></div>
+<div id="pub-troco-box" style="display:none;background:#f0fdf4;border:2px solid #86efac;border-radius:10px;padding:12px;margin-top:12px">
+    <div style="font-size:13px;font-weight:700;color:#166534;margin-bottom:8px"><i class="fa-solid fa-money-bill-wave"></i> Calcular Troco</div>
+    <div style="font-size:12px;color:var(--gray);margin-bottom:8px">Informe o valor que vai pagar:</div>
+    <input type="number" id="pub-troco-input" class="form-control" placeholder="R$ 0,00" oninput="calcPubTroco()" step="0.50" min="0" style="font-size:16px;font-weight:700">
+    <div id="pub-troco-result" style="margin-top:8px;font-size:14px;font-weight:700"></div>
 </div>`,
 `<button class="btn btn-ghost" onclick="closeModal()">Fechar</button><button class="btn btn-success w-full" onclick="placePubOrder()"><i class="fa-solid fa-check"></i> Finalizar Pedido</button>`, true);
-document.getElementById('pub-order-pay').addEventListener('change', togglePubTroco);
+
+    // Inicializa a lógica de pagamento (esconde endereço se for Vem Buscar, ajusta taxa, etc)
+    setTimeout(() => handlePubPaymentChange(), 100);
+}
+function handlePubPaymentChange() {
+    const pay = document.getElementById('pub-order-pay')?.value;
+    if (!pay) return;
+
+    const addrFields = document.getElementById('pub-address-fields');
+    const deliveryRow = document.getElementById('pub-delivery-row');
+    const totalEl = document.getElementById('pub-total-val');
+    const trocoBox = document.getElementById('pub-troco-box');
+
+    const subtotal = pubCart.reduce((s, i) => s + (i.price * i.qty), 0);
+    const baseDelivery = pubDeliveryFee || 0;
+    let currentDelivery = baseDelivery;
+
+    // 1. Ocultar/Mostrar campos de endereço
+    if (addrFields) {
+        addrFields.style.display = pay === 'vem-buscar' ? 'none' : 'block';
+    }
+
+    // 2. Ocultar/Mostrar e calcular Taxa de Entrega
+    if (pay === 'vem-buscar') {
+        currentDelivery = 0;
+        if (deliveryRow) deliveryRow.style.display = 'none';
+    } else {
+        if (baseDelivery > 0) {
+            if (deliveryRow) {
+                deliveryRow.style.display = 'flex';
+                document.getElementById('pub-delivery-val').textContent = fmt(baseDelivery);
+            }
+        } else {
+            if (deliveryRow) deliveryRow.style.display = 'none';
+        }
+    }
+
+    // 3. Atualizar o Total na tela
+    const total = subtotal + currentDelivery;
+    if (totalEl) totalEl.textContent = fmt(total);
+
+    // 4. Mostrar/Ocultar caixa de Troco e recalcular
+    if (pay === 'dinheiro') {
+        if (trocoBox) trocoBox.style.display = 'block';
+        calcPubTroco(total); // Recalcula o troco com o novo total (sem taxa se for buscar)
+    } else {
+        if (trocoBox) trocoBox.style.display = 'none';
+    }
 }
 function togglePubTroco() {
-const pay = document.getElementById('pub-order-pay')?.value;
-const tb = document.getElementById('pub-troco-box');
-if (pay === 'dinheiro' && tb) tb.classList.remove('hidden');
-else if (tb) tb.classList.add('hidden');
+    const pay = document.getElementById('pub-order-pay')?.value;
+    const tb = document.getElementById('pub-troco-box');
+    const addrFields = document.getElementById('pub-address-fields');
+    
+    // Mostrar/ocultar campos de endereço baseado na forma de pagamento
+    if (addrFields) {
+        if (pay === 'vem-buscar') {
+            addrFields.style.display = 'none';
+        } else {
+            addrFields.style.display = 'block';
+        }
+    }
+    
+    // Mostrar campo de troco apenas para dinheiro
+    if (pay === 'dinheiro' && tb) {
+        tb.style.display = 'block';
+        // Limpar valor anterior
+        const input = document.getElementById('pub-troco-input');
+        const result = document.getElementById('pub-troco-result');
+        if (input) input.value = '';
+        if (result) result.innerHTML = '';
+    } else if (tb) {
+        tb.style.display = 'none';
+    }
 }
-function calcPubTroco(total) {
-const pago = parseFloat(document.getElementById('pub-troco-input').value) || 0;
-const troco = pago - total;
-const el = document.getElementById('pub-troco-result');
-if (pago <= 0) { el.textContent = ''; return; }
-if (troco < 0) el.innerHTML = `<span style="color:var(--danger)">Valor insuficiente</span>`;
-else el.innerHTML = `Troco: <strong>${fmt(troco)}</strong>`;
+function calcPubTroco(forceTotal) {
+    // Pega o total atual da tela (que já está sem a taxa se for Vem Buscar)
+    const totalText = document.getElementById('pub-total-val')?.textContent || '0';
+    const total = forceTotal || parseFloat(totalText.replace('R$', '').replace(',', '.').trim()) || 0;
+    
+    const pago = parseFloat(document.getElementById('pub-troco-input').value) || 0;
+    const troco = pago - total;
+    const el = document.getElementById('pub-troco-result');
+    
+    if (pago <= 0) {
+        el.innerHTML = '';
+        return;
+    }
+    
+    if (troco < 0) {
+        el.innerHTML = `<div style="color:var(--danger);padding:8px;background:#fee2e2;border-radius:6px;font-size:13px"><i class="fa-solid fa-exclamation-triangle"></i> <strong>Valor insuficiente!</strong><br>Faltam <strong>${fmt(Math.abs(troco))}</strong> para completar o pedido.</div>`;
+    } else if (troco === 0) {
+        el.innerHTML = `<div style="color:var(--success);padding:8px;background:#dcfce7;border-radius:6px;font-size:13px"><i class="fa-solid fa-check-circle"></i> <strong>Valor exato!</strong> Não precisa de troco.</div>`;
+    } else {
+        el.innerHTML = `<div style="color:var(--success);padding:8px;background:#dcfce7;border-radius:6px;font-size:14px"><i class="fa-solid fa-money-bill-wave"></i> <strong>Troco:</strong> ${fmt(troco)}</div>`;
+    }
 }
 function removePubCartItem(iid) {
 pubCart = pubCart.filter(i => i.id !== iid);
@@ -2887,69 +2975,89 @@ updatePubCartCount();
 showPubCartModal();
 }
 async function placePubOrder() {
-if (!pubCart.length) { showToast('Carrinho vazio','warning'); return; }
-if (!currentCustomer) { showToast('Faça login para continuar','warning'); return; }
-const name = document.getElementById('pub-order-name').value.trim();
-const phone = document.getElementById('pub-order-phone').value.trim();
-const address = document.getElementById('pub-order-address').value.trim();
-const house = document.getElementById('pub-order-house').value.trim();
-const comp = document.getElementById('pub-order-comp').value.trim();
-const pay = document.getElementById('pub-order-pay').value;
-if (!name || !phone || !address) {
-showToast('Preencha nome, telefone e endereço','warning');
-return;
-}
-const subtotal = pubCart.reduce((s, i) => s + (i.price * i.qty), 0);
-const deliveryFee = pubDeliveryFee || 0;
-const total = subtotal + deliveryFee;
-let valorPago = total;
-let troco = 0;
-if (pay === 'dinheiro') {
-valorPago = parseFloat(document.getElementById('pub-troco-input').value) || total;
-troco = Math.max(0, valorPago - total);
-if (valorPago < total) {
-showToast('Valor recebido menor que o total','danger');
-return;
-}
-}
-showLoading('Enviando pedido...');
-try {
-const now = new Date();
-const osNum = genOSNumber();
-await db.collection('orders').add({
-    companyId: pubCompanyId,
-    customerId: currentCustomer.id,
-    customerName: name,
-    customerEmail: currentCustomer.email || '',
-    address: address,
-    houseNumber: house,
-    complement: comp,
-    phone: phone,
-    items: [...pubCart],
-    total: total,
-    subtotal: subtotal,
-    deliveryTotal: deliveryFee,
-    paymentMethod: pay,
-    valorPago: valorPago,
-    troco: troco,
-    status: 'pending',
-    date: now.toISOString(),
-    notes: comp,
-    orderNumber: osNum,
-    source: 'pub_menu',
-    orderStatus: 'novo'  // NOVO
-});
-hideLoading();
-closeModal();
-pubCart = [];
-updatePubCartCount();
-showToast('Pedido enviado com sucesso!','success');
-showPubTab('orders');
-} catch(e) {
-hideLoading();
-showToast('Erro ao enviar pedido: ' + e.message,'danger');
-console.error(e);
-}
+    if (!pubCart.length) { showToast('Carrinho vazio','warning'); return; }
+    if (!currentCustomer) { showToast('Faça login para continuar','warning'); return; }
+    const name = document.getElementById('pub-order-name').value.trim();
+    const phone = document.getElementById('pub-order-phone').value.trim();
+    const pay = document.getElementById('pub-order-pay').value;
+    
+    if (!name || !phone) {
+        showToast('Preencha nome e telefone','warning');
+        return;
+    }
+    
+    let address = '';
+    let house = '';
+    let comp = '';
+    
+    // Validação de endereço (não obrigatório para Vem Buscar)
+    if (pay !== 'vem-buscar') {
+        address = document.getElementById('pub-order-address')?.value.trim() || '';
+        house = document.getElementById('pub-order-house')?.value.trim() || '';
+        comp = document.getElementById('pub-order-comp')?.value.trim() || '';
+        
+        if (!address) {
+            showToast('Preencha o endereço de entrega','warning');
+            return;
+        }
+    }
+    
+    const subtotal = pubCart.reduce((s, i) => s + (i.price * i.qty), 0);
+    
+    // ✅ Lógica da Taxa de Entrega: Zero se for "Vem Buscar"
+    const deliveryFee = pay === 'vem-buscar' ? 0 : (pubDeliveryFee || 0);
+    const total = subtotal + deliveryFee;
+    
+    let valorPago = total;
+    let troco = 0;
+    
+    if (pay === 'dinheiro') {
+        valorPago = parseFloat(document.getElementById('pub-troco-input').value) || total;
+        troco = Math.max(0, valorPago - total);
+        if (valorPago < total) {
+            showToast('Valor recebido menor que o total','danger');
+            return;
+        }
+    }
+    
+    showLoading('Enviando pedido...');
+    try {
+        const now = new Date();
+        const osNum = genOSNumber();
+        await db.collection('orders').add({
+            companyId: pubCompanyId,
+            customerId: currentCustomer.id,
+            customerName: name,
+            customerEmail: currentCustomer.email || '',
+            address: address,
+            houseNumber: house,
+            complement: comp,
+            phone: phone,
+            items: [...pubCart],
+            total: total,
+            subtotal: subtotal,
+            deliveryTotal: deliveryFee, // ✅ Salva 0 se for buscar
+            paymentMethod: pay,
+            valorPago: valorPago,
+            troco: troco,
+            status: 'pending',
+            date: now.toISOString(),
+            notes: comp,
+            orderNumber: osNum,
+            source: 'pub_menu',
+            orderStatus: 'novo'
+        });
+        hideLoading();
+        closeModal();
+        pubCart = [];
+        updatePubCartCount();
+        showToast('Pedido enviado com sucesso!','success');
+        showPubTab('orders');
+    } catch(e) {
+        hideLoading();
+        showToast('Erro ao enviar pedido: ' + e.message,'danger');
+        console.error(e);
+    }
 }
 function renderMyOrders(orders) {
 const el = document.getElementById('my-orders-list');
