@@ -1757,21 +1757,151 @@ renderPDVGrid();
 } catch(e) { hideLoading(); showToast('Erro ao registrar venda: '+e.message,'danger'); }
 }
 function printOS(data) {
-if (!data) data = lastSaleData; if (!data) { showToast('Nenhuma venda registrada para imprimir','warning'); return; }
-const c = currentCompany || {}; const payNames = {dinheiro:'Dinheiro',cartao:'Cartão / Débito',pix:'PIX'};
-const customerName = data.customerName || ''; const logoUrl = adminLogoUrl || '';
-const dateObj = new Date(data.date); const dateStr = dateObj.toLocaleDateString('pt-BR'); const timeStr = dateObj.toLocaleTimeString('pt-BR',{hour:'2-digit',minute:'2-digit',second:'2-digit'});
-const itemsRows = (data.items||[]).map(item => { const addDesc = item.additionals && item.additionals.length ? `<tr><td colspan="3" style="font-size:10px;color:#555;padding-left:10px">+ ${item.additionals.map(a=>a.name).join(', ')}</td></tr>` : ''; return `<tr><td style="padding:3px 0">${item.qty}x ${item.name}</td><td style="text-align:right;padding:3px 4px;white-space:nowrap">${fmtPrint(item.price)}</td><td style="text-align:right;padding:3px 0;white-space:nowrap;font-weight:700">${fmtPrint(item.price*item.qty)}</td></tr>${addDesc}`; }).join('');
-const subtotal = data.subtotal ?? data.total; const delivery = data.deliveryTotal || 0;
-const html = `<!DOCTYPE html><html lang="pt-BR"><head><meta charset="UTF-8"><title>OS ${data.orderNumber}</title><style>* { margin:0; padding:0; box-sizing:border-box; } body { font-family: 'Courier New', Courier, monospace; font-size: 12px; color: #000; background: #fff; width: 80mm; margin: 0 auto; padding: 6px 4px 20px; } .center { text-align: center; } .right { text-align: right; } .bold { font-weight: bold; } .big { font-size: 15px; } .small { font-size: 10px; } .dashed { border-top: 1px dashed #000; margin: 6px 0; } .solid { border-top: 2px solid #000; margin: 6px 0; } table { width: 100%; border-collapse: collapse; } td { vertical-align: top; font-size: 11px; } .row-total td { font-size: 14px; font-weight: 900; } .row-delivery td { color: #b45309; } .troco-box { background: #f0fdf4; border: 1px dashed #166534; padding: 6px 8px; margin-top: 6px; border-radius:4px; } @media print { body { width: 80mm; } @page { size: 80mm auto; margin: 0; } button { display: none; } } .print-btn { display: block; width: 100%; margin-top: 14px; padding: 10px; background: #2563eb; color: #fff; border: none; border-radius: 8px; font-size: 14px; font-weight: 700; cursor: pointer; font-family: inherit; } .print-btn:hover { background: #1d4ed8; } .no-print { } @media print { .no-print { display:none; } }</style></head><body>${logoUrl ? `<div class="center" style="margin-bottom:8px"><img src="${logoUrl}" style="max-width:130px;max-height:90px;object-fit:contain" onerror="this.style.display='none'"></div>` : ''}<div class="center bold big">${c.companyName||'ESTABELECIMENTO'}</div>${c.cnpj ? `<div class="center small">CNPJ: ${c.cnpj}</div>` : ''}${c.address ? `<div class="center small">${c.address}</div>` : ''}${c.phone ? `<div class="center small">Tel: ${c.phone}</div>` : ''}<div class="solid"></div><div class="center bold" style="font-size:13px;letter-spacing:1px">${data.orderNumber}</div><div class="center small">${dateStr} &nbsp;|&nbsp; ${timeStr}</div>${customerName ? `<div class="center bold" style="margin-top:4px;font-size:12px">Cliente: ${customerName}</div>` : ''}<div class="dashed"></div><div class="bold" style="margin-bottom:4px">ITENS</div><table><thead><tr><td class="bold">Produto</td><td class="bold right">Unit.</td><td class="bold right">Total</td></tr></thead><tbody>${itemsRows}</tbody></table><div class="dashed"></div><table>
-<tr><td class="bold">Subtotal:</td><td class="right">${fmtPrint(subtotal)}</td></tr>${delivery > 0 ? `<tr class="row-delivery"><td><i>Taxa de Entrega:</i></td><td class="right"><i>${fmtPrint(delivery)}</i></td></tr>` : ''}<tr class="row-total"><td class="bold">TOTAL:</td><td class="right">${fmtPrint(data.total)}</td></tr>
-</table><div class="dashed"></div><div><span class="bold">Pagamento:</span> ${payNames[data.paymentMethod]||data.paymentMethod}</div>${data.valorPago && data.valorPago > data.total ? `<div><span class="bold">Recebido:</span> ${fmtPrint(data.valorPago)}</div>` : ''}${data.troco > 0 ? `<div class="troco-box"><span class="bold" style="font-size:13px">TROCO: ${fmtPrint(data.troco)}</span></div>` : ''}<div class="solid"></div><div class="center bold" style="margin-top:4px">Obrigado pela preferência! 🙏</div><div class="center small" style="margin-top:2px">Gestão Fácil — Sistema de Gestão</div><button class="print-btn no-print" onclick="window.print()">🖨️ Clique aqui para Imprimir</button></body></html>`;
-const win = window.open('', '_blank', 'width=420,height=700,left=100,top=50');
-if (!win) { showToast('Permita pop-ups neste site para imprimir','warning'); return; }
-win.document.write(html); win.document.close(); win.focus();
-setTimeout(() => { try { win.print(); } catch(e) {} }, 400);
+    if (!data) data = lastSaleData;
+    if (!data) { showToast('Nenhuma venda registrada para imprimir','warning'); return; }
+    
+    const c = currentCompany || {};
+    const payNames = {dinheiro:'Dinheiro',cartao:'Cartão / Débito',pix:'PIX'};
+    const customerName = data.customerName || '';
+    const logoUrl = adminLogoUrl || '';
+    const dateObj = new Date(data.date);
+    const dateStr = dateObj.toLocaleDateString('pt-BR');
+    const timeStr = dateObj.toLocaleTimeString('pt-BR',{hour:'2-digit',minute:'2-digit',second:'2-digit'});
+    
+    const itemsRows = (data.items||[]).map(item => {
+        const addDesc = item.additionals && item.additionals.length 
+            ? `<tr><td colspan="3" style="font-size:9px;color:#555;padding-left:8px;border-top:1px dotted #ccc">+ ${item.additionals.map(a=>a.name).join(', ')}</td></tr>` 
+            : '';
+        return `<tr><td style="padding:4px 0;font-size:11px">${item.qty}x ${item.name}</td><td style="text-align:right;padding:4px 4px;white-space:nowrap;font-size:10px">${fmtPrint(item.price)}</td><td style="text-align:right;padding:4px 0;white-space:nowrap;font-weight:700;font-size:11px">${fmtPrint(item.price*item.qty)}</td></tr>${addDesc}`;
+    }).join('');
+    
+    const subtotal = data.subtotal ?? data.total;
+    const delivery = data.deliveryTotal || 0;
+    
+    const html = `<!DOCTYPE html>
+<html lang="pt-BR">
+<head>
+    <meta charset="UTF-8">
+    <meta name="viewport" content="width=device-width, initial-scale=1.0">
+    <title>OS ${data.orderNumber}</title>
+    <style>
+        * { margin:0; padding:0; box-sizing:border-box; }
+        body { 
+            font-family: 'Courier New', Courier, monospace; 
+            font-size: 11px; 
+            color: #000; 
+            background: #fff; 
+            width: 55mm;
+            margin: 0 auto; 
+            padding: 3mm 2mm 5mm;
+            line-height: 1.3;
+        }
+        .center { text-align: center; }
+        .right { text-align: right; }
+        .bold { font-weight: bold; }
+        .big { font-size: 13px; }
+        .small { font-size: 9px; }
+        .dashed { border-top: 1px dashed #000; margin: 4px 0; }
+        .solid { border-top: 2px solid #000; margin: 4px 0; }
+        table { width: 100%; border-collapse: collapse; }
+        td { vertical-align: top; font-size: 10px; padding: 2px 0; }
+        .row-total td { font-size: 12px; font-weight: 900; }
+        .row-delivery td { color: #b45309; }
+        .troco-box { 
+            background: #f0fdf4; 
+            border: 1px dashed #166534; 
+            padding: 4px 6px; 
+            margin-top: 4px; 
+            border-radius:3px; 
+        }
+        @media print {
+            body { width: 55mm; }
+            @page { 
+                size: 55mm auto; 
+                margin: 0;
+            }
+            .no-print { display: none; }
+        }
+        .print-btn { 
+            display: block; 
+            width: 100%; 
+            margin-top: 10px; 
+            padding: 8px; 
+            background: #2563eb; 
+            color: #fff; 
+            border: none; 
+            border-radius: 6px; 
+            font-size: 13px; 
+            font-weight: 700; 
+            cursor: pointer; 
+            font-family: inherit; 
+        }
+        .print-btn:hover { background: #1d4ed8; }
+    </style>
+</head>
+<body>
+    ${logoUrl ? `<div class="center" style="margin-bottom:6px"><img src="${logoUrl}" style="max-width:110px;max-height:70px;object-fit:contain" onerror="this.style.display='none'"></div>` : ''}
+    <div class="center bold big">${c.companyName||'ESTABELECIMENTO'}</div>
+    ${c.cnpj ? `<div class="center small">CNPJ: ${c.cnpj}</div>` : ''}
+    ${c.address ? `<div class="center small">${c.address}</div>` : ''}
+    ${c.phone ? `<div class="center small">Tel: ${c.phone}</div>` : ''}
+    <div class="solid"></div>
+    <div class="center bold" style="font-size:12px;letter-spacing:1px">${data.orderNumber}</div>
+    <div class="center small">${dateStr} | ${timeStr}</div>
+    ${customerName ? `<div class="center bold" style="margin-top:3px;font-size:11px">Cliente: ${customerName}</div>` : ''}
+    <div class="dashed"></div>
+    <div class="bold" style="margin-bottom:3px">ITENS</div>
+    <table>
+        <thead>
+            <tr>
+                <td class="bold">Produto</td>
+                <td class="bold right">Unit.</td>
+                <td class="bold right">Total</td>
+            </tr>
+        </thead>
+        <tbody>${itemsRows}</tbody>
+    </table>
+    <div class="dashed"></div>
+    <table>
+        <tr><td class="bold">Subtotal:</td><td class="right">${fmtPrint(subtotal)}</td></tr>
+        ${delivery > 0 ? `<tr class="row-delivery"><td><i>Taxa de Entrega:</i></td><td class="right"><i>${fmtPrint(delivery)}</i></td></tr>` : ''}
+        <tr class="row-total"><td class="bold">TOTAL:</td><td class="right">${fmtPrint(data.total)}</td></tr>
+    </table>
+    <div class="dashed"></div>
+    <div><span class="bold">Pagamento:</span> ${payNames[data.paymentMethod]||data.paymentMethod}</div>
+    ${data.valorPago && data.valorPago > data.total ? `<div><span class="bold">Recebido:</span> ${fmtPrint(data.valorPago)}</div>` : ''}
+    ${data.troco > 0 ? `<div class="troco-box"><span class="bold" style="font-size:11px">TROCO: ${fmtPrint(data.troco)}</span></div>` : ''}
+    <div class="solid"></div>
+    <div class="center bold" style="margin-top:3px">Obrigado pela preferência! 🙏</div>
+    <div class="center small" style="margin-top:2px">Gestão Fácil</div>
+    <button class="print-btn no-print" onclick="window.print()">🖨️ Imprimir</button>
+</body>
+</html>`;
+
+    // Abrir janela de impressão
+    const printWindow = window.open('', '_blank', 'width=400,height=600,left=100,top=50,scrollbars=yes');
+    
+    if (!printWindow) {
+        showToast('Permita pop-ups neste site para imprimir','warning');
+        return;
+    }
+    
+    // Escrever o conteúdo
+    printWindow.document.open();
+    printWindow.document.write(html);
+    printWindow.document.close();
+    
+    // Aguardar carregamento e imprimir
+    printWindow.onload = function() {
+        setTimeout(() => {
+            printWindow.focus();
+            printWindow.print();
+        }, 500);
+    };
 }
-function fmtPrint(v) { return 'R$ ' + Number(v||0).toLocaleString('pt-BR',{minimumFractionDigits:2,maximumFractionDigits:2}); }
+function fmtPrint(v) { 
+    return 'R$ ' + Number(v||0).toLocaleString('pt-BR',{minimumFractionDigits:2,maximumFractionDigits:2}); 
+}
 async function showDailyHistory() {
 showLoading('Carregando histórico...');
 try {
