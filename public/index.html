@@ -1782,10 +1782,19 @@ renderPDVGrid();
 } catch(e) { hideLoading(); showToast('Erro ao registrar venda: '+e.message,'danger'); }
 }
 function printOS(data) {
-    if (!data) data = lastSaleData;
-    if (!data) { showToast('Nenhuma venda registrada para imprimir','warning'); return; }
+    // Verificar se há empresa logada
+    if (!currentCompany || !currentCompanyId) {
+        showToast('Nenhuma empresa logada. Faça login novamente.','danger');
+        return;
+    }
     
-    const c = currentCompany || {};
+    if (!data) data = lastSaleData;
+    if (!data) { 
+        showToast('Nenhuma venda registrada para imprimir','warning'); 
+        return; 
+    }
+    
+    const c = currentCompany; // Usar sempre a empresa logada
     const payNames = {dinheiro:'DINHEIRO', cartao:'CARTÃO', pix:'PIX'};
     const customerName = data.customerName || '';
     const phone = data.phone || '';
@@ -1798,21 +1807,28 @@ function printOS(data) {
     const dateStr = dateObj.toLocaleDateString('pt-BR');
     const timeStr = dateObj.toLocaleTimeString('pt-BR', {hour:'2-digit', minute:'2-digit'});
     
+    // Extrair nome base e adicionais separadamente
     const itemsRows = (data.items||[]).map(item => {
         let baseName = item.name;
         let additionalsText = '';
+        
+        // Remover "(+...)" do nome se existir
         const match = baseName.match(/^(.+?)\s*\(\+(.+?)\)$/);
         if (match) {
             baseName = match[1].trim();
             const adds = match[2].split(',').map(a => a.trim());
             additionalsText = '+' + adds.join(', +');
         }
+        
+        // Se tiver additionals no objeto mas não no nome, usar de lá
         if (item.additionals && item.additionals.length && !additionalsText) {
             additionalsText = item.additionals.map(a => '+' + a.name).join(', ');
         }
+        
         const addDesc = additionalsText
             ? `<tr><td colspan="3" style="font-size:13px;color:#000;padding-left:4px;font-weight:900">${additionalsText}</td></tr>`
             : '';
+        
         return `<tr><td style="padding:4px 0;font-size:15px;font-weight:900">${item.qty}x ${baseName}</td><td style="text-align:right;padding:4px 4px;white-space:nowrap;font-size:13px;font-weight:900">${fmtPrint(item.price)}</td><td style="text-align:right;padding:4px 0;white-space:nowrap;font-weight:900;font-size:15px">${fmtPrint(item.price*item.qty)}</td></tr>${addDesc}`;
     }).join('');
     
@@ -1914,6 +1930,11 @@ ${data.troco > 0 ? `<div class="troco-box"><span class="troco-val">TROCO: ${fmtP
 </body>
 </html>`;
 
+    // Fechar janela anterior se existir
+    if (window.lastPrintWindow && !window.lastPrintWindow.closed) {
+        window.lastPrintWindow.close();
+    }
+    
     // Abrir nova janela
     const printWindow = window.open('', '_blank', 'width=400,height=600,left=100,top=50,scrollbars=yes');
     
@@ -1922,33 +1943,47 @@ ${data.troco > 0 ? `<div class="troco-box"><span class="troco-val">TROCO: ${fmtP
         return;
     }
     
-    // Escrever conteúdo de forma segura
-    printWindow.document.open();
-    printWindow.document.write(html);
-    printWindow.document.close();
+    // Salvar referência
+    window.lastPrintWindow = printWindow;
     
-    // Aguardar carregamento e imprimir
-    printWindow.onload = function() {
+    try {
+        // Escrever conteúdo de forma segura
+        printWindow.document.open();
+        printWindow.document.write(html);
+        printWindow.document.close();
+        
+        // Aguardar carregamento e imprimir
+        printWindow.onload = function() {
+            setTimeout(function() {
+                try {
+                    printWindow.focus();
+                    printWindow.print();
+                } catch(e) {
+                    console.error('Erro ao imprimir:', e);
+                    showToast('Erro ao imprimir. Tente novamente.','danger');
+                }
+            }, 500);
+        };
+        
+        // Fallback caso onload não funcione
         setTimeout(function() {
-            printWindow.focus();
-            try {
-                printWindow.print();
-            } catch(e) {
-                console.error('Erro ao imprimir:', e);
-                showToast('Erro ao imprimir. Tente novamente.','danger');
+            if (printWindow && !printWindow.closed) {
+                try {
+                    printWindow.focus();
+                    printWindow.print();
+                } catch(e) {
+                    console.error('Erro no fallback de impressão:', e);
+                }
             }
-        }, 500);
-    };
-    
-    // Fallback caso onload não funcione
-    setTimeout(function() {
+        }, 1000);
+        
+    } catch(e) {
+        console.error('Erro ao preparar impressão:', e);
+        showToast('Erro ao preparar impressão: ' + e.message,'danger');
         if (printWindow && !printWindow.closed) {
-            try {
-                printWindow.focus();
-                printWindow.print();
-            } catch(e) {}
+            printWindow.close();
         }
-    }, 1000);
+    }
 }
 
 function fmtPrint(v) { 
@@ -3353,10 +3388,13 @@ function printOrderFromHistory(order) {
     printOS(data);
 }
 
-// Imprimir pedido do histórico pelo ID
-function printOrderFromHistoryById(orderId) {
-    const order = allCompanyOrders.find(o => o.id === orderId);
-    if (!order) { showToast('Pedido não encontrado', 'warning'); return; }
+// Imprimir pedido do histórico
+function printOrderFromHistory(order) {
+    // Verificar se há empresa logada
+    if (!currentCompany || !currentCompanyId) {
+        showToast('Nenhuma empresa logada. Faça login novamente.','danger');
+        return;
+    }
     
     const data = {
         items: order.items,
@@ -3562,6 +3600,31 @@ async function loadOrderHistory() {
     } catch(e) {
         el.innerHTML = '<div class="alert alert-danger"><i class="fa-solid fa-exclamation-triangle"></i> Erro: '+e.message+'</div>';
     }
+}
+// Imprimir pedido do histórico pelo ID
+function printOrderFromHistoryById(orderId) {
+    const order = allCompanyOrders.find(o => o.id === orderId);
+    if (!order) { showToast('Pedido não encontrado', 'warning'); return; }
+    
+    const data = {
+        items: order.items,
+        total: order.total,
+        subtotal: order.subtotal || order.total,
+        deliveryTotal: order.deliveryTotal || 0,
+        paymentMethod: order.paymentMethod,
+        valorPago: order.valorPago || order.total,
+        troco: order.troco || 0,
+        date: order.date,
+        orderNumber: order.orderNumber,
+        customerName: order.customerName,
+        phone: order.phone || '',
+        address: order.address || '',
+        houseNumber: order.houseNumber || '',
+        complement: order.complement || '',
+        source: order.source || 'pdv'
+    };
+    
+    printOS(data);
 }
 // Obter texto do status do pedido
 function getOrderStatusText(status) {
