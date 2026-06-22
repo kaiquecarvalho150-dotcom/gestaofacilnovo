@@ -1759,23 +1759,34 @@ renderPDVGrid();
 function printOS(data) {
     if (!data) data = lastSaleData;
     if (!data) { showToast('Nenhuma venda registrada para imprimir','warning'); return; }
+    
     const c = currentCompany || {};
-    const payNames = {dinheiro:'DINHEIRO',cartao:'CARTÃO',pix:'PIX'};
+    const payNames = {dinheiro:'DINHEIRO', cartao:'CARTÃO', pix:'PIX'};
     const customerName = data.customerName || '';
+    const phone = data.phone || '';
+    const address = data.address || '';
+    const houseNumber = data.houseNumber || '';
+    const complement = data.complement || '';
+    const source = data.source || 'pdv';
     const logoUrl = adminLogoUrl || '';
     const dateObj = new Date(data.date);
     const dateStr = dateObj.toLocaleDateString('pt-BR');
-    const timeStr = dateObj.toLocaleTimeString('pt-BR',{hour:'2-digit',minute:'2-digit'});
+    const timeStr = dateObj.toLocaleTimeString('pt-BR', {hour:'2-digit', minute:'2-digit'});
+    
     const itemsRows = (data.items||[]).map(item => {
         const addDesc = item.additionals && item.additionals.length
             ? `<tr><td colspan="3" style="font-size:13px;color:#000;padding-left:6px;font-weight:700">+ ${item.additionals.map(a=>a.name).join(', ')}</td></tr>`
             : '';
         return `<tr><td style="padding:5px 0;font-size:15px;font-weight:900">${item.qty}x ${item.name}</td><td style="text-align:right;padding:5px 4px;white-space:nowrap;font-size:13px;font-weight:700">${fmtPrint(item.price)}</td><td style="text-align:right;padding:5px 0;white-space:nowrap;font-weight:900;font-size:15px">${fmtPrint(item.price*item.qty)}</td></tr>${addDesc}`;
     }).join('');
+    
     const subtotal = data.subtotal ?? data.total;
     const delivery = data.deliveryTotal || 0;
-    const html = `<!DOCTYPE html><html lang="pt-BR"><head><meta charset="UTF-8"><title>OS ${data.orderNumber}</title><style>* { margin:0; padding:0; box-sizing:border-box; } body { font-family: 'Courier New', Courier, monospace; font-size: 14px; color: #000; background: #fff; width: 58mm; margin: 0; padding: 2mm 1mm 2mm; line-height: 1.25; } .center { text-align: center; } .right { text-align: right; } .bold { font-weight: 900; } .big { font-size: 18px; } .small { font-size: 12px; } .dashed { border-top: 2px dashed #000; margin: 4px 0; } .solid { border-top: 3px solid #000; margin: 4px 0; } table { width: 100%; border-collapse: collapse; } td { vertical-align: top; font-size: 13px; } .row-total td { font-size: 18px; font-weight: 900; } .row-delivery td { color: #000; font-weight: 700; } .troco-box { background: #000; color: #fff; border: 2px dashed #000; padding: 6px 8px; margin-top: 4px; text-align: center; } @media print { body { width: 58mm; } @page { size: 58mm auto; margin: 0; } .no-print, .print-btn, button { display: none !important; } } .print-btn { display: block; width: 100%; margin-top: 10px; padding: 10px; background: #000; color: #fff; border: none; font-size: 16px; font-weight: 900; cursor: pointer; } </style></head><body>${logoUrl ? `<div class="center" style="margin-bottom:6px"><img src="${logoUrl}" style="max-width:54mm;max-height:16mm;object-fit:contain" onerror="this.style.display='none'"></div>` : ''}<div class="center bold big" style="font-size:18px">${c.companyName||'ESTABELECIMENTO'}</div>${c.cnpj ? `<div class="center small">CNPJ: ${c.cnpj}</div>` : ''}${c.address ? `<div class="center small">${c.address}</div>` : ''}${c.phone ? `<div class="center small">Tel: ${c.phone}</div>` : ''}<div class="solid"></div><div class="center bold" style="font-size:16px">${data.orderNumber}</div><div class="center small">${dateStr} ${timeStr}</div>${customerName ? `<div class="center bold" style="margin-top:3px;font-size:14px">Cliente: ${customerName}</div>` : ''}<div class="dashed"></div><div class="bold" style="margin-bottom:3px;font-size:16px">ITENS DO PEDIDO</div><table><thead><tr><td class="bold" style="font-size:14px">Produto</td><td class="bold right" style="font-size:13px">Unit.</td><td class="bold right" style="font-size:14px">Total</td></tr></thead><tbody>${itemsRows}</tbody></table><div class="dashed"></div><table><tr><td class="bold" style="font-size:15px">Subtotal:</td><td class="right" style="font-size:15px">${fmtPrint(subtotal)}</td></tr>${delivery > 0 ? `<tr class="row-delivery"><td style="font-size:14px"><i>Taxa de Entrega:</i></td><td class="right" style="font-size:14px"><i>${fmtPrint(delivery)}</i></td></tr>` : ''}<tr class="row-total"><td class="bold">TOTAL:</td><td class="right">${fmtPrint(data.total)}</td></tr></table><div class="dashed"></div><div style="font-size:15px"><span class="bold">Pagamento:</span> ${payNames[data.paymentMethod]||data.paymentMethod}</div>${data.valorPago && data.valorPago > data.total ? `<div style="font-size:15px"><span class="bold">Recebido:</span> ${fmtPrint(data.valorPago)}</div>` : ''}${data.troco > 0 ? `<div class="troco-box"><span class="bold" style="font-size:17px">TROCO: ${fmtPrint(data.troco)}</span></div>` : ''}<div class="solid"></div><div class="center bold" style="margin-top:3px;font-size:15px">Obrigado pela preferência!</div><div class="center small" style="margin-top:1px;font-size:13px">Gestão Fácil</div><button class="print-btn no-print" onclick="window.print()">️ IMPRIMIR</button></body></html>`;
-    const win = window.open('', '_blank', 'width=400,height=600,left=100,top=50');
+    const isOnlineOrder = source === 'pub_menu';
+    
+    const html = `<!DOCTYPE html><html lang="pt-BR"><head><meta charset="UTF-8"><title>OS ${data.orderNumber}</title><style>* { margin:0; padding:0; box-sizing:border-box; } body { font-family: 'Courier New', Courier, monospace; font-size: 14px; color: #000; background: #fff; width: 58mm; margin: 0; padding: 2mm 1mm 2mm; line-height: 1.25; } .center { text-align: center; } .right { text-align: right; } .bold { font-weight: 900; } .big { font-size: 18px; } .small { font-size: 12px; } .dashed { border-top: 2px dashed #000; margin: 4px 0; } .solid { border-top: 3px solid #000; margin: 4px 0; } table { width: 100%; border-collapse: collapse; } td { vertical-align: top; font-size: 13px; } .row-total td { font-size: 18px; font-weight: 900; } .row-delivery td { color: #000; font-weight: 700; } .troco-box { background: #000; color: #fff; border: 2px dashed #000; padding: 6px 8px; margin-top: 4px; text-align: center; } .info-row { font-size: 13px; margin: 2px 0; } .online-badge { background: #000; color: #fff; padding: 2px 6px; font-size: 11px; font-weight: 900; display: inline-block; margin-bottom: 4px; } @media print { body { width: 58mm; } @page { size: 58mm auto; margin: 0; } .no-print, .print-btn, button { display: none !important; } } .print-btn { display: block; width: 100%; margin-top: 10px; padding: 10px; background: #000; color: #fff; border: none; font-size: 16px; font-weight: 900; cursor: pointer; } </style></head><body>${logoUrl ? `<div class="center" style="margin-bottom:6px"><img src="${logoUrl}" style="max-width:54mm;max-height:16mm;object-fit:contain" onerror="this.style.display='none'"></div>` : ''}<div class="center bold big" style="font-size:18px">${c.companyName||'ESTABELECIMENTO'}</div>${c.cnpj ? `<div class="center small">CNPJ: ${c.cnpj}</div>` : ''}${c.address ? `<div class="center small">${c.address}</div>` : ''}${c.phone ? `<div class="center small">Tel: ${c.phone}</div>` : ''}<div class="solid"></div>${isOnlineOrder ? `<div class="center"><span class="online-badge">📱 PEDIDO ONLINE</span></div>` : ''}<div class="center bold" style="font-size:16px">${data.orderNumber}</div><div class="center small">${dateStr} ${timeStr}</div><div class="dashed"></div>${customerName ? `<div class="info-row"><span class="bold">Cliente:</span> ${customerName}</div>` : ''}${phone ? `<div class="info-row"><span class="bold">Tel:</span> ${phone}</div>` : ''}${isOnlineOrder && address ? `<div class="info-row"><span class="bold">Entrega:</span> ${address}${houseNumber ? ', '+houseNumber : ''}${complement ? ' - '+complement : ''}</div>` : ''}<div class="dashed"></div><div class="bold" style="margin-bottom:3px;font-size:16px">ITENS DO PEDIDO</div><table><thead><tr><td class="bold" style="font-size:14px">Produto</td><td class="bold right" style="font-size:13px">Unit.</td><td class="bold right" style="font-size:14px">Total</td></tr></thead><tbody>${itemsRows}</tbody></table><div class="dashed"></div><table><tr><td class="bold" style="font-size:15px">Subtotal:</td><td class="right" style="font-size:15px">${fmtPrint(subtotal)}</td></tr>${delivery > 0 ? `<tr class="row-delivery"><td style="font-size:14px"><i>Taxa de Entrega:</i></td><td class="right" style="font-size:14px"><i>${fmtPrint(delivery)}</i></td></tr>` : ''}<tr class="row-total"><td class="bold">TOTAL:</td><td class="right">${fmtPrint(data.total)}</td></tr></table><div class="dashed"></div><div style="font-size:15px"><span class="bold">Pagamento:</span> ${payNames[data.paymentMethod]||data.paymentMethod}</div>${data.valorPago && data.valorPago > data.total ? `<div style="font-size:15px"><span class="bold">Recebido:</span> ${fmtPrint(data.valorPago)}</div>` : ''}${data.troco > 0 ? `<div class="troco-box"><span class="bold" style="font-size:17px">TROCO: ${fmtPrint(data.troco)}</span></div>` : ''}<div class="solid"></div><div class="center bold" style="margin-top:3px;font-size:15px">Obrigado pela preferência!</div><div class="center small" style="margin-top:1px;font-size:13px">Gestão Fácil</div><button class="print-btn no-print" onclick="window.print()">🖨️ IMPRIMIR</button></body></html>`;
+    
+    const win = window.open('', '_blank', 'width:400,height:600,left:100,top:50');
     if (!win) { showToast('Permita pop-ups neste site para imprimir','warning'); return; }
     win.document.write(html); win.document.close(); win.focus();
     setTimeout(() => { try { win.print(); } catch(e) {} }, 300);
@@ -3076,6 +3087,32 @@ function printOrderFromHistory(order) {
     printOS(data);
 }
 
+// Imprimir pedido do histórico pelo ID
+function printOrderFromHistoryById(orderId) {
+    const order = allCompanyOrders.find(o => o.id === orderId);
+    if (!order) { showToast('Pedido não encontrado', 'warning'); return; }
+    
+    const data = {
+        items: order.items,
+        total: order.total,
+        subtotal: order.subtotal || order.total,
+        deliveryTotal: order.deliveryTotal || 0,
+        paymentMethod: order.paymentMethod,
+        valorPago: order.valorPago || order.total,
+        troco: order.troco || 0,
+        date: order.date,
+        orderNumber: order.orderNumber,
+        customerName: order.customerName,
+        phone: order.phone || '',
+        address: order.address || '',
+        houseNumber: order.houseNumber || '',
+        complement: order.complement || '',
+        source: order.source || 'pdv'
+    };
+    
+    printOS(data);
+}
+
 // Mostrar histórico de pedidos
 async function showOrderHistory() {
     showLoading('Carregando histórico...');
@@ -3196,59 +3233,66 @@ async function showOrderHistoryModal() {
 async function loadOrderHistory() {
     const startDate = document.getElementById('hist-date-start').value;
     const endDate = document.getElementById('hist-date-end').value;
-    
-    if (!startDate || !endDate) {
-        showToast('Selecione as datas', 'warning');
-        return;
-    }
+    if (!startDate || !endDate) { showToast('Selecione as datas', 'warning'); return; }
     
     const start = new Date(startDate + 'T00:00:00');
     const end = new Date(endDate + 'T23:59:59');
-    
     const el = document.getElementById('hist-orders-list');
-    el.innerHTML = '<div class="text-center" style="padding:20px"><div class="loading-spinner" style="width:32px;height:32px;margin:0 auto"></div></div>';
     
     try {
-        // Buscar todas as OS do período
         const allOrders = allCompanyOrders.filter(o => {
             const d = new Date(o.date);
-            return d >= start && d <= end;
-        });
-        
-        if (!allOrders.length) {
-            el.innerHTML = '<div class="text-center" style="padding:40px;color:var(--gray)"><i class="fa-solid fa-inbox" style="font-size:48px;display:block;margin-bottom:12px;color:var(--border)"></i><p>Nenhuma OS encontrada neste período</p></div>';
-            return;
-        }
+            return d >= start && d <= end && o.status === 'paid';
+        }).sort((a,b) => new Date(b.date) - new Date(a.date));
         
         const payIcons = {dinheiro:'💵',cartao:'💳',pix:'📱'};
         const statusLabels = {novo:'Novo',preparando:'Preparando',finalizado:'Finalizado'};
         const statusColors = {novo:'info',preparando:'warning',finalizado:'success'};
         
         el.innerHTML = `<div style="font-size:13px;color:var(--gray);margin-bottom:12px">${allOrders.length} OS encontrada(s) · Total: <strong style="color:var(--success)">${fmt(allOrders.reduce((s,o)=>s+o.total,0))}</strong></div>` +
-            allOrders.map(o => {
-                const t = new Date(o.date);
-                const timeStr = t.toLocaleTimeString('pt-BR',{hour:'2-digit',minute:'2-digit'});
-                const dateStr = t.toLocaleDateString('pt-BR');
-                const os = o.orderStatus || 'novo';
-                return `<div style="background:#f8fafc;border-radius:10px;padding:12px;margin-bottom:8px;border:1px solid var(--border)">
-                    <div style="display:flex;align-items:center;justify-content:space-between;margin-bottom:6px">
-                        <div>
-                            <div style="font-size:11px;font-family:monospace;font-weight:700;color:var(--primary)">${o.orderNumber||o.id}</div>
-                            <div style="font-size:11px;color:var(--gray)">${dateStr} ${timeStr} · ${o.customerName||''}</div>
+        allOrders.map(o => {
+            const t = new Date(o.date);
+            const timeStr = t.toLocaleTimeString('pt-BR',{hour:'2-digit',minute:'2-digit'});
+            const dateStr = t.toLocaleDateString('pt-BR');
+            const sourceBadge = o.source === 'pub_menu' ? '<span class="badge badge-success" style="font-size:10px;margin-left:6px">Online</span>' : 
+                               o.source === 'pdv' ? '<span class="badge badge-info" style="font-size:10px;margin-left:6px">PDV</span>' : '';
+            
+            return `<div class="order-card" style="margin-bottom:12px;padding:12px;border:1px solid var(--border);border-radius:8px">
+                <div class="flex items-start justify-between mb-2">
+                    <div>
+                        <div class="flex items-center gap-2">
+                            <strong style="font-size:15px">${o.orderNumber||o.id}</strong>
+                            ${sourceBadge}
                         </div>
-                        <div style="text-align:right">
-                            <div style="font-size:15px;font-weight:900;color:var(--success)">${fmt(o.total)}</div>
-                            <span class="badge badge-${statusColors[os]||'gray'}">${statusLabels[os]||os}</span>
+                        <div style="font-size:12px;color:var(--gray);margin-top:2px">
+                            <i class="fa-solid fa-clock"></i> ${dateStr} às ${timeStr}
                         </div>
+                        ${o.customerName ? `<div style="margin-top:4px;font-size:13px"><i class="fa-solid fa-user"></i> <strong>${o.customerName}</strong></div>` : ''}
+                        ${o.phone ? `<div style="font-size:12px;color:var(--dark3)"><i class="fa-solid fa-phone"></i> ${o.phone}</div>` : ''}
+                        ${o.address ? `<div style="font-size:12px;color:var(--dark3);margin-top:2px"><i class="fa-solid fa-location-dot"></i> ${o.address}${o.houseNumber ? ', '+o.houseNumber : ''}${o.complement ? ' - '+o.complement : ''}</div>` : ''}
                     </div>
-                    <div style="font-size:11px;color:var(--dark3);margin-bottom:8px">${(o.items||[]).map(i=>`${i.qty}x ${i.name}`).join(', ')}</div>
-                    <div style="display:flex;gap:6px;flex-wrap:wrap">
-                        ${o.paymentMethod?`<span style="font-size:11px;color:var(--gray)">${payIcons[o.paymentMethod]||''} ${o.paymentMethod}</span>`:''}
-                        ${o.source==='pdv'?'<span class="badge badge-info" style="font-size:10px">PDV</span>':''}
-                        ${o.source==='pub_menu'?'<span class="badge badge-success" style="font-size:10px">Online</span>':''}
+                    <div class="text-right">
+                        <div class="order-total-val" style="font-size:18px">${fmt(o.total)}</div>
+                        <div style="font-size:11px;color:var(--gray);margin-top:2px">${payIcons[o.paymentMethod]||''} ${o.paymentMethod||'—'}</div>
                     </div>
-                </div>`;
-            }).join('');
+                </div>
+                <div style="border-top:1px dashed var(--border);padding-top:8px;margin-top:8px">
+                    <div style="font-size:12px;color:var(--gray);margin-bottom:4px">Itens:</div>
+                    ${(o.items||[]).map(i => `<div style="font-size:12px;margin-bottom:2px">${i.qty}x ${i.name}</div>`).join('')}
+                </div>
+                ${o.deliveryTotal > 0 ? `<div style="font-size:12px;margin-top:4px;color:var(--dark3)"><i class="fa-solid fa-truck"></i> Taxa Entrega: ${fmt(o.deliveryTotal)}</div>` : ''}
+                ${o.troco > 0 ? `<div style="font-size:12px;margin-top:2px;color:var(--success)"><strong>Troco: ${fmt(o.troco)}</strong></div>` : ''}
+                <div class="flex gap-2 mt-3">
+                    <button class="btn btn-sm btn-primary flex-1" onclick="printOrderFromHistoryById('${o.id}')">
+                        <i class="fa-solid fa-print"></i> Imprimir
+                    </button>
+                </div>
+            </div>`;
+        }).join('');
+        
+        if (!allOrders.length) {
+            el.innerHTML = '<div class="text-center" style="padding:40px;color:var(--gray)"><i class="fa-solid fa-inbox" style="font-size:48px;display:block;margin-bottom:12px;color:var(--border)"></i><p>Nenhum pedido no período</p></div>';
+        }
     } catch(e) {
         el.innerHTML = '<div class="alert alert-danger"><i class="fa-solid fa-exclamation-triangle"></i> Erro: '+e.message+'</div>';
     }
