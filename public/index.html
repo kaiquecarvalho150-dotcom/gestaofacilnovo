@@ -1782,7 +1782,6 @@ renderPDVGrid();
 } catch(e) { hideLoading(); showToast('Erro ao registrar venda: '+e.message,'danger'); }
 }
 function printOS(data) {
-    // Verificar se há empresa logada
     if (!currentCompany || !currentCompanyId) {
         showToast('Nenhuma empresa logada. Faça login novamente.','danger');
         return;
@@ -1794,7 +1793,6 @@ function printOS(data) {
         return;
     }
 
-    // Usar SEMPRE a empresa logada
     const c = currentCompany;
     const payNames = {dinheiro:'DINHEIRO', cartao:'CARTÃO', pix:'PIX'};
     const customerName = data.customerName || '';
@@ -1924,42 +1922,50 @@ ${data.troco > 0 ? `<div class="troco-box"><span class="troco-val">TROCO: ${fmtP
 </body>
 </html>`;
 
-    // Fechar janela anterior se existir
+    // ✅ FECHAR JANELA ANTERIOR
     if (window.lastPrintWindow && !window.lastPrintWindow.closed) {
         try { window.lastPrintWindow.close(); } catch(e) {}
     }
 
+    // ✅ ABRIR NOVA JANELA
     let printWindow;
     try {
         printWindow = window.open('', '_blank', 'width=400,height=600,left=100,top=50,scrollbars=yes');
     } catch(e) {
-        showToast('Erro ao abrir janela de impressão. Permita pop-ups.','danger');
+        showToast('Erro ao abrir janela. Permita pop-ups no navegador.','danger');
         return;
     }
 
     if (!printWindow) {
-        showToast('Permita pop-ups neste site para imprimir','warning');
+        showToast('Pop-up bloqueado. Permita pop-ups para este site.','warning');
         return;
     }
 
     window.lastPrintWindow = printWindow;
 
+    // ✅ MÉTODO ROBUSTO: Usar Blob URL em vez de document.write
     try {
-        printWindow.document.open();
-        printWindow.document.write(html);
-        printWindow.document.close();
-
+        const blob = new Blob([html], { type: 'text/html;charset=utf-8' });
+        const blobUrl = URL.createObjectURL(blob);
+        
+        printWindow.location.href = blobUrl;
+        
+        // Aguardar carregamento e imprimir
         printWindow.onload = function() {
             setTimeout(function() {
                 try {
                     printWindow.focus();
                     printWindow.print();
+                    // Limpar blob URL após impressão
+                    setTimeout(() => URL.revokeObjectURL(blobUrl), 1000);
                 } catch(e) {
                     console.error('Erro ao imprimir:', e);
+                    showToast('Erro ao imprimir. Tente novamente.','danger');
                 }
             }, 500);
         };
 
+        // Fallback caso onload não dispare
         setTimeout(function() {
             if (printWindow && !printWindow.closed) {
                 try {
@@ -1967,7 +1973,7 @@ ${data.troco > 0 ? `<div class="troco-box"><span class="troco-val">TROCO: ${fmtP
                     printWindow.print();
                 } catch(e) {}
             }
-        }, 1000);
+        }, 1500);
 
     } catch(e) {
         console.error('Erro ao preparar impressão:', e);
