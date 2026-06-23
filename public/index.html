@@ -1534,53 +1534,51 @@ if (globalAdds.length > 0) { showAdditionalsModal(itemId, product); }
 else { addToCartDirect(itemId, product); }
 }
 function showAdditionalsModal(itemId, product) {
-const c = currentCompany;
-const globalAdds = c.globalAdditionals || [];
-const addsHtml = globalAdds.map(a => `
-<div class="flex items-center justify-between" style="padding:10px 0;border-bottom:1px solid #f1f5f9">
-<label style="display:flex;align-items:center;gap:10px;cursor:pointer;flex:1">
-<input type="checkbox" class="add-check" data-id="${a.id}" data-name="${a.name}" data-price="${a.price}" style="width:18px;height:18px;cursor:pointer">
-<span style="font-weight:600">${a.name}</span>
-</label>
-<span style="color:var(--primary);font-weight:700">+ ${fmt(a.price)}</span>
-</div>
-`).join('');
-showModal(
-`<i class="fa-solid fa-plus-circle"></i> ${product.name}`,
-`<div style="font-size:20px;font-weight:900;color:var(--primary);margin-bottom:16px">${fmt(product.price)}</div>
-<div style="margin-bottom:16px">
-<div style="font-size:12px;font-weight:700;color:var(--gray);text-transform:uppercase;letter-spacing:.3px;margin-bottom:10px">Adicionais Globais (opcional)</div>
-${addsHtml}
-<div style="font-size:11px;color:var(--gray);margin-top:8px;font-style:italic">Deixe em branco se não quiser adicionais</div>
-</div>
-<div class="form-group mt-3"><label>Quantidade</label>
-<div class="flex items-center gap-3">
-<button class="btn btn-ghost btn-sm" onclick="document.getElementById('atc-qty').value=Math.max(1,+document.getElementById('atc-qty').value-1)">−</button>
-<input type="number" id="atc-qty" class="form-control" value="1" min="1" style="width:70px;text-align:center">
-<button class="btn btn-ghost btn-sm" onclick="document.getElementById('atc-qty').value=+document.getElementById('atc-qty').value+1">+</button>
-</div>
-</div>`,
-`<button class="btn btn-ghost" onclick="closeModal()">Cancelar</button>
-<button class="btn btn-success" onclick="confirmAddToCartWithAdditionals('${itemId}', ${product.price})"><i class="fa-solid fa-cart-plus"></i> Adicionar ao Carrinho</button>`,
-false
-);
+    const c = currentCompany;
+    const globalAdds = c.globalAdditionals || [];
+    const addsHtml = globalAdds.map(a => `
+    <div class="flex items-center justify-between" style="padding:10px 0;border-bottom:1px solid #f1f5f9">
+        <label style="display:flex;align-items:center;gap:10px;cursor:pointer;flex:1">
+            <input type="checkbox" class="add-check" data-id="${a.id}" data-name="${a.name}" data-price="${a.price}" data-is-free="${a.isFree||false}" style="width:18px;height:18px;cursor:pointer">
+            <span style="font-weight:600">${a.name}${a.isFree?' <span style="color:var(--gray);font-size:11px">(sem custo)</span>':''}</span>
+        </label>
+        <span style="color:${a.isFree?'var(--gray)': 'var(--primary)'};font-weight:700">${a.isFree?'Grátis':fmt(a.price)}</span>
+    </div>
+    `).join('');
+    showModal(
+    `<i class="fa-solid fa-plus-circle"></i> ${product.name}`,
+    `<div style="font-size:20px;font-weight:900;color:var(--primary);margin-bottom:16px">${fmt(product.price)}</div>
+    <div style="margin-bottom:16px">
+        <div style="font-size:12px;font-weight:700;color:var(--gray);text-transform:uppercase;letter-spacing:.3px;margin-bottom:10px">Adicionais Globais (opcional)</div>
+        ${addsHtml}
+        <div style="font-size:11px;color:var(--gray);margin-top:8px;font-style:italic">Deixe em branco se não quiser adicionais</div>
+    </div>
+    <div class="form-group mt-3"><label>Quantidade</label>
+        <div class="flex items-center gap-3">
+            <button class="btn btn-ghost btn-sm" onclick="document.getElementById('atc-qty').value=Math.max(1,+document.getElementById('atc-qty').value-1)">−</button>
+            <input type="number" id="atc-qty" class="form-control" value="1" min="1" style="width:70px;text-align:center">
+            <button class="btn btn-ghost btn-sm" onclick="document.getElementById('atc-qty').value=+document.getElementById('atc-qty').value+1">+</button>
+        </div>
+    </div>`,
+    `<button class="btn btn-ghost" onclick="closeModal()">Cancelar</button>
+    <button class="btn btn-success" onclick="confirmAddToCartWithAdditionals('${itemId}', ${product.price})"><i class="fa-solid fa-cart-plus"></i> Adicionar ao Carrinho</button>`,
+    false
+    );
 }
 function confirmAddToCartWithAdditionals(itemId, basePrice) {
-const qty = parseInt(document.getElementById('atc-qty').value)||1;
-const selected = [...document.querySelectorAll('.add-check:checked')].map(cb=>({
-id:cb.dataset.id, name:cb.dataset.name, price:parseFloat(cb.dataset.price)||0
-}));
-const addPrice = selected.reduce((s,a)=>s+a.price, 0);
-const totalPrice = basePrice + addPrice;
-const c = currentCompany;
-const product = (c.menuItems||[]).find(p=>p.id===itemId);
-const cartName = selected.length ? `${product.name} (+${selected.map(a=>a.name).join(', ')})` : product.name;
-const sigKey = itemId+'|'+selected.map(a=>a.id).sort().join(',');
-const item = cart.find(i=>i._sigKey===sigKey);
-if (item) { item.qty += qty; }
-else { cart.push({id:itemId, name:cartName, price:totalPrice, qty, additionals:selected, _sigKey:sigKey}); }
-closeModal(); renderCart();
-showToast(`${product.name} adicionado!`,'success');
+    const qty = parseInt(document.getElementById('atc-qty').value)||1;
+    const selected = [...document.querySelectorAll('.add-check:checked')].map(cb=>({
+        id:cb.dataset.id, name:cb.dataset.name, price:parseFloat(cb.dataset.price)||0, isFree:cb.dataset.isFree==='true'
+    }));
+    const addPrice = selected.filter(a=>!a.isFree).reduce((s,a)=>s+a.price, 0);
+    const totalPrice = basePrice + addPrice;
+    const c = currentCompany;
+    const product = (c.menuItems||[]).find(p=>p.id===itemId);
+    const cartName = selected.length ? `${product.name} (+${selected.map(a=>a.name).join(', ')})` : product.name;
+    const sigKey = itemId+'|'+selected.map(a=>a.id).sort().join(',');
+    const item = cart.find(i=>i._sigKey===sigKey);
+    if (item) { item.qty += qty; }
+    else { cart.push({id:itemId, name:cartName, price:totalPrice, qty, additionals:selected, _sigKey:sigKey}); }
     closeModal(); renderCart();
     showToast(`${product.name} adicionado!`,'success');
     openCartDrawer();
@@ -1782,30 +1780,10 @@ renderPDVGrid();
 } catch(e) { hideLoading(); showToast('Erro ao registrar venda: '+e.message,'danger'); }
 }
 function printOS(data) {
-    if (!currentCompany || !currentCompanyId) {
-        showToast('Nenhuma empresa logada. Faça login novamente.','danger');
-        return;
-    }
-
-    if (!data) data = lastSaleData;
-    if (!data) {
-        showToast('Nenhuma venda registrada para imprimir','warning');
-        return;
-    }
-
-    const c = currentCompany;
-    const payNames = {dinheiro:'DINHEIRO', cartao:'CARTÃO', pix:'PIX'};
-    const customerName = data.customerName || '';
-    const phone = data.phone || '';
-    const address = data.address || '';
-    const houseNumber = data.houseNumber || '';
-    const complement = data.complement || '';
-    const source = data.source || 'pdv';
-    const logoUrl = c.logoUrl || '';
-    const dateObj = new Date(data.date);
-    const dateStr = dateObj.toLocaleDateString('pt-BR');
-    const timeStr = dateObj.toLocaleTimeString('pt-BR', {hour:'2-digit', minute:'2-digit'});
-
+    if (!data) data = lastSaleData; if (!data) { showToast('Nenhuma venda registrada para imprimir','warning'); return; }
+    const c = currentCompany || {}; const payNames = {dinheiro:'DINHEIRO', cartao:'CARTÃO', pix:'PIX'};
+    const customerName = data.customerName || ''; const logoUrl = adminLogoUrl || '';
+    const dateObj = new Date(data.date); const dateStr = dateObj.toLocaleDateString('pt-BR'); const timeStr = dateObj.toLocaleTimeString('pt-BR',{hour:'2-digit',minute:'2-digit',second:'2-digit'});
     const itemsRows = (data.items||[]).map(item => {
         let baseName = item.name;
         let additionalsText = '';
@@ -1816,176 +1794,40 @@ function printOS(data) {
             additionalsText = '+' + adds.join(', +');
         }
         if (item.additionals && item.additionals.length && !additionalsText) {
-            additionalsText = item.additionals.map(a => '+' + a.name).join(', ');
+            additionalsText = item.additionals.map(a => a.name).join(', ');
         }
         const addDesc = additionalsText
             ? `<tr><td colspan="3" style="font-size:13px;color:#000;padding-left:4px;font-weight:900">${additionalsText}</td></tr>`
             : '';
         return `<tr><td style="padding:4px 0;font-size:15px;font-weight:900">${item.qty}x ${baseName}</td><td style="text-align:right;padding:4px 4px;white-space:nowrap;font-size:13px;font-weight:900">${fmtPrint(item.price)}</td><td style="text-align:right;padding:4px 0;white-space:nowrap;font-weight:900;font-size:15px">${fmtPrint(item.price*item.qty)}</td></tr>${addDesc}`;
     }).join('');
-
-    const subtotal = data.subtotal ?? data.total;
-    const delivery = data.deliveryTotal || 0;
-    const isOnlineOrder = source === 'pub_menu';
-
-    const html = `<!DOCTYPE html>
-<html lang="pt-BR">
-<head>
-<meta charset="UTF-8">
-<title>OS ${data.orderNumber}</title>
-<style>
-* { margin:0; padding:0; box-sizing:border-box; }
-body {
-    font-family: 'Courier New', Courier, monospace;
-    font-size: 15px;
-    color: #000;
-    background: #fff;
-    width: 58mm;
-    margin: 0;
-    padding: 1mm 0.5mm 1mm;
-    line-height: 1.2;
-}
-.center { text-align: center; }
-.right { text-align: right; }
-.bold { font-weight: 900; }
-.big { font-size: 19px; }
-.small { font-size: 13px; }
-.dashed { border-top: 2px dashed #000; margin: 3px 0; }
-.solid { border-top: 3px solid #000; margin: 3px 0; }
-table { width: 100%; border-collapse: collapse; }
-td { vertical-align: top; font-size: 14px; font-weight: 900; }
-.row-total td { font-size: 19px; font-weight: 900; }
-.row-delivery td { color: #000; font-weight: 900; }
-.troco-box { border: 3px dashed #000; padding: 8px 10px; margin-top: 6px; text-align: center; background: #fff; }
-.info-row { font-size: 14px; margin: 2px 0; font-weight: 900; }
-.online-badge { background: #fff; color: #000; border: 3px solid #000; padding: 6px 10px; font-size: 16px; font-weight: 900; display: inline-block; margin-bottom: 6px; letter-spacing: 1px; }
-.company-info { font-size: 13px; font-weight: 900; margin: 2px 0; }
-.date-time { font-size: 15px; font-weight: 900; margin: 3px 0; }
-.pay-section { font-size: 18px; font-weight: 900; margin: 4px 0; color: #000; }
-.pay-label { font-size: 18px; font-weight: 900; }
-.troco-val { font-size: 20px; font-weight: 900; }
-@media print {
-    body { width: 58mm; }
-    @page { size: 58mm auto; margin: 0; }
-    button { display: none; }
-}
-.print-btn {
-    display: block;
-    width: 100%;
-    margin-top: 10px;
-    padding: 10px;
-    background: #000;
-    color: #fff;
-    border: none;
-    font-size: 16px;
-    font-weight: 900;
-    cursor: pointer;
-}
-</style>
-</head>
-<body>
-${logoUrl ? `<div class="center" style="margin-bottom:5px"><img src="${logoUrl}" style="max-width:56mm;max-height:15mm;object-fit:contain" onerror="this.style.display='none'"></div>` : ''}
-<div class="center bold big" style="font-size:19px">${c.companyName||'ESTABELECIMENTO'}</div>
-${c.cnpj ? `<div class="company-info"><span style="font-size:12px">CNPJ:</span> ${c.cnpj}</div>` : ''}
-${c.address ? `<div class="company-info">${c.address}</div>` : ''}
-${c.phone ? `<div class="company-info">Tel: ${c.phone}</div>` : ''}
-<div class="solid"></div>
-${isOnlineOrder ? `<div class="center"><span class="online-badge">📱 PEDIDO ONLINE</span></div>` : ''}
-<div class="center bold date-time" style="font-size:17px">${data.orderNumber}</div>
-<div class="center date-time" style="font-size:15px">${dateStr} ${timeStr}</div>
-<div class="dashed"></div>
-${customerName ? `<div class="info-row"><span class="bold">Cliente:</span> ${customerName}</div>` : ''}
-${phone ? `<div class="info-row"><span class="bold">Tel:</span> ${phone}</div>` : ''}
-${isOnlineOrder && address ? `<div class="info-row"><span class="bold">Entrega:</span> ${address}${houseNumber ? ', '+houseNumber : ''}${complement ? ' - '+complement : ''}</div>` : ''}
-<div class="dashed"></div>
-<div class="bold" style="margin-bottom:3px;font-size:17px">ITENS DO PEDIDO</div>
-<table>
-<thead>
-<tr><td class="bold" style="font-size:15px">Produto</td><td class="bold right" style="font-size:14px">Unit.</td><td class="bold right" style="font-size:15px">Total</td></tr>
-</thead>
-<tbody>${itemsRows}</tbody>
-</table>
-<div class="dashed"></div>
-<table>
-<tr><td class="bold" style="font-size:16px">Subtotal:</td><td class="right" style="font-size:16px">${fmtPrint(subtotal)}</td></tr>
-${delivery > 0 ? `<tr class="row-delivery"><td style="font-size:15px"><i>Taxa de Entrega:</i></td><td class="right" style="font-size:15px"><i>${fmtPrint(delivery)}</i></td></tr>` : ''}
-<tr class="row-total"><td class="bold">TOTAL:</td><td class="right">${fmtPrint(data.total)}</td></tr>
-</table>
-<div class="dashed"></div>
-<div class="pay-section"><span class="pay-label">Pagamento:</span> ${payNames[data.paymentMethod]||data.paymentMethod}</div>
-${data.valorPago && data.valorPago > data.total ? `<div class="pay-section"><span class="pay-label">Recebido:</span> ${fmtPrint(data.valorPago)}</div>` : ''}
-${data.troco > 0 ? `<div class="troco-box"><span class="troco-val">TROCO: ${fmtPrint(data.troco)}</span></div>` : ''}
-<div class="solid"></div>
-<div class="center bold" style="margin-top:3px;font-size:16px">Obrigado pela preferência!</div>
-<div class="center small" style="margin-top:1px;font-size:15px;font-weight:900">Gestão Fácil</div>
-<button class="print-btn" onclick="window.print()">🖨️ IMPRIMIR</button>
-</body>
-</html>`;
-
-    // ✅ FECHAR JANELA ANTERIOR
-    if (window.lastPrintWindow && !window.lastPrintWindow.closed) {
-        try { window.lastPrintWindow.close(); } catch(e) {}
-    }
-
-    // ✅ ABRIR NOVA JANELA
+    const subtotal = data.subtotal ?? data.total; const delivery = data.deliveryTotal || 0;
+    const html = `<!DOCTYPE html><html lang="pt-BR"><head><meta charset="UTF-8"><title>OS ${data.orderNumber}</title><style>* { margin:0; padding:0; box-sizing:border-box; } body { font-family: 'Courier New', Courier, monospace; font-size: 15px; color: #000; background: #fff; width: 58mm; margin: 0; padding: 1mm 0.5mm 1mm; line-height: 1.2; } .center { text-align: center; } .right { text-align: right; } .bold { font-weight: 900; } .big { font-size: 19px; } .small { font-size: 13px; } .dashed { border-top: 2px dashed #000; margin: 3px 0; } .solid { border-top: 3px solid #000; margin: 3px 0; } table { width: 100%; border-collapse: collapse; } td { vertical-align: top; font-size: 14px; font-weight: 900; } .row-total td { font-size: 19px; font-weight: 900; } .row-delivery td { color: #000; font-weight: 900; } .troco-box { border: 3px dashed #000; padding: 8px 10px; margin-top: 6px; text-align: center; background: #fff; } .info-row { font-size: 14px; margin: 2px 0; font-weight: 900; } .online-badge { background: #fff; color: #000; border: 3px solid #000; padding: 6px 10px; font-size: 16px; font-weight: 900; display: inline-block; margin-bottom: 6px; letter-spacing: 1px; } .company-info { font-size: 13px; font-weight: 900; margin: 2px 0; } .date-time { font-size: 15px; font-weight: 900; margin: 3px 0; } .pay-section { font-size: 18px; font-weight: 900; margin: 4px 0; color: #000; } .pay-label { font-size: 18px; font-weight: 900; } .troco-val { font-size: 20px; font-weight: 900; } @media print { body { width: 58mm; } @page { size: 58mm auto; margin: 0; } .no-print, .print-btn, button { display: none !important; } } .print-btn { display: block; width: 100%; margin-top: 10px; padding: 10px; background: #000; color: #fff; border: none; font-size: 16px; font-weight: 900; cursor: pointer; } </style></head><body>${logoUrl ? `<div class="center" style="margin-bottom:5px"><img src="${logoUrl}" style="max-width:56mm;max-height:15mm;object-fit:contain" onerror="this.style.display='none'"></div>` : ''}<div class="center bold big" style="font-size:19px">${c.companyName||'ESTABELECIMENTO'}</div>${c.cnpj ? `<div class="company-info"><span style="font-size:12px">CNPJ:</span> ${c.cnpj}</div>` : ''}${c.address ? `<div class="company-info">${c.address}</div>` : ''}${c.phone ? `<div class="company-info">Tel: ${c.phone}</div>` : ''}<div class="solid"></div><div class="center bold date-time" style="font-size:17px">${data.orderNumber}</div><div class="center date-time" style="font-size:15px">${dateStr} ${timeStr}</div><div class="dashed"></div>${customerName ? `<div class="info-row"><span class="bold">Cliente:</span> ${customerName}</div>` : ''}<div class="dashed"></div><div class="bold" style="margin-bottom:3px;font-size:17px">ITENS DO PEDIDO</div><table><thead><tr><td class="bold" style="font-size:15px">Produto</td><td class="bold right" style="font-size:14px">Unit.</td><td class="bold right" style="font-size:15px">Total</td></tr></thead><tbody>${itemsRows}</tbody></table><div class="dashed"></div><table><tr><td class="bold" style="font-size:16px">Subtotal:</td><td class="right" style="font-size:16px">${fmtPrint(subtotal)}</td></tr>${delivery > 0 ? `<tr class="row-delivery"><td style="font-size:15px"><i>Taxa de Entrega:</i></td><td class="right" style="font-size:15px"><i>${fmtPrint(delivery)}</i></td></tr>` : ''}<tr class="row-total"><td class="bold">TOTAL:</td><td class="right">${fmtPrint(data.total)}</td></tr></table><div class="dashed"></div><div class="pay-section"><span class="pay-label">Pagamento:</span> ${payNames[data.paymentMethod]||data.paymentMethod}</div>${data.valorPago && data.valorPago > data.total ? `<div class="pay-section"><span class="pay-label">Recebido:</span> ${fmtPrint(data.valorPago)}</div>` : ''}${data.troco > 0 ? `<div class="troco-box"><span class="troco-val">TROCO: ${fmtPrint(data.troco)}</span></div>` : ''}<div class="solid"></div><div class="center bold" style="margin-top:3px;font-size:16px">Obrigado pela preferência!</div><div class="center small" style="margin-top:1px;font-size:15px;font-weight:900">Gestão Fácil</div><button class="print-btn no-print" onclick="window.print()">🖨️ IMPRIMIR</button></body></html>`;
+    if (window.lastPrintWindow && !window.lastPrintWindow.closed) { try { window.lastPrintWindow.close(); } catch(e) {} }
     let printWindow;
-    try {
-        printWindow = window.open('', '_blank', 'width=400,height=600,left=100,top=50,scrollbars=yes');
-    } catch(e) {
-        showToast('Erro ao abrir janela. Permita pop-ups no navegador.','danger');
-        return;
-    }
-
-    if (!printWindow) {
-        showToast('Pop-up bloqueado. Permita pop-ups para este site.','warning');
-        return;
-    }
-
+    try { printWindow = window.open('', '_blank', 'width=400,height=600,left=100,top=50,scrollbars=yes'); } catch(e) { showToast('Erro ao abrir janela de impressão. Permita pop-ups.','danger'); return; }
+    if (!printWindow) { showToast('Permita pop-ups neste site para imprimir','warning'); return; }
     window.lastPrintWindow = printWindow;
-
-    // ✅ MÉTODO ROBUSTO: Usar Blob URL em vez de document.write
     try {
-        const blob = new Blob([html], { type: 'text/html;charset=utf-8' });
-        const blobUrl = URL.createObjectURL(blob);
-        
-        printWindow.location.href = blobUrl;
-        
-        // Aguardar carregamento e imprimir
+        printWindow.document.open();
+        printWindow.document.write(html);
+        printWindow.document.close();
         printWindow.onload = function() {
             setTimeout(function() {
-                try {
-                    printWindow.focus();
-                    printWindow.print();
-                    // Limpar blob URL após impressão
-                    setTimeout(() => URL.revokeObjectURL(blobUrl), 1000);
-                } catch(e) {
-                    console.error('Erro ao imprimir:', e);
-                    showToast('Erro ao imprimir. Tente novamente.','danger');
-                }
+                try { printWindow.focus(); printWindow.print(); } catch(e) { console.error('Erro ao imprimir:', e); }
             }, 500);
         };
-
-        // Fallback caso onload não dispare
-        setTimeout(function() {
-            if (printWindow && !printWindow.closed) {
-                try {
-                    printWindow.focus();
-                    printWindow.print();
-                } catch(e) {}
-            }
-        }, 1500);
-
-    } catch(e) {
-        console.error('Erro ao preparar impressão:', e);
-        showToast('Erro ao preparar impressão: ' + e.message,'danger');
-        if (printWindow && !printWindow.closed) {
-            printWindow.close();
-        }
-    }
+        setTimeout(function() { if (printWindow && !printWindow.closed) { try { printWindow.focus(); printWindow.print(); } catch(e) {} } }, 1000);
+    } catch(e) { 
+    console.error('Erro ao preparar impressão:', e); 
+    showToast('Erro ao preparar impressão: ' + e.message,'danger'); 
+    if (printWindow && !printWindow.closed) { 
+        printWindow.close(); 
+    } 
 }
-
-function fmtPrint(v) {
-    return 'R$ ' + Number(v||0).toLocaleString('pt-BR',{minimumFractionDigits:2,maximumFractionDigits:2});
+}
+function fmtPrint(v) { 
+    return 'R$ ' + Number(v||0).toLocaleString('pt-BR',{minimumFractionDigits:2,maximumFractionDigits:2}); 
 }
 async function showDailyHistory() {
 showLoading('Carregando histórico...');
@@ -2087,49 +1929,62 @@ document.getElementById('menu-link-text').textContent = url;
 // ADICIONAIS GLOBAIS
 // ============================================================
 function showGlobalAdditionalsModal() {
-const c = currentCompany;
-const adds = c.globalAdditionals||[];
-const addsHtml = adds.map((a,idx)=>`
-<div class="flex items-center gap-2 mb-2" id="gl-add-row-${a.id}">
-<input type="text" class="form-control" id="gl-add-name-${a.id}" value="${a.name}" placeholder="Ex: Bacon extra" style="flex:2">
-<input type="number" class="form-control" id="gl-add-price-${a.id}" value="${a.price}" step="0.01" min="0" placeholder="R$" style="flex:1">
-<button class="btn btn-sm btn-danger" onclick="document.getElementById('gl-add-row-${a.id}').remove()"><i class="fa-solid fa-times"></i></button>
-</div>`).join('');
-showModal('<i class="fa-solid fa-list-check"></i> Adicionais Globais',
-`<p style="color:var(--gray);font-size:13px;margin-bottom:14px">Estes adicionais aparecem para o cliente ao adicionar <strong>qualquer produto</strong> ao carrinho, tanto no PDV quanto no cardápio online.</p>
-<div id="gl-adds-container">${addsHtml}</div>
-<button type="button" class="btn btn-ghost btn-sm mt-2 w-full" onclick="addGlobalAdditionalRow()"><i class="fa-solid fa-plus"></i> Adicionar Opção</button>`,
-`<button class="btn btn-ghost" onclick="closeModal()">Cancelar</button>
-<button class="btn btn-primary" onclick="saveGlobalAdditionals()"><i class="fa-solid fa-save"></i> Salvar Adicionais</button>`,
-false
-);
+    const c = currentCompany;
+    const adds = c.globalAdditionals||[];
+    const addsHtml = adds.map((a,idx)=>`
+    <div class="flex items-center gap-2 mb-2" id="gl-add-row-${a.id}">
+        <input type="text" class="form-control" id="gl-add-name-${a.id}" value="${a.name}" placeholder="Ex: Bacon extra ou SEM ALFACE" style="flex:2">
+        <input type="number" class="form-control" id="gl-add-price-${a.id}" value="${a.price}" step="0.01" min="0" placeholder="R$" style="flex:1">
+        <label style="display:flex;align-items:center;gap:6px;font-size:12px;color:var(--gray);cursor:pointer;white-space:nowrap">
+            <input type="checkbox" class="gl-add-free" data-id="${a.id}" ${!a.price || a.price===0 ? 'checked' : ''} style="width:16px;height:16px;cursor:pointer">
+            <span>Sem custo</span>
+        </label>
+        <button class="btn btn-sm btn-danger" onclick="document.getElementById('gl-add-row-${a.id}').remove()"><i class="fa-solid fa-times"></i></button>
+    </div>`).join('');
+    showModal('<i class="fa-solid fa-list-check"></i> Adicionais Globais',
+    `<p style="color:var(--gray);font-size:13px;margin-bottom:14px">Estes adicionais aparecem para o cliente ao adicionar <strong>qualquer produto</strong> ao carrinho, tanto no PDV quanto no cardápio online.</p>
+    <div style="background:#dbeafe;border:2px solid var(--primary);border-radius:8px;padding:12px;margin-bottom:16px">
+        <div style="font-size:12px;font-weight:700;color:var(--primary);margin-bottom:6px"><i class="fa-solid fa-info-circle"></i> Como usar:</div>
+        <ul style="font-size:12px;color:var(--dark3);margin:0;padding-left:16px;line-height:1.6">
+            <li><strong>Adicionais cobrados:</strong> Bacon, Calabresa, Queijo extra... (informe o valor)</li>
+            <li><strong>Adicionais grátis:</strong> SEM ALFACE, SEM TOMATE, SEM CEBOLA... (marque "Sem custo" ou deixe R$ 0,00)</li>
+        </ul>
+    </div>
+    <div id="gl-adds-container">${addsHtml}</div>
+    <button type="button" class="btn btn-ghost btn-sm mt-2 w-full" onclick="addGlobalAdditionalRow()"><i class="fa-solid fa-plus"></i> Adicionar Opção</button>`,
+    `<button class="btn btn-ghost" onclick="closeModal()">Cancelar</button>
+    <button class="btn btn-primary" onclick="saveGlobalAdditionals()"><i class="fa-solid fa-save"></i> Salvar Adicionais</button>`,
+    false
+    );
 }
 let _glAddCount = 500;
 function addGlobalAdditionalRow() {
-const id = 'new_'+(++_glAddCount);
-const container = document.getElementById('gl-adds-container'); if(!container) return;
-const row = document.createElement('div');
-row.className = 'flex items-center gap-2 mb-2';
-row.id = `gl-add-row-${id}`;
-row.innerHTML = `<input type="text" class="form-control" id="gl-add-name-${id}" placeholder="Ex: Queijo extra" style="flex:2"><input type="number" class="form-control" id="gl-add-price-${id}" step="0.01" min="0" placeholder="R$" style="flex:1"><button class="btn btn-sm btn-danger" onclick="this.parentElement.remove()"><i class="fa-solid fa-times"></i></button>`;
-container.appendChild(row);
+    const id = 'new_'+(++_glAddCount);
+    const container = document.getElementById('gl-adds-container'); if(!container) return;
+    const row = document.createElement('div');
+    row.className = 'flex items-center gap-2 mb-2';
+    row.id = `gl-add-row-${id}`;
+    row.innerHTML = `<input type="text" class="form-control" id="gl-add-name-${id}" placeholder="Ex: SEM ALFACE ou Bacon extra" style="flex:2"><input type="number" class="form-control" id="gl-add-price-${id}" step="0.01" min="0" placeholder="R$" style="flex:1"><label style="display:flex;align-items:center;gap:6px;font-size:12px;color:var(--gray);cursor:pointer;white-space:nowrap"><input type="checkbox" class="gl-add-free" data-id="${id}" checked style="width:16px;height:16px;cursor:pointer"><span>Sem custo</span></label><button class="btn btn-sm btn-danger" onclick="this.parentElement.remove()"><i class="fa-solid fa-times"></i></button>`;
+    container.appendChild(row);
 }
 async function saveGlobalAdditionals() {
-const c = currentCompany;
-const additionals = [];
-document.querySelectorAll('#gl-adds-container [id^="gl-add-row-"]').forEach(row => {
-const rid = row.id.replace('gl-add-row-','');
-const nm = document.getElementById(`gl-add-name-${rid}`)?.value.trim();
-const pr = parseFloat(document.getElementById(`gl-add-price-${rid}`)?.value)||0;
-if (nm) additionals.push({id:rid.startsWith('new_')?genId():rid, name:nm, price:pr});
-});
-showLoading('Salvando adicionais...');
-try {
-await db.collection('companies').doc(currentCompanyId).update({globalAdditionals:additionals});
-c.globalAdditionals = additionals;
-hideLoading(); closeModal();
-showToast(additionals.length?`${additionals.length} adicional(is) salvos!`:'Adicionais removidos.','success');
-} catch(e) { hideLoading(); showToast('Erro: '+e.message,'danger'); }
+    const c = currentCompany;
+    const additionals = [];
+    document.querySelectorAll('#gl-adds-container [id^="gl-add-row-"]').forEach(row => {
+        const rid = row.id.replace('gl-add-row-','');
+        const nm = document.getElementById(`gl-add-name-${rid}`)?.value.trim();
+        const prInput = document.getElementById(`gl-add-price-${rid}`)?.value;
+        const isFree = document.querySelector(`.gl-add-free[data-id="${rid}"]`)?.checked;
+        const pr = isFree ? 0 : (parseFloat(prInput)||0);
+        if (nm) additionals.push({id:rid.startsWith('new_')?genId():rid, name:nm, price:pr, isFree:isFree});
+    });
+    showLoading('Salvando adicionais...');
+    try {
+        await db.collection('companies').doc(currentCompanyId).update({globalAdditionals:additionals});
+        c.globalAdditionals = additionals;
+        hideLoading(); closeModal();
+        showToast(additionals.length?`${additionals.length} adicional(is) salvos!`:'Adicionais removidos.','success');
+    } catch(e) { hideLoading(); showToast('Erro: '+e.message,'danger'); }
 }
 function showMenuItemModal(iid) {
 const c = currentCompany;
