@@ -711,12 +711,15 @@ table th,table td{padding:7px 8px;font-size:11px}
 </div>
 </div>
 <div class="flex items-center justify-between mb-4 flex-wrap gap-3">
-<div style="font-size:15px;font-weight:700">Itens do Cardápio</div>
-<button class="btn btn-ghost" onclick="showGlobalAdditionalsModal()"><i class="fa-solid fa-list-check"></i> Adicionais Globais</button>
-<button class="btn btn-primary" onclick="showMenuItemModal()"><i class="fa-solid fa-plus"></i> Adicionar Item</button>
+<div class="flex items-center justify-between mb-4 flex-wrap gap-3">
+    <div style="font-size:15px;font-weight:700">Itens do Cardápio</div>
+    <div class="flex gap-2 flex-wrap">
+        <button class="btn btn-ghost" onclick="showGlobalAdditionalsModal()"><i class="fa-solid fa-list-check"></i> Adicionais Globais</button>
+        <button class="btn btn-success" onclick="showWhatsAppContactModal()" style="background:#25d366;color:#fff"><i class="fa-brands fa-whatsapp"></i> Cadastrar Contato</button>
+        <button class="btn btn-primary" onclick="showMenuItemModal()"><i class="fa-solid fa-plus"></i> Adicionar Item</button>
+    </div>
 </div>
-<div class="products-grid" id="menu-grid"></div>
-</div>
+<div class="products-grid" id="menu-grid" style="width:100%"></div>
 
 <!-- ORDERS -->
 <div id="section-orders" class="section">
@@ -817,12 +820,20 @@ table th,table td{padding:7px 8px;font-size:11px}
 </div>
 </div>
 <div id="pub-main-view" class="hidden">
-<div class="pub-nav-tabs">
-<div class="pub-nav-tab active" id="pnt-menu" onclick="showPubTab('menu')"><i class="fa-solid fa-utensils"></i> Cardápio</div>
-<div class="pub-nav-tab" id="pnt-orders" onclick="showPubTab('orders')"><i class="fa-solid fa-receipt"></i> Meus Pedidos</div>
-<div style="margin-left:auto;display:flex;align-items:center;padding-right:8px">
-<button class="btn btn-sm btn-ghost" onclick="doPubLogout()"><i class="fa-solid fa-sign-out-alt"></i> Sair</button>
-</div>
+<div style="display:flex;align-items:center;background:#fff;border-bottom:2px solid var(--border);padding:0 16px;position:sticky;top:0;z-index:20">
+    <div style="display:flex;align-items:center;background:#fff;border-bottom:2px solid var(--border);padding:0 16px;position:sticky;top:0;z-index:20">
+    <div class="pub-nav-tabs" style="border-bottom:none;position:static;padding:0;flex:1">
+        <div class="pub-nav-tab active" id="pnt-menu" onclick="showPubTab('menu')"><i class="fa-solid fa-utensils"></i> Cardápio</div>
+        <div class="pub-nav-tab" id="pnt-orders" onclick="showPubTab('orders')"><i class="fa-solid fa-receipt"></i> Meus Pedidos</div>
+    </div>
+    <div id="pub-whatsapp-btn" style="display:none;margin-right:8px">
+        <button class="btn btn-sm" style="background:#dcfce7;color:#166534;border:2px solid #86efac" onclick="openWhatsAppContact()">
+            <i class="fa-brands fa-whatsapp"></i> Contato
+        </button>
+    </div>
+    <div style="display:flex;align-items:center;padding:8px 0">
+        <button class="btn btn-sm btn-ghost" onclick="doPubLogout()"><i class="fa-solid fa-sign-out-alt"></i> Sair</button>
+    </div>
 </div>
 <div id="pub-tab-menu" class="pub-body">
 <div class="pub-cats" id="pub-cats"></div>
@@ -1927,13 +1938,13 @@ async function saveStock(pid) { const c = currentCompany; const p = c.menuItems.
 // MENU (CARDÁPIO)
 // ============================================================
 function renderMenu() {
-const c = currentCompany; if(!c) return;
-const url = window.location.origin + window.location.pathname + '?cardapio='+currentCompanyId;
-document.getElementById('menu-link-text').textContent = url;
-const items = c.menuItems||[];
-const g = document.getElementById('menu-grid');
-if (!items.length) { g.innerHTML='<div style="grid-column:1/-1;text-align:center;padding:60px;color:var(--gray)"><i class="fa-solid fa-utensils" style="font-size:48px;display:block;margin-bottom:12px;color:var(--border)"></i><h3>Nenhum item no cardápio</h3></div>'; return; }
-g.innerHTML = items.map(item=>`<div class="product-card">${item.image?`<img src="${item.image}" class="product-card-img">`:`<div class="product-card-no-img">${getCategoryEmoji(item.category)}</div>`}<div class="product-card-body"><div class="product-card-name">${item.name}</div><div class="product-card-cat">${item.category||'Sem categoria'}</div><div class="product-card-price">${fmt(item.price)}</div>${item.description?`<div style="font-size:12px;color:var(--gray);margin-bottom:8px;line-height:1.4">${item.description}</div>`:''}<div style="font-size:11px;color:var(--gray);margin-bottom:12px"><i class="fa-solid fa-boxes-stacked"></i> Estoque: ${item.stock||0} · Mín: ${item.minStock||5}</div><div class="product-card-actions"><button class="btn btn-sm btn-primary" onclick="showMenuItemModal('${item.id}')"><i class="fa-solid fa-edit"></i> Editar</button><button class="btn btn-sm btn-danger" onclick="deleteMenuItem('${item.id}')"><i class="fa-solid fa-trash"></i></button></div></div></div>`).join('');
+    const c = currentCompany; if(!c) return;
+    const url = window.location.origin + window.location.pathname + '?cardapio='+currentCompanyId;
+    document.getElementById('menu-link-text').textContent = url;
+    const items = c.menuItems||[];
+    const g = document.getElementById('menu-grid');
+    if (!items.length) { g.innerHTML='<div style="grid-column:1/-1;text-align:center;padding:60px;color:var(--gray)"><i class="fa-solid fa-utensils" style="font-size:48px;display:block;margin-bottom:12px;color:var(--border)"></i><h3>Nenhum item no cardápio</h3></div>'; return; }
+    g.innerHTML = items.map(item=>`<div class="product-card">${item.image?`<img src="${item.image}" class="product-card-img">`:`<div class="product-card-no-img">${getCategoryEmoji(item.category)}</div>`}<div class="product-card-body"><div class="product-card-name">${item.name}</div><div class="product-card-cat">${item.category||'Sem categoria'}</div><div class="product-card-price">${fmt(item.price)}</div>${item.description?`<div style="font-size:12px;color:var(--gray);margin-bottom:8px;line-height:1.4">${item.description}</div>`:''}<div style="font-size:11px;color:var(--gray);margin-bottom:12px"><i class="fa-solid fa-boxes-stacked"></i> Estoque: ${item.stock||0} · Mín: ${item.minStock||5}</div><div class="product-card-actions"><button class="btn btn-sm btn-primary" onclick="showMenuItemModal('${item.id}')"><i class="fa-solid fa-edit"></i> Editar</button><button class="btn btn-sm btn-danger" onclick="deleteMenuItem('${item.id}')"><i class="fa-solid fa-trash"></i></button></div></div></div>`).join('');
 }
 function copyMenuLink() {
 const url = window.location.origin + window.location.pathname + '?cardapio='+currentCompanyId;
@@ -1942,6 +1953,16 @@ showToast('Link copiado!','success');
 document.getElementById('menu-link-text').textContent = url;
 }).catch(()=>showToast('Não foi possível copiar','warning'));
 }
+function openWhatsAppContact() {
+    if (!pubCompany || !pubCompany.whatsappContact) {
+        showToast('WhatsApp não cadastrado','warning');
+        return;
+    }
+    const number = pubCompany.whatsappContact;
+    const message = `Olá! Gostaria de tirar uma dúvida sobre o cardápio da ${pubCompany.companyName}`;
+    const url = `https://wa.me/${number}?text=${encodeURIComponent(message)}`;
+    window.open(url, '_blank');
+}
 
 // ============================================================
 // ADICIONAIS GLOBAIS
@@ -1949,6 +1970,7 @@ document.getElementById('menu-link-text').textContent = url;
 function showGlobalAdditionalsModal() {
     const c = currentCompany;
     const adds = c.globalAdditionals||[];
+    const whatsappNumber = c.whatsappContact || '';
     const addsHtml = adds.map((a,idx)=>`
     <div class="flex items-center gap-2 mb-2" id="gl-add-row-${a.id}">
         <input type="text" class="form-control" id="gl-add-name-${a.id}" value="${a.name}" placeholder="Ex: Bacon extra ou SEM ALFACE" style="flex:2">
@@ -1974,6 +1996,63 @@ function showGlobalAdditionalsModal() {
     <button class="btn btn-primary" onclick="saveGlobalAdditionals()"><i class="fa-solid fa-save"></i> Salvar Adicionais</button>`,
     false
     );
+}
+function showWhatsAppContactModal() {
+    const c = currentCompany;
+    const whatsappNumber = c.whatsappContact || '';
+    showModal('<i class="fa-brands fa-whatsapp" style="color:#25d366"></i> Cadastrar Contato WhatsApp',
+    `<div style="background:#dcfce7;border:2px solid #86efac;border-radius:10px;padding:14px;margin-bottom:16px">
+        <div style="font-size:13px;font-weight:700;color:#166534;margin-bottom:8px">
+            <i class="fa-solid fa-info-circle"></i> Para que serve?
+        </div>
+        <p style="font-size:13px;color:#166534;margin:0">
+            Este número aparecerá no cardápio digital para os clientes entrarem em contato via WhatsApp.
+        </p>
+    </div>
+    <div class="form-group">
+        <label>Número do WhatsApp *</label>
+        <input type="text" id="whatsapp-contact-input" class="form-control" 
+            placeholder="5511999999999 (com DDI e DDD, sem espaços)" 
+            value="${whatsappNumber}" oninput="maskWhatsApp(this)">
+        <div style="font-size:11px;color:var(--gray);margin-top:6px">
+            Ex: 5511999999999 (55=Brasil, 11=DDD, 999999999=número)
+        </div>
+    </div>`,
+    `<button class="btn btn-ghost" onclick="closeModal()">Cancelar</button>
+    <button class="btn btn-success" onclick="saveWhatsAppContact()"><i class="fa-brands fa-whatsapp"></i> Salvar</button>`,
+    false);
+}
+
+function maskWhatsApp(el) {
+    el.value = el.value.replace(/\D/g,'').slice(0,13);
+}
+
+async function saveWhatsAppContact() {
+    const number = document.getElementById('whatsapp-contact-input').value.trim();
+    if (number && number.length < 10) {
+        showToast('Número inválido. Use formato: 5511999999999','warning');
+        return;
+    }
+    showLoading('Salvando...');
+    try {
+        await db.collection('companies').doc(currentCompanyId).update({ 
+            whatsappContact: number 
+        });
+        currentCompany.whatsappContact = number;
+        hideLoading(); closeModal();
+        showToast(number ? 'WhatsApp cadastrado!':'WhatsApp removido!','success');
+    } catch(e) { hideLoading(); showToast('Erro: '+e.message,'danger'); }
+}
+
+function openWhatsAppContact() {
+    if (!pubCompany || !pubCompany.whatsappContact) {
+        showToast('WhatsApp não cadastrado','warning');
+        return;
+    }
+    const number = pubCompany.whatsappContact;
+    const message = `Olá! Gostaria de tirar uma dúvida sobre o cardápio da ${pubCompany.companyName}`;
+    const url = `https://wa.me/${number}?text=${encodeURIComponent(message)}`;
+    window.open(url, '_blank');
 }
 let _glAddCount = 500;
 function addGlobalAdditionalRow() {
@@ -2831,9 +2910,16 @@ document.getElementById('pub-main-view').classList.add('hidden');
 document.getElementById('pub-cart-btn').style.display = 'none';
 }
 function showPubMain() {
-document.getElementById('pub-auth-view').classList.add('hidden');
-document.getElementById('pub-main-view').classList.remove('hidden');
-renderPublicMenu();
+    document.getElementById('pub-auth-view').classList.add('hidden');
+    document.getElementById('pub-main-view').classList.remove('hidden');
+    
+    // Mostrar botão WhatsApp se cadastrado
+    const whatsappBtn = document.getElementById('pub-whatsapp-btn');
+    if (whatsappBtn && pubCompany && pubCompany.whatsappContact) {
+        whatsappBtn.style.display = 'block';
+    }
+    
+    renderPublicMenu();
 }
 function showPubTab(tab) {
 pubActiveTab = tab;
