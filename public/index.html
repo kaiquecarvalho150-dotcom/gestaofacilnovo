@@ -544,28 +544,26 @@ table th,table td{padding:7px 8px;font-size:11px}
 <button class="btn btn-outline w-full btn-lg" style="border-color:var(--success);color:var(--success)" onclick="selectPlan('trial', 0, 14)">Começar Trial Grátis</button>
 </div>
 <div class="plan-card">
-<div class="plan-name">Starter</div>
-<div style="margin:14px 0"><div class="plan-price-amount">R$ 49,90</div><div class="plan-price-period">por mês</div></div>
-<ul class="plan-features">
-<li><i class="fa-solid fa-check-circle"></i> Até 100 produtos</li>
-<li><i class="fa-solid fa-check-circle"></i> 1 Caixa (PDV)</li>
-<li><i class="fa-solid fa-check-circle"></i> Cardápio Digital com Link</li>
-<li><i class="fa-solid fa-check-circle"></i> Relatórios Básicos</li>
-<li><i class="fa-solid fa-check-circle"></i> Suporte por E-mail</li>
-</ul>
-<button class="btn btn-primary w-full btn-lg" onclick="selectPlan('starter', 49.90, 30)">Assinar Starter</button>
+    <div class="plan-name">Starter</div>
+    <div style="margin:14px 0"><div class="plan-price-amount">R$ 29,90</div><div class="plan-price-period">por mês</div></div>
+    <ul class="plan-features">
+        <li><i class="fa-solid fa-check-circle"></i> Até 100 produtos</li>
+        <li><i class="fa-solid fa-check-circle"></i> Cardápio Digital com Link</li>
+        <li><i class="fa-solid fa-check-circle"></i> Relatórios Básicos</li>
+        <li><i class="fa-solid fa-check-circle"></i> Suporte por E-mail</li>
+    </ul>
+    <button class="btn btn-primary w-full btn-lg" onclick="selectPlan('starter', 29.90, 30)">Assinar Starter</button>
 </div>
 <div class="plan-card featured">
-<div class="plan-name">Professional</div>
-<div style="margin:14px 0"><div class="plan-price-amount">R$ 99,90</div><div class="plan-price-period">por mês</div><div class="plan-save">💰 Melhor Custo-Benefício</div></div>
-<ul class="plan-features">
-<li><i class="fa-solid fa-check-circle"></i> Produtos Ilimitados</li>
-<li><i class="fa-solid fa-check-circle"></i> 3 Caixas (PDV) simultâneos</li>
-<li><i class="fa-solid fa-check-circle"></i> Delivery e Taxa de Entrega</li>
-<li><i class="fa-solid fa-check-circle"></i> Relatórios Financeiros Avançados</li>
-<li><i class="fa-solid fa-check-circle"></i> Suporte Prioritário WhatsApp</li>
-</ul>
-<button class="btn btn-primary w-full btn-lg" onclick="selectPlan('professional', 99.90, 30)">Assinar Professional</button>
+    <div class="plan-name">Professional</div>
+    <div style="margin:14px 0"><div class="plan-price-amount">R$ 59,90</div><div class="plan-price-period">por mês</div><div class="plan-save">💰 Melhor Custo-Benefício</div></div>
+    <ul class="plan-features">
+        <li><i class="fa-solid fa-check-circle"></i> Produtos Ilimitados</li>
+        <li><i class="fa-solid fa-check-circle"></i> Relatórios Financeiros Avançados</li>
+        <li><i class="fa-solid fa-check-circle"></i> Controle de Lucro por Lanche</li>
+        <li><i class="fa-solid fa-check-circle"></i> Suporte Prioritário WhatsApp</li>
+    </ul>
+    <button class="btn btn-primary w-full btn-lg" onclick="selectPlan('professional', 59.90, 30)">Assinar Professional</button>
 </div>
 </div>
 <div class="text-center"><button class="btn btn-ghost" onclick="showPage('page-login')"><i class="fa-solid fa-arrow-left"></i> Voltar ao Login</button></div>
@@ -1126,7 +1124,7 @@ adminLogoUrl = doc.data().logoUrl || '';
 async function selectPlan(plan, price, days) {
 pendingPlan = { plan, price, days };
 if (plan === 'trial') { goRegister(); return; }
-const planNames = { starter: 'Starter (R$ 49,90/mês)', professional: 'Professional (R$ 99,90/mês)' };
+const planNames = { starter: 'Starter (R$ 29,90/mês)', professional: 'Professional (R$ 59,90/mês)' };
 const planColors = { starter: 'primary', professional: 'secondary' };
 const mpSubscriptionLink = plan === 'starter' ? 'https://www.mercadopago.com.br/subscriptions/checkout?preapproval_plan_id=3eda481758b541cf82211a4383019eca' : 'https://www.mercadopago.com.br/subscriptions/checkout?preapproval_plan_id=b39a928fd9f748a7801961ba8c854ed0';
 showModal(
@@ -1205,16 +1203,16 @@ showModal(
 <div style="display:grid;grid-template-columns:1fr 1fr;gap:12px;text-align:left">
 <div class="card" style="cursor:pointer;border:2px solid var(--border)" onclick="selectPlan('starter',49.90,30);closeModal()">
 <div style="font-weight:800;color:var(--primary)">Starter</div>
-<div style="font-size:20px;font-weight:900">R$ 49,90<span style="font-size:12px;font-weight:400">/mês</span></div>
+<div style="font-size:20px;font-weight:900">R$ 29,90<span style="font-size:12px;font-weight:400">/mês</span></div>
 <ul style="font-size:12px;color:var(--gray);margin-top:8px;padding-left:16px">
-<li>100 Produtos</li><li>1 Caixa</li><li>Relatórios Básicos</li>
+<li>100 Produtos</li><li>Relatórios Básicos</li>
 </ul>
 </div>
-<div class="card" style="cursor:pointer;border:2px solid var(--primary);background:var(--primary-light)" onclick="selectPlan('professional',99.90,30);closeModal()">
+<div class="card" style="cursor:pointer;border:2px solid var(--primary);background:var(--primary-light)" onclick="selectPlan('professional',59.90,30);closeModal()">
 <div style="font-weight:800;color:var(--primary)">Professional ⭐</div>
-<div style="font-size:20px;font-weight:900">R$ 99,90<span style="font-size:12px;font-weight:400">/mês</span></div>
+<div style="font-size:20px;font-weight:900">R$ 59,90<span style="font-size:12px;font-weight:400">/mês</span></div>
 <ul style="font-size:12px;color:var(--gray);margin-top:8px;padding-left:16px">
-<li>Produtos Ilimitados</li><li>3 Caixas</li><li>Delivery & Suporte VIP</li>
+<li>Produtos Ilimitados</li><li>Lucro por Lanche</li><li>Suporte VIP</li>
 </ul>
 </div>
 </div>
@@ -1342,7 +1340,7 @@ showModal('<i class="fa-solid fa-plus-circle"></i> Criar Novo Cadastro',
 <div class="form-group"><label>Endereço</label><input type="text" id="nc-address" class="form-control"></div>
 <div class="form-row"><div class="form-group"><label>E-mail *</label><input type="email" id="nc-email" class="form-control"></div>
 <div class="form-group"><label>Senha *</label><div class="pwd-wrap"><input type="password" id="nc-password" class="form-control"><button class="pwd-toggle" type="button" onclick="togglePwd('nc-password','eye-ncpwd')"><i class="fa-solid fa-eye" id="eye-ncpwd"></i></button></div></div></div>
-<div class="form-row"><div class="form-group"><label>Plano *</label><select id="nc-plan" class="form-control" onchange="updatePlanPrice()"><option value="trial">Trial (14 dias)</option><option value="starter">Starter (R$ 49,90)</option><option value="professional">Professional (R$ 99,90)</option></select></div>
+<div class="form-row"><div class="form-group"><label>Plano *</label><select id="nc-plan" class="form-control" onchange="updatePlanPrice()"><option value="trial">Trial (14 dias)</option><option value="starter">Starter (R$ 29,90)</option><option value="professional">Professional (R$ 59,90)</option></select></div>
 <div class="form-group"><label>Dias de Acesso *</label><input type="number" id="nc-days" class="form-control" value="14" min="1"></div></div>
 <div style="border-top:1px solid var(--border);margin:14px 0;padding-top:14px">
 <div style="font-size:12px;font-weight:700;color:var(--success);text-transform:uppercase;margin-bottom:8px"><i class="fa-solid fa-coins"></i> Valor Cobrado (opcional)</div>
@@ -1374,7 +1372,7 @@ try {
 const snap = await db.collection('companies').where('email','==',em).get();
 if (!snap.empty) { hideLoading(); showToast('E-mail já cadastrado','danger'); return; }
 const id = genId();
-const prices = {trial:0, starter:49.90, professional:99.90};
+const prices = {trial:0, starter:29.90, professional:59.90};
 const company = { companyName:co, ownerName:own, cnpj, phone:ph, address:addr, email:em, password:pw, plan, planPrice:prices[plan]||0, accessDays:days, startDate:new Date().toISOString(), createdAt:new Date().toISOString(), blocked:false, menuItems:[], employees:[], expenses:[], globalAdditionals:[] };
 await db.collection('companies').doc(id).set(company);
 // Somar valor cobrado na receita manual
@@ -1404,7 +1402,7 @@ showModal('<i class="fa-solid fa-edit"></i> Editar Empresa',
 }
 async function saveEditCompany(id) {
 const c = allCompanies.find(x=>x.id===id); if(!c) return;
-const prices = {trial:0, starter:49.90, professional:99.90};
+const prices = {trial:0, starter:29.90, professional:59.90};
 const updates = { companyName:document.getElementById('ec-company').value.trim()||c.companyName, ownerName:document.getElementById('ec-owner').value.trim()||c.ownerName, cnpj:document.getElementById('ec-cnpj').value.trim()||c.cnpj, phone:document.getElementById('ec-phone').value.trim(), address:document.getElementById('ec-address').value.trim(), email:document.getElementById('ec-email').value.trim()||c.email, plan:document.getElementById('ec-plan').value, accessDays:parseInt(document.getElementById('ec-days').value)||c.accessDays };
 updates.planPrice = prices[updates.plan] || 0;
 const pw = document.getElementById('ec-password').value.trim(); if(pw) updates.password = pw;
