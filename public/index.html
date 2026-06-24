@@ -386,6 +386,102 @@ table th,table td{padding:7px 8px;font-size:11px}
 .product-card-price{font-size:16px;font-weight:900;color:var(--primary);margin-bottom:6px}
 .product-card-actions{display:flex;gap:6px;margin-top:8px}
 .product-card-actions .btn{flex:1;font-size:11px;padding:6px 8px}
+/* Tabela de Lucro por Lanche */
+.lanche-lucro-row {
+    background: #fff;
+    border-radius: 10px;
+    padding: 14px 16px;
+    border: 1px solid var(--border);
+    display: grid;
+    grid-template-columns: 2fr 1fr 1fr 1fr auto;
+    gap: 12px;
+    align-items: center;
+    margin-bottom: 8px;
+    transition: box-shadow 0.2s;
+}
+.lanche-lucro-row:hover {
+    box-shadow: 0 4px 12px rgba(0,0,0,0.07);
+}
+.lanche-lucro-header {
+    background: #f8fafc;
+    font-weight: 700;
+    font-size: 11px;
+    text-transform: uppercase;
+    color: var(--gray);
+    padding: 10px 16px;
+    border-radius: 8px;
+    display: grid;
+    grid-template-columns: 2fr 1fr 1fr 1fr auto;
+    gap: 12px;
+    margin-bottom: 8px;
+}
+.lanche-lucro-input {
+    width: 100%;
+    padding: 8px 10px;
+    border: 2px solid var(--border);
+    border-radius: 6px;
+    font-size: 13px;
+    font-family: 'Inter', sans-serif;
+    transition: border-color 0.2s;
+}
+.lanche-lucro-input:focus {
+    outline: none;
+    border-color: var(--primary);
+}
+.lanche-lucro-valor {
+    font-weight: 700;
+    font-size: 14px;
+    color: var(--dark);
+}
+.lanche-lucro-lucro {
+    font-weight: 800;
+    font-size: 15px;
+    color: var(--success);
+}
+.lanche-lucro-prejuizo {
+    color: var(--danger);
+}
+.lanche-lucro-total {
+    background: linear-gradient(135deg, #f0fdf4, #dcfce7);
+    border: 2px solid var(--success);
+    border-radius: 12px;
+    padding: 16px 20px;
+    margin-top: 12px;
+    display: flex;
+    justify-content: space-between;
+    align-items: center;
+}
+.lanche-lucro-total-label {
+    font-size: 14px;
+    font-weight: 700;
+    color: var(--dark);
+}
+.lanche-lucro-total-valor {
+    font-size: 24px;
+    font-weight: 900;
+    color: var(--success);
+}
+@media (max-width: 768px) {
+    .lanche-lucro-row,
+    .lanche-lucro-header {
+        grid-template-columns: 1fr;
+        gap: 8px;
+    }
+    .lanche-lucro-header {
+        display: none;
+    }
+    .lanche-lucro-row > div {
+        display: flex;
+        justify-content: space-between;
+        align-items: center;
+    }
+    .lanche-lucro-row > div::before {
+        content: attr(data-label);
+        font-weight: 600;
+        font-size: 12px;
+        color: var(--gray);
+    }
+}
 </style>
 </head>
 <body>
@@ -767,7 +863,27 @@ table th,table td{padding:7px 8px;font-size:11px}
 </div>
 </div>
 </div>
+
+<!-- CONTROLE DE LUCROS POR LANCHE -->
+     <div class="card mt-4">
+         <div class="card-header">
+		 <div class="card-title"><i class="fa-solid fa-hamburger"></i> Lucro por Lanche</div>
+             <button class="btn btn-primary btn-sm" onclick="showAddLancheLucroModal()">
+                 <i class="fa-solid fa-plus"></i> Adicionar Lanche
+             </button>
+         </div>
+         <div id="lucro-lanches-list">
+             <div class="text-center" style="padding:40px;color:var(--gray)">
+                 <i class="fa-solid fa-hamburger" style="font-size:48px;display:block;margin-bottom:12px;opacity:0.3"></i>
+                 <p>Nenhum lanche cadastrado</p>
+                 <p style="font-size:13px;margin-top:8px">Adicione seus lanches para controlar o lucro</p>
+             </div>
+         </div>
+		 </div>
+
 </div>
+
+
 
 <!-- EMPLOYEES -->
 <div id="section-employees" class="section">
@@ -1128,7 +1244,7 @@ currentCompany = co;
 pdvDeliveryFee = parseFloat(co.pdvDeliveryFee)||0;
 pubDeliveryFee = parseFloat(co.pubDeliveryFee)||0;
 hideLoading();
-initDashboard();
+await initDashboard();
 } catch(e) { hideLoading(); showToast('Erro de conexão: '+e.message,'danger'); }
 }
 function doLogout() {
@@ -1363,9 +1479,11 @@ hideLoading(); closeModal(); showToast('Receitas zeradas! Nova contagem iniciada
 // ============================================================
 // DASHBOARD INIT
 // ============================================================
-function initDashboard() {
+async function initDashboard() {  // ← Adicionar 'async' aqui
 const c = currentCompany; if(!c) return;
 pdvDeliveryFee = parseFloat(c.pdvDeliveryFee)||0;
+await loadLanchesLucro();
+renderLanchesLucro();
 pubDeliveryFee = parseFloat(c.pubDeliveryFee)||0;
 adminLogoUrl = c.logoUrl || '';
 document.getElementById('sb-company-name').textContent = c.companyName;
@@ -2292,6 +2410,7 @@ renderReportData(sales, expenses, totalSalary);
 showToast('Erro ao carregar relatórios: ' + e.message, 'danger');
 }
 hideLoading();
+renderLanchesLucro();
 }
 async function clearReportData() {
     if (!confirm('Limpar todas as vendas e despesas deste mês? Esta ação não pode ser desfeita.')) return;
@@ -3650,6 +3769,221 @@ ${(o.items||[]).map(i => `
         </div>
         `;
     }).join('');
+}
+
+// ========== CONTROLE DE LUCRO POR LANCHE ==========
+let lanchesLucro = [];
+
+function showAddLancheLucroModal() {
+    showModal(
+        '<i class="fa-solid fa-hamburger"></i> Adicionar Lanche',
+        `<div class="form-group">
+            <label>Nome do Lanche *</label>
+            <input type="text" id="ll-nome" class="form-control" placeholder="Ex: X-Salada, Hamburguer...">
+        </div>
+        <div class="form-row">
+            <div class="form-group">
+                <label>Custo (R$) *</label>
+                <input type="number" id="ll-custo" class="form-control" step="0.01" min="0" placeholder="0,00" oninput="calcLucroPreview()">
+            </div>
+            <div class="form-group">
+                <label>Valor de Venda (R$) *</label>
+                <input type="number" id="ll-venda" class="form-control" step="0.01" min="0" placeholder="0,00" oninput="calcLucroPreview()">
+            </div>
+        </div>
+        <div class="alert alert-info mt-3" id="ll-preview" style="display:none">
+            <div style="font-size:13px;margin-bottom:6px"><strong>Pré-visualização:</strong></div>
+            <div style="display:flex;justify-content:space-between;align-items:center">
+                <span>Custo: <strong id="prev-custo">R$ 0,00</strong></span>
+                <span>Venda: <strong id="prev-venda">R$ 0,00</strong></span>
+                <span>Lucro: <strong id="prev-lucro" style="color:var(--success)">R$ 0,00</strong></span>
+            </div>
+        </div>`,
+        `<button class="btn btn-ghost" onclick="closeModal()">Cancelar</button>
+        <button class="btn btn-primary" onclick="saveLancheLucro()"><i class="fa-solid fa-save"></i> Salvar</button>`,
+        false
+    );
+}
+
+function calcLucroPreview() {
+    const custo = parseFloat(document.getElementById('ll-custo').value) || 0;
+    const venda = parseFloat(document.getElementById('ll-venda').value) || 0;
+    const lucro = venda - custo;
+    
+    const preview = document.getElementById('ll-preview');
+    if (custo > 0 || venda > 0) {
+        preview.style.display = 'block';
+        document.getElementById('prev-custo').textContent = fmt(custo);
+        document.getElementById('prev-venda').textContent = fmt(venda);
+        const elLucro = document.getElementById('prev-lucro');
+        elLucro.textContent = fmt(lucro);
+        elLucro.style.color = lucro >= 0 ? 'var(--success)' : 'var(--danger)';
+    } else {
+        preview.style.display = 'none';
+    }
+}
+
+async function saveLancheLucro() {
+    const nome = document.getElementById('ll-nome').value.trim();
+    const custo = parseFloat(document.getElementById('ll-custo').value) || 0;
+    const venda = parseFloat(document.getElementById('ll-venda').value) || 0;
+    
+    if (!nome || !custo || !venda) {
+        showToast('Preencha todos os campos obrigatórios', 'warning');
+        return;
+    }
+    
+    const lucro = venda - custo;
+    const newLanche = {
+        id: genId(),
+        nome,
+        custo,
+        venda,
+        lucro,
+        createdAt: new Date().toISOString()
+    };
+    
+    lanchesLucro.push(newLanche);
+    
+    showLoading('Salvando...');
+    try {
+        await db.collection('companies').doc(currentCompanyId).update({
+            lanchesLucro: lanchesLucro
+        });
+        hideLoading();
+        closeModal();
+        renderLanchesLucro();
+        showToast('Lanche adicionado com sucesso!', 'success');
+    } catch(e) {
+        hideLoading();
+        showToast('Erro: ' + e.message, 'danger');
+    }
+}
+
+function renderLanchesLucro() {
+    const el = document.getElementById('lucro-lanches-list');
+    if (!el) return;
+    
+    if (!lanchesLucro.length) {
+        el.innerHTML = `
+            <div class="text-center" style="padding:40px;color:var(--gray)">
+                <i class="fa-solid fa-hamburger" style="font-size:48px;display:block;margin-bottom:12px;opacity:0.3"></i>
+                <p>Nenhum lanche cadastrado</p>
+                <p style="font-size:13px;margin-top:8px">Adicione seus lanches para controlar o lucro</p>
+            </div>
+        `;
+        return;
+    }
+    
+    const totalLucro = lanchesLucro.reduce((sum, l) => sum + l.lucro, 0);
+    
+    let html = `
+        <div class="lanche-lucro-header">
+            <div>NOME LANCHE</div>
+            <div>CUSTO</div>
+            <div>VAL VENDA</div>
+            <div>LUCRO</div>
+            <div></div>
+        </div>
+    `;
+    
+    html += lanchesLucro.map(l => `
+        <div class="lanche-lucro-row">
+            <div data-label="Nome:">
+                <input type="text" class="lanche-lucro-input" value="${l.nome}" 
+                    onchange="updateLancheLucro('${l.id}', 'nome', this.value)"
+                    placeholder="Nome do lanche">
+            </div>
+            <div data-label="Custo:">
+                <input type="number" class="lanche-lucro-input" value="${l.custo}" step="0.01" min="0"
+                    onchange="updateLancheLucro('${l.id}', 'custo', parseFloat(this.value))">
+            </div>
+            <div data-label="Venda:">
+                <input type="number" class="lanche-lucro-input" value="${l.venda}" step="0.01" min="0"
+                    onchange="updateLancheLucro('${l.id}', 'venda', parseFloat(this.value))">
+            </div>
+            <div data-label="Lucro:">
+                <div class="lanche-lucro-valor ${l.lucro < 0 ? 'lanche-lucro-prejuizo' : ''}">
+                    ${fmt(l.lucro)}
+                </div>
+            </div>
+            <div>
+                <button class="btn btn-sm btn-danger" onclick="deleteLancheLucro('${l.id}')">
+                    <i class="fa-solid fa-trash"></i>
+                </button>
+            </div>
+        </div>
+    `).join('');
+    
+    html += `
+        <div class="lanche-lucro-total">
+            <div class="lanche-lucro-total-label">
+                <i class="fa-solid fa-chart-line"></i> 
+                Lucro Total (${lanchesLucro.length} lanche${lanchesLucro.length !== 1 ? 's' : ''})
+            </div>
+            <div class="lanche-lucro-total-valor ${totalLucro < 0 ? 'lanche-lucro-prejuizo' : ''}">
+                ${fmt(totalLucro)}
+            </div>
+        </div>
+    `;
+    
+    el.innerHTML = html;
+}
+
+async function updateLancheLucro(id, field, value) {
+    const lanche = lanchesLucro.find(l => l.id === id);
+    if (!lanche) return;
+    
+    lanche[field] = value;
+    
+    // Recalcular lucro se custo ou venda mudou
+    if (field === 'custo' || field === 'venda') {
+        lanche.lucro = lanche.venda - lanche.custo;
+    }
+    
+    showLoading('Atualizando...');
+    try {
+        await db.collection('companies').doc(currentCompanyId).update({
+            lanchesLucro: lanchesLucro
+        });
+        hideLoading();
+        renderLanchesLucro();
+    } catch(e) {
+        hideLoading();
+        showToast('Erro: ' + e.message, 'danger');
+    }
+}
+
+async function deleteLancheLucro(id) {
+    if (!confirm('Excluir este lanche?')) return;
+    
+    lanchesLucro = lanchesLucro.filter(l => l.id !== id);
+    
+    showLoading('Excluindo...');
+    try {
+        await db.collection('companies').doc(currentCompanyId).update({
+            lanchesLucro: lanchesLucro
+        });
+        hideLoading();
+        renderLanchesLucro();
+        showToast('Lanche excluído!', 'success');
+    } catch(e) {
+        hideLoading();
+        showToast('Erro: ' + e.message, 'danger');
+    }
+}
+
+// Carregar lanchesLucro ao inicializar o dashboard
+async function loadLanchesLucro() {
+    try {
+        const doc = await db.collection('companies').doc(currentCompanyId).get();
+        if (doc.exists) {
+            const data = doc.data();
+            lanchesLucro = data.lanchesLucro || [];
+        }
+    } catch(e) {
+        console.error('Erro ao carregar lanches:', e);
+    }
 }
 
 // ============================================================
