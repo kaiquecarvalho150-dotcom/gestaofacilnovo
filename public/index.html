@@ -1222,41 +1222,209 @@ true
 );
 }
 
-// ============================================================
-// COMPANY LOGIN/LOGOUT
-// ============================================================
-async function doLogin() {
-const email = document.getElementById('login-email').value.trim();
-const pass = document.getElementById('login-password').value.trim();
-if (!email||!pass) { showToast('Preencha e-mail e senha','warning'); return; }
-showLoading('Verificando credenciais...');
+function showRenewalModal(company) {
+    const daysExpired = Math.abs(getDaysRemaining(company));
+    const adminWA = adminWhatsApp || '5511999999999'; // Fallback caso não esteja configurado
+    const waMessage = encodeURIComponent(`Olá! Acabei de realizar o pagamento da renovação da assinatura para a empresa ${company.companyName} (CNPJ: ${company.cnpj}). Por favor, desbloqueie meu acesso e adicione os dias ao meu plano.`);
+    const waLink = `https://wa.me/${adminWA}?text=${waMessage}`;
+
+    const mpLinkStarter = `https://www.mercadopago.com.br/subscriptions/checkout?preapproval_plan_id=3eda481758b541cf82211a4383019eca&external_reference=${company.id}`;
+    const mpLinkPro = `https://www.mercadopago.com.br/subscriptions/checkout?preapproval_plan_id=b39a928fd9f748a7801961ba8c854ed0&external_reference=${company.id}`;
+
+    showModal(
+        '<i class="fa-solid fa-exclamation-triangle" style="color:var(--danger)"></i> Plano Expirado',
+        `<div style="padding:10px 0">
+            <div style="text-align:center; margin-bottom:16px;">
+                <div style="font-size:64px;margin-bottom:12px">⏰</div>
+                <h3 style="font-size:20px;font-weight:800;margin-bottom:8px;color:var(--danger)">Seu plano expirou!</h3>
+                <p style="color:var(--gray);margin-bottom:16px">O plano da empresa <strong>${company.companyName}</strong> expirou há <strong style="color:var(--danger)">${daysExpired} dia(s)</strong>.</p>
+                <div class="alert alert-warning" style="justify-content:center">
+                    <i class="fa-solid fa-info-circle"></i>
+                    <span>Seus dados estão salvos! Escolha um plano, pague no Mercado Pago e solicite o desbloqueio via WhatsApp.</span>
+                </div>
+            </div>
+            <p style="color:var(--gray);font-size:13px;margin-bottom:16px; text-align:center;"><strong>1º Passo:</strong> Escolha um plano e realize o pagamento:</p>
+            <div style="display:grid;grid-template-columns:1fr 1fr;gap:12px;text-align:left; margin-bottom: 20px;">
+                <div class="card" style="border:2px solid var(--border); transition:all .2s;">
+                    <div style="font-weight:800;color:var(--primary);font-size:15px">Starter</div>
+                    <div style="font-size:22px;font-weight:900;color:var(--primary)">R$ 29,90<span style="font-size:12px;font-weight:400;color:var(--gray)">/mês</span></div>
+                    <ul style="font-size:12px;color:var(--gray);margin-top:8px;padding-left:16px;line-height:1.6">
+                        <li>Até 100 produtos</li>
+                        <li>Cardápio Digital</li>
+                        <li>Relatórios Básicos</li>
+                    </ul>
+                    <button class="btn btn-outline w-full mt-3" onclick="window.open('${mpLinkStarter}', '_blank')"><i class="fa-solid fa-credit-card"></i> Pagar Starter</button>
+                </div>
+                <div class="card" style="border:2px solid var(--primary);background:var(--primary-light); transition:all .2s;">
+                    <div style="font-weight:800;color:var(--primary);font-size:15px">Professional ⭐</div>
+                    <div style="font-size:22px;font-weight:900;color:var(--primary)">R$ 59,90<span style="font-size:12px;font-weight:400;color:var(--gray)">/mês</span></div>
+                    <ul style="font-size:12px;color:var(--gray);margin-top:8px;padding-left:16px;line-height:1.6">
+                        <li>Produtos Ilimitados</li>
+                        <li>Relatórios Avançados</li>
+                        <li>Controle de Lucro</li>
+                    </ul>
+                    <button class="btn btn-primary w-full mt-3" onclick="window.open('${mpLinkPro}', '_blank')"><i class="fa-solid fa-crown"></i> Pagar Pro</button>
+                </div>
+            </div>
+            <p style="color:var(--gray);font-size:13px;margin-bottom:10px; text-align:center;"><strong>2º Passo:</strong> Após pagar, clique no botão abaixo para avisar o administrador:</p>
+        </div>`,
+        `<button class="btn btn-ghost" onclick="closeModal(); showPage('page-login')"><i class="fa-solid fa-arrow-left"></i> Voltar</button>
+         <button class="btn btn-success flex-1" onclick="window.open('${waLink}', '_blank'); closeModal();"><i class="fa-brands fa-whatsapp"></i> Já Paguei - Solicitar Desbloqueio</button>`,
+        true
+    );
+}
+
+async function renewPlan(companyId, plan, price, days) {
+const planNames = { starter: 'Starter (R$ 29,90/mês)', professional: 'Professional (R$ 59,90/mês)' };
+const planColors = { starter: 'primary', professional: 'secondary' };
+const mpSubscriptionLink = plan === 'starter' ? 'https://www.mercadopago.com.br/subscriptions/checkout?preapproval_plan_id=3eda481758b541cf82211a4383019eca' : 'https://www.mercadopago.com.br/subscriptions/checkout?preapproval_plan_id=b39a928fd9f748a7801961ba8c854ed0';
+
+showModal(
+`<i class="fa-solid fa-crown" style="color:var(--${planColors[plan]})"></i> Renovar Plano ${plan.charAt(0).toUpperCase() + plan.slice(1)}`,
+`<div class="text-center" style="padding:16px 0">
+<div style="font-size:56px;margin-bottom:16px">💳</div>
+<h3 style="font-size:20px;font-weight:800;margin-bottom:8px">Quase lá!</h3>
+<p style="color:var(--gray);margin-bottom:16px">Você selecionou o plano <strong>${planNames[plan]}</strong> para renovar.</p>
+<div class="alert alert-info"><i class="fa-solid fa-info-circle"></i> Ao clicar em "Ir para Pagamento", você será direcionado para nosso checkout seguro de assinatura recorrente.</div>
+<p style="color:var(--gray);font-size:13px;margin-top:12px">Após confirmar a assinatura na outra aba, volte aqui e clique em "Já Renovei" para liberar seu sistema por mais <strong>${days} dias</strong>.</p>
+</div>`,
+`<button class="btn btn-ghost" onclick="closeModal();showPage('page-login')">Cancelar</button>
+<button class="btn btn-primary" onclick="window.open('${mpSubscriptionLink}', '_blank')"><i class="fa-solid fa-external-link-alt"></i> Ir para Pagamento</button>
+<button class="btn btn-success" onclick="confirmRenewal('${companyId}','${plan}',${price},${days})"><i class="fa-solid fa-check"></i> Já Renovei — Liberar Acesso</button>`,
+false
+);
+}
+
+async function confirmRenewal(companyId, plan, price, days) {
+showLoading('Renovando plano...');
 try {
-const snap = await db.collection('companies').where('email','==',email).get();
-if (snap.empty) { hideLoading(); showToast('E-mail ou senha incorretos','danger'); return; }
-const doc = snap.docs[0];
-const co = { id: doc.id, ...doc.data() };
-if (co.password !== pass) { hideLoading(); showToast('E-mail ou senha incorretos','danger'); return; }
-if (co.blocked) { hideLoading(); showToast('Acesso bloqueado. Entre em contato com o administrador.','danger'); return; }
-const days = getDaysRemaining(co);
-if (days <= 0) { hideLoading(); showToast('Plano expirado. Renove seu plano para continuar.','danger'); return; }
+await db.collection('companies').doc(companyId).update({
+plan: plan,
+planPrice: price,
+accessDays: days,
+startDate: new Date().toISOString(),
+blocked: false
+});
+hideLoading();
+closeModal();
+showToast('Plano renovado com sucesso! Acesso liberado por '+days+' dias.','success');
+// Auto-login após renovação
+const snap = await db.collection('companies').doc(companyId).get();
+if (snap.exists) {
+const co = { id: snap.id, ...snap.data() };
 currentCompanyId = co.id;
 currentCompany = co;
 pdvDeliveryFee = parseFloat(co.pdvDeliveryFee)||0;
 pubDeliveryFee = parseFloat(co.pubDeliveryFee)||0;
-hideLoading();
-await initDashboard();
-} catch(e) { hideLoading(); showToast('Erro de conexão: '+e.message,'danger'); }
+initDashboard();
 }
-function doLogout() {
-if (ordersUnsubscribe) { ordersUnsubscribe(); ordersUnsubscribe = null; }
-if (dashboardInterval) { clearInterval(dashboardInterval); dashboardInterval = null; }
-if (ordersRefreshInterval) { clearInterval(ordersRefreshInterval); ordersRefreshInterval = null; }
-currentCompanyId = null; currentCompany = null; cart = []; selectedPayment = null;
-allCompanyOrders = [];
-if (homeClockInterval) { clearInterval(homeClockInterval); homeClockInterval = null; }
-Object.values(chartInstances).forEach(c => { try { c.destroy(); } catch(e){} });
-chartInstances = {};
-showPage('page-login');
+} catch(e) {
+hideLoading();
+showToast('Erro ao renovar: '+e.message,'danger');
+}
+}
+// ============================================================
+// COMPANY LOGIN/LOGOUT
+// ============================================================
+// ============================================================
+// VERIFICAÇÃO AUTOMÁTICA MERCADO PAGO
+// ============================================================
+async function checkMPAutoRenew(company) {
+    if (!mpAccessToken) return false;
+    try {
+        // Busca assinaturas ativas (authorized) vinculadas ao ID da empresa
+        const url = `https://api.mercadopago.com/preapproval/search?external_reference=${company.id}&status=authorized`;
+        const response = await fetch(url, {
+            headers: {
+                'Authorization': `Bearer ${mpAccessToken}`,
+                'Content-Type': 'application/json'
+            }
+        });
+        
+        if (!response.ok) return false;
+        
+        const data = await response.json();
+        // Se houver pelo menos uma assinatura ativa, retorna true
+        if (data.results && data.results.length > 0) {
+            return true;
+        }
+        return false;
+    } catch (e) {
+        console.error("Erro ao verificar API do MP:", e);
+        return false; // Se der erro de rede/CORS, fallback para o manual
+    }
+}
+async function doLogin() {
+    const email = document.getElementById('login-email').value.trim();
+    const pass = document.getElementById('login-password').value.trim();
+    if (!email||!pass) { showToast('Preencha e-mail e senha','warning'); return; }
+    
+    showLoading('Verificando credenciais...');
+    try {
+        const snap = await db.collection('companies').where('email','==',email).get();
+        if (snap.empty) { hideLoading(); showToast('E-mail ou senha incorretos','danger'); return; }
+        const doc = snap.docs[0];
+        const co = { id: doc.id, ...doc.data() };
+        if (co.password !== pass) { hideLoading(); showToast('E-mail ou senha incorretos','danger'); return; }
+        if (co.blocked) { hideLoading(); showToast('Acesso bloqueado. Entre em contato com o administrador.','danger'); return; }
+        
+        const days = getDaysRemaining(co);
+        
+        // ==========================================
+        // NOVA LÓGICA DE EXPIRAÇÃO E RENOVAÇÃO
+        // ==========================================
+        if (days <= 0) {
+            // 1. Contas TRIAL não têm assinatura automática, vão direto para o WhatsApp
+            if (co.plan === 'trial') {
+                hideLoading();
+                showRenewalModal(co);
+                return;
+            } 
+            
+            // 2. Contas PAGAS (Starter/Pro): Tenta renovar automaticamente via Mercado Pago
+            showLoading('Verificando sua assinatura no Mercado Pago...');
+            const isSubscribed = await checkMPAutoRenew(co);
+            
+            if (isSubscribed) {
+                // Sucesso! Renova automaticamente por mais 30 dias
+                const newDays = (co.accessDays || 0) + 30;
+                const now = new Date().toISOString();
+                await db.collection('companies').doc(co.id).update({
+                    accessDays: newDays,
+                    startDate: now
+                });
+                co.accessDays = newDays;
+                co.startDate = now;
+                
+                hideLoading();
+                showToast('Assinatura renovada automaticamente por mais 30 dias! 🎉', 'success');
+                
+                // Prossegue com o login normal
+                currentCompanyId = co.id;
+                currentCompany = co;
+                pdvDeliveryFee = parseFloat(co.pdvDeliveryFee)||0;
+                pubDeliveryFee = parseFloat(co.pubDeliveryFee)||0;
+                initDashboard();
+                return;
+            } else {
+                // Falhou (cancelou ou erro na API): Cai para o fluxo manual do WhatsApp
+                hideLoading();
+                showRenewalModal(co);
+                return;
+            }
+        }
+        // ==========================================
+
+        currentCompanyId = co.id;
+        currentCompany = co;
+        pdvDeliveryFee = parseFloat(co.pdvDeliveryFee)||0;
+        pubDeliveryFee = parseFloat(co.pubDeliveryFee)||0;
+        hideLoading();
+        initDashboard();
+    } catch(e) { 
+        hideLoading(); 
+        showToast('Erro de conexão: '+e.message,'danger'); 
+    }
 }
 
 // ============================================================
@@ -1273,6 +1441,40 @@ showPage('page-admin');
 } else { showToast('Credenciais inválidas','danger'); }
 }
 function doAdminLogout() { allCompanies=[]; showPage('page-login'); }
+function doLogout() {
+    try {
+        if (ordersUnsubscribe) { ordersUnsubscribe(); ordersUnsubscribe = null; }
+        if (customerOrdersUnsubscribe) { customerOrdersUnsubscribe(); customerOrdersUnsubscribe = null; }
+        if (dashboardInterval) { clearInterval(dashboardInterval); dashboardInterval = null; }
+        if (ordersRefreshInterval) { clearInterval(ordersRefreshInterval); ordersRefreshInterval = null; }
+        if (homeClockInterval) { clearInterval(homeClockInterval); homeClockInterval = null; }
+        
+        currentCompanyId = null; 
+        currentCompany = null; 
+        cart = []; 
+        selectedPayment = null;
+        allCompanyOrders = [];
+        lanchesLucro = [];
+        pubCart = [];
+        
+        Object.values(chartInstances).forEach(c => { 
+            try { c.destroy(); } catch(e){} 
+        });
+        chartInstances = {};
+        
+        closeSidebar();
+        closeCartDrawer();
+        
+    } catch(e) {
+        console.error("Erro no logout:", e);
+    } finally {
+        const le = document.getElementById('login-email');
+        const lp = document.getElementById('login-password');
+        if(le) le.value = '';
+        if(lp) lp.value = '';
+        showPage('page-login');
+    }
+}
 async function loadAdminData() {
 const snap = await db.collection('companies').get();
 allCompanies = snap.docs.map(d => ({ id:d.id, ...d.data() }));
@@ -4076,11 +4278,19 @@ async function loadLanchesLucro() {
 // ============================================================
 // APP INIT
 // ============================================================
-window.addEventListener('DOMContentLoaded', () => {
-const params = new URLSearchParams(window.location.search);
-const cardapioId = params.get('cardapio');
-if (cardapioId) { showPublicMenu(cardapioId); }
-else { showPage('page-login'); }
+window.addEventListener('DOMContentLoaded', async () => {
+    // Carregar WhatsApp do Admin para usar no modal de renovação
+    try {
+        const doc = await db.collection('admin_config').doc('settings').get();
+        if (doc.exists) {
+            adminWhatsApp = doc.data().adminWhatsApp || '';
+        }
+    } catch(e) {}
+
+    const params = new URLSearchParams(window.location.search);
+    const cardapioId = params.get('cardapio');
+    if (cardapioId) { showPublicMenu(cardapioId); }
+    else { showPage('page-login'); }
 });
 </script>
 </body>
