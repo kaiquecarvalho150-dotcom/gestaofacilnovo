@@ -1002,7 +1002,9 @@ let pixTimerInterval = null;
 let pendingPaymentId = null;
 let adminWhatsApp = '';
 let adminLogoUrl = '';
-let pdvDeliveryFee = 0;
+let adminEmail = 'admin@gestaofacil.com';
+let adminPassword = 'Admin@2024';
+let manualRevenue = 0;let pdvDeliveryFee = 0;
 let pubDeliveryFee = 0;
 let lastSaleData = null;
 let speechUnlocked = false;
@@ -1265,7 +1267,7 @@ showPage('page-login');
 async function doAdminLogin() {
 const email = document.getElementById('adm-email').value.trim();
 const pass = document.getElementById('adm-password').value.trim();
-if (email===ADMIN_CREDS.email && pass===ADMIN_CREDS.password) {
+if (email===adminEmail && pass===adminPassword) {
 showLoading('Carregando painel...');
 await loadAdminData();
 hideLoading();
@@ -1277,6 +1279,16 @@ async function loadAdminData() {
 const snap = await db.collection('companies').get();
 allCompanies = snap.docs.map(d => ({ id:d.id, ...d.data() }));
 await loadMPConfig();
+// Carregar credenciais admin e receita manual
+try {
+const cfg = await db.collection('admin_config').doc('settings').get();
+if (cfg.exists) {
+const d = cfg.data();
+if (d.adminEmail) adminEmail = d.adminEmail;
+if (d.adminPassword) adminPassword = d.adminPassword;
+if (d.manualRevenue) manualRevenue = parseFloat(d.manualRevenue) || 0;
+}
+} catch(e) {}
 renderAdminStats();
 renderAdminTable();
 }
@@ -1287,13 +1299,15 @@ const blocked = allCompanies.filter(c => c.blocked).length;
 const expired = allCompanies.filter(c => !c.blocked && getDaysRemaining(c)<=0).length;
 const revenueList = mpRevenueZeroDate ? allCompanies.filter(c => c.createdAt && c.createdAt >= mpRevenueZeroDate) : allCompanies;
 const revenue = revenueList.reduce((s,c)=>s+(c.planPrice||0),0);
+const totalRevenue = revenue + manualRevenue;
 const zeroLabel = mpRevenueZeroDate ? `<div style="font-size:10px;color:var(--gray);margin-top:4px">Desde ${new Date(mpRevenueZeroDate).toLocaleDateString('pt-BR')}</div>` : '';
+const manualLabel = manualRevenue > 0 ? `<div style="font-size:10px;color:var(--success);margin-top:4px">+ ${fmt(manualRevenue)} (manual)</div>` : '';
 document.getElementById('admin-stats').innerHTML = `
 <div class="stat-card"><div class="stat-icon" style="background:#dbeafe;color:var(--primary)"><i class="fa-solid fa-building"></i></div><div class="stat-value">${total}</div><div class="stat-label">Total Empresas</div></div>
 <div class="stat-card"><div class="stat-icon" style="background:#dcfce7;color:var(--success)"><i class="fa-solid fa-circle-check"></i></div><div class="stat-value" style="color:var(--success)">${active}</div><div class="stat-label">Ativas</div></div>
 <div class="stat-card"><div class="stat-icon" style="background:#fee2e2;color:var(--danger)"><i class="fa-solid fa-ban"></i></div><div class="stat-value" style="color:var(--danger)">${blocked}</div><div class="stat-label">Bloqueadas</div></div>
 <div class="stat-card"><div class="stat-icon" style="background:#fef3c7;color:var(--warning)"><i class="fa-solid fa-clock"></i></div><div class="stat-value" style="color:var(--warning)">${expired}</div><div class="stat-label">Expiradas</div></div>
-<div class="stat-card"><div class="stat-icon" style="background:#f0fdf4;color:var(--success)"><i class="fa-solid fa-dollar-sign"></i></div><div class="stat-value" style="color:var(--success);font-size:20px">${fmt(revenue)}</div><div class="stat-label">Receita Total</div>${zeroLabel}</div>`;
+<div class="stat-card"><div class="stat-icon" style="background:#f0fdf4;color:var(--success)"><i class="fa-solid fa-dollar-sign"></i></div><div class="stat-value" style="color:var(--success);font-size:20px">${fmt(totalRevenue)}</div><div class="stat-label">Receita Total</div>${zeroLabel}${manualLabel}</div>`;
 }
 function renderAdminTable() {
 const q = (document.getElementById('admin-search')?.value||'').toLowerCase();
@@ -1328,12 +1342,32 @@ showModal('<i class="fa-solid fa-plus-circle"></i> Criar Novo Cadastro',
 <div class="form-group"><label>Endereço</label><input type="text" id="nc-address" class="form-control"></div>
 <div class="form-row"><div class="form-group"><label>E-mail *</label><input type="email" id="nc-email" class="form-control"></div>
 <div class="form-group"><label>Senha *</label><div class="pwd-wrap"><input type="password" id="nc-password" class="form-control"><button class="pwd-toggle" type="button" onclick="togglePwd('nc-password','eye-ncpwd')"><i class="fa-solid fa-eye" id="eye-ncpwd"></i></button></div></div></div>
-<div class="form-row"><div class="form-group"><label>Plano *</label><select id="nc-plan" class="form-control"><option value="trial">Trial (14 dias)</option><option value="starter">Starter (R$ 49,90)</option><option value="professional">Professional (R$ 99,90)</option></select></div>
-<div class="form-group"><label>Dias de Acesso *</label><input type="number" id="nc-days" class="form-control" value="14" min="1"></div></div>`,
+<div class="form-row"><div class="form-group"><label>Plano *</label><select id="nc-plan" class="form-control" onchange="updatePlanPrice()"><option value="trial">Trial (14 dias)</option><option value="starter">Starter (R$ 49,90)</option><option value="professional">Professional (R$ 99,90)</option></select></div>
+<div class="form-group"><label>Dias de Acesso *</label><input type="number" id="nc-days" class="form-control" value="14" min="1"></div></div>
+<div style="border-top:1px solid var(--border);margin:14px 0;padding-top:14px">
+<div style="font-size:12px;font-weight:700;color:var(--success);text-transform:uppercase;margin-bottom:8px"><i class="fa-solid fa-coins"></i> Valor Cobrado (opcional)</div>
+<div class="form-group"><label>Valor pago pelo cliente (R$) — será somado à receita</label>
+<input type="number" id="nc-charged-value" class="form-control" value="0" step="0.01" min="0" placeholder="0,00">
+<div style="font-size:11px;color:var(--gray);margin-top:4px">Informe o valor que foi cobrado manualmente. Este valor será adicionado à receita total do admin.</div>
+</div>
+</div>`,
 `<button class="btn btn-ghost" onclick="closeModal()">Cancelar</button><button class="btn btn-primary" onclick="createCompanyAdmin()"><i class="fa-solid fa-save"></i> Criar</button>`, true);
+// Preenche automaticamente o valor do plano
+setTimeout(() => updatePlanPrice(), 100);
+}
+function updatePlanPrice() {
+const plan = document.getElementById('nc-plan')?.value;
+const prices = {trial:0, starter:49.90, professional:99.90};
+const input = document.getElementById('nc-charged-value');
+if (input && plan && prices[plan] > 0) {
+input.value = prices[plan];
+} else if (input && plan === 'trial') {
+input.value = 0;
+}
 }
 async function createCompanyAdmin() {
 const co=document.getElementById('nc-company').value.trim(), own=document.getElementById('nc-owner').value.trim(), cnpj=document.getElementById('nc-cnpj').value.trim(), ph=document.getElementById('nc-phone').value.trim(), addr=document.getElementById('nc-address').value.trim(), em=document.getElementById('nc-email').value.trim(), pw=document.getElementById('nc-password').value.trim(), plan=document.getElementById('nc-plan').value, days=parseInt(document.getElementById('nc-days').value)||14;
+const chargedValue = parseFloat(document.getElementById('nc-charged-value').value) || 0;
 if (!co||!own||!cnpj||!em||!pw) { showToast('Preencha os campos obrigatórios','warning'); return; }
 showLoading('Criando empresa...');
 try {
@@ -1343,8 +1377,15 @@ const id = genId();
 const prices = {trial:0, starter:49.90, professional:99.90};
 const company = { companyName:co, ownerName:own, cnpj, phone:ph, address:addr, email:em, password:pw, plan, planPrice:prices[plan]||0, accessDays:days, startDate:new Date().toISOString(), createdAt:new Date().toISOString(), blocked:false, menuItems:[], employees:[], expenses:[], globalAdditionals:[] };
 await db.collection('companies').doc(id).set(company);
+// Somar valor cobrado na receita manual
+if (chargedValue > 0) {
+manualRevenue += chargedValue;
+await db.collection('admin_config').doc('settings').set({ manualRevenue: manualRevenue }, { merge: true });
+}
 allCompanies.push({ id, ...company });
-hideLoading(); closeModal(); showToast('Empresa criada com sucesso!','success'); renderAdminStats(); renderAdminTable();
+hideLoading(); closeModal();
+showToast(`Empresa criada! +${fmt(chargedValue)} adicionado à receita.`,'success');
+renderAdminStats(); renderAdminTable();
 } catch(e) { hideLoading(); showToast('Erro: '+e.message,'danger'); }
 }
 function editCompanyModal(id) {
@@ -1428,10 +1469,38 @@ showModal('<i class="fa-solid fa-key"></i> Credenciais de Acesso',
 // ============================================================
 function showAdminConfigModal() {
 showModal('<i class="fa-solid fa-gear"></i> Configurações do Sistema',
-`<div class="form-group">
+`<div class="alert alert-info"><i class="fa-solid fa-info-circle"></i> Estas configurações afetam o acesso ao painel administrativo.</div>
+<div style="border-top:1px solid var(--border);margin:14px 0;padding-top:14px">
+<div style="font-size:12px;font-weight:700;color:var(--primary);text-transform:uppercase;margin-bottom:12px"><i class="fa-solid fa-user-shield"></i> Credenciais do Administrador</div>
+<div class="form-group">
+<label><i class="fa-solid fa-envelope" style="color:var(--primary)"></i> Gmail do Admin *</label>
+<input type="email" id="cfg-admin-email" class="form-control" value="${adminEmail}" placeholder="admin@gestaofacil.com">
+<div style="font-size:11px;color:var(--gray);margin-top:4px">E-mail usado para fazer login no painel admin.</div>
+</div>
+<div class="form-group">
+<label><i class="fa-solid fa-lock" style="color:var(--danger)"></i> Senha do Admin *</label>
+<div class="pwd-wrap">
+<input type="password" id="cfg-admin-password" class="form-control" value="${adminPassword}" placeholder="Senha de acesso">
+<button class="pwd-toggle" type="button" onclick="togglePwd('cfg-admin-password','eye-cfgap')"><i class="fa-solid fa-eye" id="eye-cfgap"></i></button>
+</div>
+<div style="font-size:11px;color:var(--gray);margin-top:4px">Senha para acessar o painel administrativo.</div>
+</div>
+</div>
+<div style="border-top:1px solid var(--border);margin:14px 0;padding-top:14px">
+<div style="font-size:12px;font-weight:700;color:var(--gray);text-transform:uppercase;margin-bottom:8px">Receita Manual</div>
+<div class="form-group">
+<label><i class="fa-solid fa-coins" style="color:var(--success)"></i> Valor de Receita Adicional (R$)</label>
+<input type="number" id="cfg-manual-revenue" class="form-control" value="${manualRevenue}" step="0.01" min="0" placeholder="0,00">
+<div style="font-size:11px;color:var(--gray);margin-top:4px">Valores cobrados manualmente que serão somados à receita total.</div>
+</div>
+</div>
+<div style="border-top:1px solid var(--border);margin:14px 0;padding-top:14px">
+<div style="font-size:12px;font-weight:700;color:var(--gray);text-transform:uppercase;margin-bottom:8px">Contato</div>
+<div class="form-group">
 <label><i class="fa-brands fa-whatsapp" style="color:#25d366"></i> WhatsApp para Contato de Planos *</label>
 <input type="text" id="cfg-whatsapp" class="form-control" value="${adminWhatsApp}" placeholder="5511999999999 (com DDI e DDD, sem espaços)">
 <div style="font-size:11px;color:var(--gray);margin-top:4px">Ex: 5511999999999 — Quando cliente clicar em um plano, será redirecionado para este WhatsApp.</div>
+</div>
 </div>
 <div style="border-top:1px solid var(--border);margin:14px 0;padding-top:14px">
 <div style="font-size:12px;font-weight:700;color:var(--gray);text-transform:uppercase;margin-bottom:8px">Mercado Pago (opcional)</div>
@@ -1450,11 +1519,31 @@ showModal('<i class="fa-solid fa-gear"></i> Configurações do Sistema',
 async function saveAdminConfig() {
 const wa = document.getElementById('cfg-whatsapp').value.trim().replace(/\D/g,'');
 const token = document.getElementById('cfg-mp-token').value.trim();
+const newAdminEmail = document.getElementById('cfg-admin-email').value.trim();
+const newAdminPassword = document.getElementById('cfg-admin-password').value.trim();
+const newManualRevenue = parseFloat(document.getElementById('cfg-manual-revenue').value) || 0;
+if (!newAdminEmail || !newAdminPassword) {
+showToast('Preencha o Gmail e a senha do admin','warning');
+return;
+}
 showLoading('Salvando...');
 try {
-await db.collection('admin_config').doc('settings').set({ adminWhatsApp: wa, mpAccessToken: token }, { merge: true });
-adminWhatsApp = wa; mpAccessToken = token;
-hideLoading(); closeModal(); showToast('Configurações salvas! ✅','success');
+await db.collection('admin_config').doc('settings').set({
+adminWhatsApp: wa,
+mpAccessToken: token,
+adminEmail: newAdminEmail,
+adminPassword: newAdminPassword,
+manualRevenue: newManualRevenue
+}, { merge: true });
+adminWhatsApp = wa;
+mpAccessToken = token;
+adminEmail = newAdminEmail;
+adminPassword = newAdminPassword;
+manualRevenue = newManualRevenue;
+hideLoading();
+closeModal();
+showToast('Configurações salvas! ✅','success');
+renderAdminStats();
 } catch(e) { hideLoading(); showToast('Erro: '+e.message,'danger'); }
 }
 function showZerarReceitasModal() {
