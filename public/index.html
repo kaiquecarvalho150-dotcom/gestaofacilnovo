@@ -3900,29 +3900,36 @@ async function loadOrderHistory() {
     const el = document.getElementById('hist-orders-list');
     
     try {
+        // Guarda o período pesquisado para reabrir no mesmo filtro após editar/cancelar
+        window.__histLastRange = { start: startDate, end: endDate };
+
         const allOrders = allCompanyOrders.filter(o => {
             const d = new Date(o.date);
-            return d >= start && d <= end && o.status === 'paid';
+            return d >= start && d <= end && (o.status === 'paid' || o.status === 'cancelled');
         }).sort((a,b) => new Date(b.date) - new Date(a.date));
         
         const payIcons = {dinheiro:'💵',cartao:'💳',pix:'📱'};
         const statusLabels = {novo:'Novo',preparando:'Preparando',finalizado:'Finalizado'};
         const statusColors = {novo:'info',preparando:'warning',finalizado:'success'};
         
-        el.innerHTML = `<div style="font-size:13px;color:var(--gray);margin-bottom:12px">${allOrders.length} OS encontrada(s) · Total: <strong style="color:var(--success)">${fmt(allOrders.reduce((s,o)=>s+o.total,0))}</strong></div>` +
+        const totalValido = allOrders.filter(o => o.status !== 'cancelled').reduce((s,o)=>s+o.total,0);
+        el.innerHTML = `<div style="font-size:13px;color:var(--gray);margin-bottom:12px">${allOrders.length} OS encontrada(s) · Total: <strong style="color:var(--success)">${fmt(totalValido)}</strong></div>` +
         allOrders.map(o => {
             const t = new Date(o.date);
             const timeStr = t.toLocaleTimeString('pt-BR',{hour:'2-digit',minute:'2-digit'});
             const dateStr = t.toLocaleDateString('pt-BR');
+            const isCancelled = o.status === 'cancelled';
             const sourceBadge = o.source === 'pub_menu' ? '<span class="badge badge-success" style="font-size:10px;margin-left:6px">Online</span>' : 
                                o.source === 'pdv' ? '<span class="badge badge-info" style="font-size:10px;margin-left:6px">PDV</span>' : '';
+            const cancelledBadge = isCancelled ? '<span class="badge badge-danger" style="font-size:10px;margin-left:6px">Cancelada</span>' : '';
             
-            return `<div class="order-card" style="margin-bottom:12px;padding:12px;border:1px solid var(--border);border-radius:8px">
+            return `<div class="order-card" style="margin-bottom:12px;padding:12px;border:1px solid var(--border);border-radius:8px;${isCancelled?'opacity:0.65':''}">
                 <div class="flex items-start justify-between mb-2">
                     <div>
                         <div class="flex items-center gap-2">
                             <strong style="font-size:15px">${o.orderNumber||o.id}</strong>
                             ${sourceBadge}
+                            ${cancelledBadge}
                         </div>
                         <div style="font-size:12px;color:var(--gray);margin-top:2px">
                             <i class="fa-solid fa-clock"></i> ${dateStr} às ${timeStr}
@@ -3946,6 +3953,13 @@ async function loadOrderHistory() {
                     <button class="btn btn-sm btn-primary flex-1" onclick="printOrderFromHistoryById('${o.id}')">
                         <i class="fa-solid fa-print"></i> Imprimir
                     </button>
+                    ${!isCancelled ? `
+                    <button class="btn btn-sm btn-outline flex-1" onclick="openEditHistoryOrder('${o.id}')">
+                        <i class="fa-solid fa-pen"></i> Editar
+                    </button>
+                    <button class="btn btn-sm btn-danger flex-1" onclick="cancelHistoryOrder('${o.id}')">
+                        <i class="fa-solid fa-ban"></i> Cancelar
+                    </button>` : ''}
                 </div>
             </div>`;
         }).join('');
@@ -3957,6 +3971,208 @@ async function loadOrderHistory() {
         el.innerHTML = '<div class="alert alert-danger"><i class="fa-solid fa-exclamation-triangle"></i> Erro: '+e.message+'</div>';
     }
 }
+// ============================================================
+// EDITAR / CANCELAR OS NO HISTÓRICO (mantém data original)
+// ============================================================
+let editHistOrderState = null;
+
+function backToHistoryModal() {
+    const range = window.__histLastRange;
+    showOrderHistoryModal();
+    if (range) {
+        setTimeout(() => {
+            const s = document.getElementById('hist-date-start');
+            const e = document.getElementById('hist-date-end');
+            if (s && e) { s.value = range.start; e.value = range.end; loadOrderHistory(); }
+        }, 250);
+    }
+}
+
+function openEditHistoryOrder(orderId) {
+    const order = allCompanyOrders.find(o => o.id === orderId);
+    if (!order) { showToast('OS não encontrada', 'warning'); return; }
+    if (order.status === 'cancelled') { showToast('Não é possível editar uma OS cancelada', 'warning'); return; }
+    editHistOrderState = {
+        id: order.id,
+        orderNumber: order.orderNumber,
+        date: order.date,
+        items: JSON.parse(JSON.stringify(order.items || [])),
+        deliveryTotal: order.deliveryTotal || 0,
+        paymentMethod: order.paymentMethod || 'dinheiro'
+    };
+    renderEditHistoryModal();
+}
+
+function renderEditHistoryModal() {
+    const st = editHistOrderState;
+    if (!st) return;
+    const c = currentCompany || { menuItems: [] };
+    const subtotal = st.items.reduce((s,i) => s + (i.price * i.qty), 0);
+    const total = subtotal + (st.deliveryTotal || 0);
+    const menuOptions = (c.menuItems || []).map(p => `<option value="${p.id}">${p.name} — ${fmt(p.price)}</option>`).join('');
+
+    const itemsHtml = st.items.map((i, idx) => `
+        <div style="display:flex;align-items:center;gap:8px;padding:8px 4px;border-bottom:1px solid var(--border)">
+            <div style="flex:1;min-width:0">
+                <div style="font-size:13px;font-weight:600">${i.name}</div>
+                <div style="font-size:11px;color:var(--gray)">${fmt(i.price)} un.</div>
+            </div>
+            <button class="btn btn-sm btn-ghost" onclick="editHistItemQty(${idx}, -1)"><i class="fa-solid fa-minus"></i></button>
+            <span style="min-width:22px;text-align:center;font-weight:700">${i.qty}</span>
+            <button class="btn btn-sm btn-ghost" onclick="editHistItemQty(${idx}, 1)"><i class="fa-solid fa-plus"></i></button>
+            <div style="min-width:70px;text-align:right;font-weight:700;font-size:13px">${fmt(i.price*i.qty)}</div>
+            <button class="btn btn-sm btn-ghost" style="color:var(--danger)" onclick="removeHistItem(${idx})"><i class="fa-solid fa-trash"></i></button>
+        </div>
+    `).join('') || '<div style="padding:16px;text-align:center;color:var(--gray)">Nenhum item</div>';
+
+    showModal(
+        `<i class="fa-solid fa-pen"></i> Editar OS ${st.orderNumber}`,
+        `<div style="font-size:12px;color:var(--gray);margin-bottom:10px"><i class="fa-solid fa-lock"></i> Data/hora original mantida: <strong>${new Date(st.date).toLocaleString('pt-BR')}</strong></div>
+        <div style="border:1px solid var(--border);border-radius:8px;margin-bottom:12px;max-height:220px;overflow-y:auto">${itemsHtml}</div>
+        <div class="form-row mb-3" style="align-items:flex-end">
+            <div class="form-group" style="flex:1">
+                <label>Adicionar Item</label>
+                <select id="hist-edit-add-select" class="form-control">
+                    <option value="">Selecione um produto</option>
+                    ${menuOptions}
+                </select>
+            </div>
+            <button class="btn btn-sm btn-primary" onclick="addHistItem()"><i class="fa-solid fa-plus"></i> Adicionar</button>
+        </div>
+        <div class="form-row mb-3">
+            <div class="form-group">
+                <label>Taxa de Entrega</label>
+                <input type="number" id="hist-edit-delivery" class="form-control" value="${st.deliveryTotal||0}" step="0.5" min="0" onchange="editHistDeliveryChange(this.value)">
+            </div>
+            <div class="form-group">
+                <label>Forma de Pagamento</label>
+                <select id="hist-edit-payment" class="form-control" onchange="editHistPaymentChange(this.value)">
+                    <option value="dinheiro" ${st.paymentMethod==='dinheiro'?'selected':''}>Dinheiro</option>
+                    <option value="cartao" ${st.paymentMethod==='cartao'?'selected':''}>Cartão</option>
+                    <option value="pix" ${st.paymentMethod==='pix'?'selected':''}>Pix</option>
+                </select>
+            </div>
+        </div>
+        <div style="background:#f8fafc;border-radius:8px;padding:12px;display:flex;justify-content:space-between;align-items:center">
+            <div>
+                <div style="font-size:12px;color:var(--gray)">Subtotal: ${fmt(subtotal)}</div>
+                <div style="font-size:12px;color:var(--gray)">Entrega: ${fmt(st.deliveryTotal||0)}</div>
+            </div>
+            <div style="font-size:22px;font-weight:900;color:var(--primary)">${fmt(total)}</div>
+        </div>`,
+        `<button class="btn btn-ghost" onclick="backToHistoryModal()">Voltar</button>
+        <button class="btn btn-primary" onclick="saveEditedHistoryOrder()"><i class="fa-solid fa-save"></i> Salvar Alterações</button>`,
+        true
+    );
+}
+
+function editHistItemQty(idx, delta) {
+    const st = editHistOrderState;
+    if (!st || !st.items[idx]) return;
+    st.items[idx].qty = Math.max(1, (st.items[idx].qty || 1) + delta);
+    renderEditHistoryModal();
+}
+
+function removeHistItem(idx) {
+    const st = editHistOrderState;
+    if (!st || !st.items[idx]) return;
+    if (st.items.length <= 1) { showToast('A OS precisa ter ao menos 1 item. Use "Cancelar" para anular a OS inteira.', 'warning'); return; }
+    st.items.splice(idx, 1);
+    renderEditHistoryModal();
+}
+
+function addHistItem() {
+    const st = editHistOrderState;
+    if (!st) return;
+    const sel = document.getElementById('hist-edit-add-select');
+    const pid = sel ? sel.value : '';
+    if (!pid) { showToast('Selecione um produto', 'warning'); return; }
+    const c = currentCompany;
+    const p = (c.menuItems || []).find(m => m.id === pid);
+    if (!p) return;
+    const existing = st.items.find(i => i.id === pid);
+    if (existing) { existing.qty += 1; }
+    else { st.items.push({ id: p.id, name: p.name, price: p.price, qty: 1 }); }
+    renderEditHistoryModal();
+}
+
+function editHistDeliveryChange(v) {
+    if (!editHistOrderState) return;
+    editHistOrderState.deliveryTotal = parseFloat(v) || 0;
+    renderEditHistoryModal();
+}
+
+function editHistPaymentChange(v) {
+    if (!editHistOrderState) return;
+    editHistOrderState.paymentMethod = v;
+}
+
+async function saveEditedHistoryOrder() {
+    const st = editHistOrderState;
+    if (!st) return;
+    if (!st.items.length) { showToast('Adicione ao menos um item', 'warning'); return; }
+    const subtotal = st.items.reduce((s,i) => s + (i.price * i.qty), 0);
+    const deliveryTotal = st.deliveryTotal || 0;
+    const total = subtotal + deliveryTotal;
+    showLoading('Salvando alterações...');
+    try {
+        const updateData = {
+            items: st.items,
+            subtotal,
+            deliveryTotal,
+            total,
+            paymentMethod: st.paymentMethod,
+            updatedAt: new Date().toISOString()
+        };
+        // Atualiza o pedido mantendo a data original (não altera o campo 'date')
+        await db.collection('orders').doc(st.id).update(updateData);
+        // Sincroniza o registro correspondente em 'sales' para os Relatórios ficarem corretos
+        const salesSnap = await db.collection('sales')
+            .where('companyId', '==', currentCompanyId)
+            .where('orderNumber', '==', st.orderNumber)
+            .limit(1)
+            .get();
+        if (!salesSnap.empty) {
+            await db.collection('sales').doc(salesSnap.docs[0].id).update(updateData);
+        }
+        hideLoading();
+        showToast('OS atualizada! Os relatórios foram recalculados.', 'success');
+        editHistOrderState = null;
+        backToHistoryModal();
+    } catch(e) {
+        hideLoading();
+        showToast('Erro: ' + e.message, 'danger');
+    }
+}
+
+async function cancelHistoryOrder(orderId) {
+    const order = allCompanyOrders.find(o => o.id === orderId);
+    if (!order) { showToast('OS não encontrada', 'warning'); return; }
+    if (!confirm(`Cancelar a OS ${order.orderNumber || orderId}? Esta venda será removida dos relatórios.`)) return;
+    showLoading('Cancelando OS...');
+    try {
+        await db.collection('orders').doc(orderId).update({
+            status: 'cancelled',
+            orderStatus: 'cancelado',
+            cancelledAt: new Date().toISOString()
+        });
+        const salesSnap = await db.collection('sales')
+            .where('companyId', '==', currentCompanyId)
+            .where('orderNumber', '==', order.orderNumber)
+            .limit(1)
+            .get();
+        if (!salesSnap.empty) {
+            await db.collection('sales').doc(salesSnap.docs[0].id).delete();
+        }
+        hideLoading();
+        showToast('OS cancelada! Os relatórios foram atualizados.', 'success');
+        loadOrderHistory();
+    } catch(e) {
+        hideLoading();
+        showToast('Erro: ' + e.message, 'danger');
+    }
+}
+
 // Imprimir pedido do histórico pelo ID
 function printOrderFromHistoryById(orderId) {
     if (!currentCompany || !currentCompanyId) {
