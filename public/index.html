@@ -665,6 +665,7 @@ table th,table td{padding:7px 8px;font-size:11px}
 <div class="nav-item" onclick="showSection('stock')"><span class="nav-ic"><i class="fa-solid fa-boxes-stacked"></i></span> Estoque</div>
 <div class="nav-section-label">Cadastros</div>
 <div class="nav-item" onclick="showSection('menu')"><span class="nav-ic"><i class="fa-solid fa-utensils"></i></span> Cadastrar Cardápio</div>
+<div class="nav-item" onclick="showSection('coupons')"><span class="nav-ic"><i class="fa-solid fa-tags"></i></span> Cupons de Desconto</div>
 <div class="nav-section-label">Operação</div>
 <div class="nav-item" onclick="showSection('orders')"><span class="nav-ic"><i class="fa-solid fa-receipt"></i></span> Pedidos <span class="nav-badge-dot" id="nb-orders">0</span></div>
 <div class="nav-item" onclick="requireAuth('reports')"><span class="nav-ic"><i class="fa-solid fa-chart-bar"></i></span> Relatórios</div>
@@ -721,7 +722,7 @@ table th,table td{padding:7px 8px;font-size:11px}
 <div class="flex items-center justify-between mb-3 flex-wrap gap-2">
 <div style="font-size:15px;font-weight:700">Produtos</div>
 <div class="flex gap-2 items-center">
-<input type="text" id="pdv-search" class="form-control" style="width:200px" placeholder="Buscar produto..." oninput="renderPDV()">
+<input type="text" id="pdv-search" class="form-control" style="width:200px" placeholder="Buscar por nome ou número (#)..." oninput="renderPDVGrid()">
 <button class="btn btn-sm btn-ghost" onclick="openCartDrawer()" id="btn-open-cart" style="position:relative">
     <i class="fa-solid fa-shopping-cart"></i> 
     <span class="hidden-sm">Carrinho</span>
@@ -810,6 +811,16 @@ table th,table td{padding:7px 8px;font-size:11px}
 <button class="btn btn-primary" onclick="showMenuItemModal()"><i class="fa-solid fa-plus"></i> Adicionar Item</button>
 </div>
 <div class="products-grid" id="menu-grid"></div>
+</div>
+
+<!-- COUPONS -->
+<div id="section-coupons" class="section">
+<div class="flex items-center justify-between mb-4 flex-wrap gap-3">
+<div style="font-size:15px;font-weight:700">Cupons de Desconto</div>
+<button class="btn btn-primary" onclick="showCouponModal()"><i class="fa-solid fa-plus"></i> Novo Cupom</button>
+</div>
+<p style="color:var(--gray);font-size:13px;margin-bottom:16px">Crie cupões de desconto para seus clientes usarem no cardápio online ao finalizar o pedido. Você define o código, a porcentagem de desconto e se ele está ativo.</p>
+<div id="coupons-list"></div>
 </div>
 
 <!-- ORDERS -->
@@ -939,6 +950,7 @@ table th,table td{padding:7px 8px;font-size:11px}
 </div>
 </div>
 <div id="pub-tab-menu" class="pub-body">
+<div class="form-group" style="margin-top:16px"><input type="text" id="pub-search" class="form-control" placeholder="Buscar por nome ou número (#) do lanche..." oninput="onPubSearchInput()"></div>
 <div class="pub-cats" id="pub-cats"></div>
 <div class="pub-items-grid" id="pub-items"></div>
 </div>
@@ -984,6 +996,8 @@ let pubCart = [];
 let orderFilter = 'all';
 let pubActiveTab = 'menu';
 let pubActiveCat = 'Todos';
+let pubAppliedCoupon = null;
+let pubSearchTerm = '';
 let selectedReportYM = '';
 let chartInstances = {};
 let ordersUnsubscribe = null;
@@ -1088,11 +1102,11 @@ function showSection(name) {
 document.querySelectorAll('.section').forEach(s => s.classList.remove('active'));
 document.getElementById('section-'+name)?.classList.add('active');
 document.querySelectorAll('.nav-item').forEach(n => n.classList.remove('active'));
-const labels = {home:'Dashboard',pos:'PDV — Caixa',stock:'Estoque',menu:'Cadastrar Cardápio',orders:'Pedidos',reports:'Relatórios',employees:'Funcionários'};
+const labels = {home:'Dashboard',pos:'PDV — Caixa',stock:'Estoque',menu:'Cadastrar Cardápio',coupons:'Cupons de Desconto',orders:'Pedidos',reports:'Relatórios',employees:'Funcionários'};
 document.getElementById('topbar-title').textContent = labels[name] || name;
 document.querySelectorAll('.nav-item').forEach(n => { if(n.textContent.trim().startsWith(labels[name]||name)) n.classList.add('active'); });
 closeSidebar();
-const renders = {home:renderHome,pos:renderPDV,stock:renderStock,menu:renderMenu,employees:renderEmployees};
+const renders = {home:renderHome,pos:renderPDV,stock:renderStock,menu:renderMenu,coupons:renderCoupons,employees:renderEmployees};
 if (name !== 'home' && homeClockInterval) { clearInterval(homeClockInterval); homeClockInterval = null; }
 if (renders[name]) renders[name]();
 if (name === 'orders') {
@@ -1801,6 +1815,10 @@ ordersUnsubscribe = db.collection('orders')
             const prevOrder = allCompanyOrders.find(o => o.id === order.id);
             if (!prevOrder && order.orderStatus === 'novo') {
                 playOrderSound();
+                // Impressão automática de 2 vias para pedidos vindos do cardápio online (entrega/retirada)
+                if (order.source === 'pub_menu') {
+                    setTimeout(function() { autoPrintOrderCopies(order); }, 600);
+                }
             }
         });
         
@@ -1933,12 +1951,14 @@ let pdvActiveCat = 'Todos';
 function setPDVCat(el, cat) { pdvActiveCat = cat; document.querySelectorAll('#pdv-cats .filter-chip').forEach(c=>c.classList.remove('active')); el.classList.add('active'); renderPDVGrid(); }
 function renderPDVGrid() {
 const c = currentCompany; if(!c) return;
-let items = c.menuItems||[];
-const q = document.getElementById('pdv-search')?.value.toLowerCase()||'';
+const allItems = c.menuItems||[];
+const numbered = allItems.map((p,idx)=>({...p, _num: idx+1}));
+let items = numbered;
+const q = document.getElementById('pdv-search')?.value.toLowerCase().trim()||'';
 if (pdvActiveCat!=='Todos') items = items.filter(p=>p.category===pdvActiveCat);
-if (q) items = items.filter(p=>p.name.toLowerCase().includes(q));
+if (q) items = items.filter(p=>p.name.toLowerCase().includes(q) || String(p._num)===q);
 const g = document.getElementById('pdv-grid');
-const cards = items.map(p => { const oos = (p.stock||0)<=0; return `<div class="pdv-card ${oos?'out-of-stock':''}" onclick="${oos?"showToast('Produto sem estoque','warning')":`addToCartWithAdditionals('${p.id}')`}">${p.image?`<img src="${p.image}" class="pdv-card-img">`:`<div class="pdv-card-no-img">${getCategoryEmoji(p.category)}</div>`}<div class="pdv-card-name">${p.name}</div><div class="pdv-card-price">${fmt(p.price)}</div><div class="pdv-card-stock">Estoque: ${p.stock||0}${oos?' · <span style="color:var(--danger)">Esgotado</span>':''}</div></div>`; });
+const cards = items.map(p => { const oos = (p.stock||0)<=0; return `<div class="pdv-card ${oos?'out-of-stock':''}" style="position:relative" onclick="${oos?"showToast('Produto sem estoque','warning')":`addToCartWithAdditionals('${p.id}')`}"><span style="position:absolute;top:6px;left:6px;background:var(--primary);color:#fff;font-size:10px;font-weight:800;padding:2px 6px;border-radius:8px">#${p._num}</span>${p.image?`<img src="${p.image}" class="pdv-card-img">`:`<div class="pdv-card-no-img">${getCategoryEmoji(p.category)}</div>`}<div class="pdv-card-name">${p.name}</div><div class="pdv-card-price">${fmt(p.price)}</div><div class="pdv-card-stock">Estoque: ${p.stock||0}${oos?' · <span style="color:var(--danger)">Esgotado</span>':''}</div></div>`; });
 if (!cards.length) { g.innerHTML = '<div style="grid-column:1/-1;text-align:center;padding:40px;color:var(--gray)">Nenhum produto encontrado</div>'; return; }
 g.innerHTML = cards.join('');
 }
@@ -2196,8 +2216,7 @@ clearCart();
 renderPDVGrid();
 } catch(e) { hideLoading(); showToast('Erro ao registrar venda: '+e.message,'danger'); }
 }
-function printOS(data) {
-    if (!data) data = lastSaleData; if (!data) { showToast('Nenhuma venda registrada para imprimir','warning'); return; }
+function buildOSHtml(data, copyLabel) {
     const c = currentCompany || {}; const payNames = {dinheiro:'DINHEIRO', cartao:'CARTÃO', pix:'PIX'};
     const customerName = data.customerName || ''; const logoUrl = adminLogoUrl || '';
     const dateObj = new Date(data.date); const dateStr = dateObj.toLocaleDateString('pt-BR'); const timeStr = dateObj.toLocaleTimeString('pt-BR',{hour:'2-digit',minute:'2-digit',second:'2-digit'});
@@ -2218,8 +2237,20 @@ function printOS(data) {
             : '';
         return `<tr><td style="padding:4px 0;font-size:15px;font-weight:900">${item.qty}x ${baseName}</td><td style="text-align:right;padding:4px 4px;white-space:nowrap;font-size:13px;font-weight:900">${fmtPrint(item.price)}</td><td style="text-align:right;padding:4px 0;white-space:nowrap;font-weight:900;font-size:15px">${fmtPrint(item.price*item.qty)}</td></tr>${addDesc}`;
     }).join('');
-    const subtotal = data.subtotal ?? data.total; const delivery = data.deliveryTotal || 0;
-    const html = `<!DOCTYPE html><html lang="pt-BR"><head><meta charset="UTF-8"><title>OS ${data.orderNumber}</title><style>* { margin:0; padding:0; box-sizing:border-box; } body { font-family: 'Courier New', Courier, monospace; font-size: 15px; color: #000; background: #fff; width: 58mm; margin: 0; padding: 1mm 0.5mm 1mm; line-height: 1.2; } .center { text-align: center; } .right { text-align: right; } .bold { font-weight: 900; } .big { font-size: 19px; } .small { font-size: 13px; } .dashed { border-top: 2px dashed #000; margin: 3px 0; } .solid { border-top: 3px solid #000; margin: 3px 0; } table { width: 100%; border-collapse: collapse; } td { vertical-align: top; font-size: 14px; font-weight: 900; } .row-total td { font-size: 19px; font-weight: 900; } .row-delivery td { color: #000; font-weight: 900; } .troco-box { border: 3px dashed #000; padding: 8px 10px; margin-top: 6px; text-align: center; background: #fff; } .info-row { font-size: 14px; margin: 2px 0; font-weight: 900; } .online-badge { background: #fff; color: #000; border: 3px solid #000; padding: 6px 10px; font-size: 16px; font-weight: 900; display: inline-block; margin-bottom: 6px; letter-spacing: 1px; } .company-info { font-size: 13px; font-weight: 900; margin: 2px 0; } .date-time { font-size: 15px; font-weight: 900; margin: 3px 0; } .pay-section { font-size: 18px; font-weight: 900; margin: 4px 0; color: #000; } .pay-label { font-size: 18px; font-weight: 900; } .troco-val { font-size: 20px; font-weight: 900; } @media print { body { width: 58mm; } @page { size: 58mm auto; margin: 0; } .no-print, .print-btn, button { display: none !important; } } .print-btn { display: block; width: 100%; margin-top: 10px; padding: 10px; background: #000; color: #fff; border: none; font-size: 16px; font-weight: 900; cursor: pointer; } </style></head><body>${logoUrl ? `<div class="center" style="margin-bottom:5px"><img src="${logoUrl}" style="max-width:56mm;max-height:15mm;object-fit:contain" onerror="this.style.display='none'"></div>` : ''}<div class="center bold big" style="font-size:19px">${c.companyName||'ESTABELECIMENTO'}</div>${c.cnpj ? `<div class="company-info"><span style="font-size:12px">CNPJ:</span> ${c.cnpj}</div>` : ''}${c.address ? `<div class="company-info">${c.address}</div>` : ''}${c.phone ? `<div class="company-info">Tel: ${c.phone}</div>` : ''}<div class="solid"></div><div class="center bold date-time" style="font-size:17px">${data.orderNumber}</div><div class="center date-time" style="font-size:15px">${dateStr} ${timeStr}</div><div class="dashed"></div>${customerName ? `<div class="info-row"><span class="bold">Cliente:</span> ${customerName}</div>` : ''}<div class="dashed"></div><div class="bold" style="margin-bottom:3px;font-size:17px">ITENS DO PEDIDO</div><table><thead><tr><td class="bold" style="font-size:15px">Produto</td><td class="bold right" style="font-size:14px">Unit.</td><td class="bold right" style="font-size:15px">Total</td></tr></thead><tbody>${itemsRows}</tbody></table><div class="dashed"></div><table><tr><td class="bold" style="font-size:16px">Subtotal:</td><td class="right" style="font-size:16px">${fmtPrint(subtotal)}</td></tr>${delivery > 0 ? `<tr class="row-delivery"><td style="font-size:15px"><i>Taxa de Entrega:</i></td><td class="right" style="font-size:15px"><i>${fmtPrint(delivery)}</i></td></tr>` : ''}<tr class="row-total"><td class="bold">TOTAL:</td><td class="right">${fmtPrint(data.total)}</td></tr></table><div class="dashed"></div><div class="pay-section"><span class="pay-label">Pagamento:</span> ${payNames[data.paymentMethod]||data.paymentMethod}</div>${data.valorPago && data.valorPago > data.total ? `<div class="pay-section"><span class="pay-label">Recebido:</span> ${fmtPrint(data.valorPago)}</div>` : ''}${data.troco > 0 ? `<div class="troco-box"><span class="troco-val">TROCO: ${fmtPrint(data.troco)}</span></div>` : ''}<div class="solid"></div><div class="center bold" style="margin-top:3px;font-size:16px">Obrigado pela preferência!</div><div class="center small" style="margin-top:1px;font-size:15px;font-weight:900">Gestão Fácil</div><button class="print-btn no-print" onclick="window.print()">🖨️ IMPRIMIR</button></body></html>`;
+    const subtotal = data.subtotal ?? data.total; const delivery = data.deliveryTotal || 0; const discount = data.discountTotal || 0;
+    const isDelivery = data.source === 'pub_menu' || !!data.address || !!data.phone;
+    const deliveryInfoBlock = isDelivery ? `
+        ${data.phone ? `<div class="info-row"><span class="bold">Telefone:</span> ${data.phone}</div>` : ''}
+        ${data.address ? `<div class="info-row" style="white-space:normal"><span class="bold">Endereço:</span> ${data.address}${data.houseNumber ? ', nº '+data.houseNumber : ''}${data.complement ? ' - '+data.complement : ''}</div>` : ''}
+        ${(!data.address && (data.paymentMethod === 'vem-buscar' || data.source === 'pub_menu')) ? `<div class="info-row">${!data.address ? '<span class="bold">Retirada no local (Vem Buscar)</span>' : ''}</div>` : ''}
+    ` : '';
+    const copyLabelHtml = copyLabel ? `<div class="center bold" style="font-size:14px;border:2px solid #000;padding:3px;margin-bottom:5px">${copyLabel}</div>` : '';
+    const html = `<!DOCTYPE html><html lang="pt-BR"><head><meta charset="UTF-8"><title>OS ${data.orderNumber}</title><style>* { margin:0; padding:0; box-sizing:border-box; } body { font-family: 'Courier New', Courier, monospace; font-size: 15px; color: #000; background: #fff; width: 58mm; margin: 0; padding: 1mm 0.5mm 1mm; line-height: 1.2; } .center { text-align: center; } .right { text-align: right; } .bold { font-weight: 900; } .big { font-size: 19px; } .small { font-size: 13px; } .dashed { border-top: 2px dashed #000; margin: 3px 0; } .solid { border-top: 3px solid #000; margin: 3px 0; } table { width: 100%; border-collapse: collapse; } td { vertical-align: top; font-size: 14px; font-weight: 900; } .row-total td { font-size: 19px; font-weight: 900; } .row-delivery td { color: #000; font-weight: 900; } .troco-box { border: 3px dashed #000; padding: 8px 10px; margin-top: 6px; text-align: center; background: #fff; } .info-row { font-size: 14px; margin: 2px 0; font-weight: 900; } .online-badge { background: #fff; color: #000; border: 3px solid #000; padding: 6px 10px; font-size: 16px; font-weight: 900; display: inline-block; margin-bottom: 6px; letter-spacing: 1px; } .company-info { font-size: 13px; font-weight: 900; margin: 2px 0; } .date-time { font-size: 15px; font-weight: 900; margin: 3px 0; } .pay-section { font-size: 18px; font-weight: 900; margin: 4px 0; color: #000; } .pay-label { font-size: 18px; font-weight: 900; } .troco-val { font-size: 20px; font-weight: 900; } @media print { body { width: 58mm; } @page { size: 58mm auto; margin: 0; } .no-print, .print-btn, button { display: none !important; } } .print-btn { display: block; width: 100%; margin-top: 10px; padding: 10px; background: #000; color: #fff; border: none; font-size: 16px; font-weight: 900; cursor: pointer; } </style></head><body>${copyLabelHtml}${logoUrl ? `<div class="center" style="margin-bottom:5px"><img src="${logoUrl}" style="max-width:56mm;max-height:15mm;object-fit:contain" onerror="this.style.display='none'"></div>` : ''}<div class="center bold big" style="font-size:19px">${c.companyName||'ESTABELECIMENTO'}</div>${c.cnpj ? `<div class="company-info"><span style="font-size:12px">CNPJ:</span> ${c.cnpj}</div>` : ''}${c.address ? `<div class="company-info">${c.address}</div>` : ''}${c.phone ? `<div class="company-info">Tel: ${c.phone}</div>` : ''}<div class="solid"></div><div class="center bold date-time" style="font-size:17px">${data.orderNumber}</div><div class="center date-time" style="font-size:15px">${dateStr} ${timeStr}</div><div class="dashed"></div>${customerName ? `<div class="info-row"><span class="bold">Cliente:</span> ${customerName}</div>` : ''}${deliveryInfoBlock}<div class="dashed"></div><div class="bold" style="margin-bottom:3px;font-size:17px">ITENS DO PEDIDO</div><table><thead><tr><td class="bold" style="font-size:15px">Produto</td><td class="bold right" style="font-size:14px">Unit.</td><td class="bold right" style="font-size:15px">Total</td></tr></thead><tbody>${itemsRows}</tbody></table><div class="dashed"></div><table><tr><td class="bold" style="font-size:16px">Subtotal:</td><td class="right" style="font-size:16px">${fmtPrint(subtotal)}</td></tr>${discount > 0 ? `<tr class="row-delivery"><td style="font-size:15px"><i>Desconto${data.couponCode?' ('+data.couponCode+')':''}:</i></td><td class="right" style="font-size:15px"><i>- ${fmtPrint(discount)}</i></td></tr>` : ''}${delivery > 0 ? `<tr class="row-delivery"><td style="font-size:15px"><i>Taxa de Entrega:</i></td><td class="right" style="font-size:15px"><i>${fmtPrint(delivery)}</i></td></tr>` : ''}<tr class="row-total"><td class="bold">TOTAL:</td><td class="right">${fmtPrint(data.total)}</td></tr></table><div class="dashed"></div><div class="pay-section"><span class="pay-label">Pagamento:</span> ${payNames[data.paymentMethod]||data.paymentMethod}</div>${data.valorPago && data.valorPago > data.total ? `<div class="pay-section"><span class="pay-label">Recebido:</span> ${fmtPrint(data.valorPago)}</div>` : ''}${data.troco > 0 ? `<div class="troco-box"><span class="troco-val">TROCO: ${fmtPrint(data.troco)}</span></div>` : ''}<div class="solid"></div><div class="center bold" style="margin-top:3px;font-size:16px">Obrigado pela preferência!</div><div class="center small" style="margin-top:1px;font-size:15px;font-weight:900">Gestão Fácil</div><button class="print-btn no-print" onclick="window.print()">🖨️ IMPRIMIR</button></body></html>`;
+    return html;
+}
+function printOS(data) {
+    if (!data) data = lastSaleData; if (!data) { showToast('Nenhuma venda registrada para imprimir','warning'); return; }
+    const html = buildOSHtml(data);
     if (window.lastPrintWindow && !window.lastPrintWindow.closed) { try { window.lastPrintWindow.close(); } catch(e) {} }
     let printWindow;
     try { printWindow = window.open('', '_blank', 'width=400,height=600,left=100,top=50,scrollbars=yes'); } catch(e) { showToast('Erro ao abrir janela de impressão. Permita pop-ups.','danger'); return; }
@@ -2242,6 +2273,49 @@ function printOS(data) {
         printWindow.close(); 
     } 
 }
+}
+// Impressão silenciosa via iframe oculto (usada na impressão automática de 2 vias)
+function printOSViaIframe(html) {
+    try {
+        const iframe = document.createElement('iframe');
+        iframe.style.position = 'fixed';
+        iframe.style.right = '0'; iframe.style.bottom = '0';
+        iframe.style.width = '0'; iframe.style.height = '0';
+        iframe.style.border = '0';
+        document.body.appendChild(iframe);
+        const doc = iframe.contentWindow.document;
+        doc.open(); doc.write(html); doc.close();
+        iframe.onload = function() {
+            setTimeout(function() {
+                try { iframe.contentWindow.focus(); iframe.contentWindow.print(); } catch(e) { console.error('Erro na impressão automática:', e); }
+                setTimeout(function() { try { iframe.remove(); } catch(e) {} }, 1500);
+            }, 400);
+        };
+    } catch(e) { console.error('Erro ao preparar impressão automática:', e); }
+}
+// Imprime automaticamente 2 vias do pedido: 1 via para o cliente (vai junto no lanche) e 1 via para o estabelecimento (controle)
+function autoPrintOrderCopies(order) {
+    const data = {
+        items: order.items,
+        total: order.total,
+        subtotal: order.subtotal || order.total,
+        deliveryTotal: order.deliveryTotal || 0,
+        discountTotal: order.discountTotal || 0,
+        couponCode: order.couponCode || '',
+        paymentMethod: order.paymentMethod,
+        valorPago: order.valorPago || order.total,
+        troco: order.troco || 0,
+        date: order.date,
+        orderNumber: order.orderNumber,
+        customerName: order.customerName,
+        phone: order.phone || '',
+        address: order.address || '',
+        houseNumber: order.houseNumber || '',
+        complement: order.complement || '',
+        source: order.source || 'pub_menu'
+    };
+    printOSViaIframe(buildOSHtml(data, 'VIA CLIENTE (vai no lanche)'));
+    setTimeout(function() { printOSViaIframe(buildOSHtml(data, 'VIA ESTABELECIMENTO (controle)')); }, 1800);
 }
 function fmtPrint(v) { 
     return 'R$ ' + Number(v||0).toLocaleString('pt-BR',{minimumFractionDigits:2,maximumFractionDigits:2}); 
@@ -2340,7 +2414,7 @@ document.getElementById('menu-link-text').textContent = url;
 const items = c.menuItems||[];
 const g = document.getElementById('menu-grid');
 if (!items.length) { g.innerHTML='<div style="grid-column:1/-1;text-align:center;padding:60px;color:var(--gray)"><i class="fa-solid fa-utensils" style="font-size:48px;display:block;margin-bottom:12px;color:var(--border)"></i><h3>Nenhum item no cardápio</h3></div>'; return; }
-g.innerHTML = items.map(item=>`<div class="product-card">${item.image?`<img src="${item.image}" class="product-card-img">`:`<div class="product-card-no-img">${getCategoryEmoji(item.category)}</div>`}<div class="product-card-body"><div class="product-card-name">${item.name}</div><div class="product-card-cat">${item.category||'Sem categoria'}</div><div class="product-card-price">${fmt(item.price)}</div>${item.description?`<div style="font-size:12px;color:var(--gray);margin-bottom:8px;line-height:1.4">${item.description}</div>`:''}<div style="font-size:11px;color:var(--gray);margin-bottom:12px"><i class="fa-solid fa-boxes-stacked"></i> Estoque: ${item.stock||0} · Mín: ${item.minStock||5}</div><div class="product-card-actions"><button class="btn btn-sm btn-primary" onclick="showMenuItemModal('${item.id}')"><i class="fa-solid fa-edit"></i> Editar</button><button class="btn btn-sm btn-danger" onclick="deleteMenuItem('${item.id}')"><i class="fa-solid fa-trash"></i></button></div></div></div>`).join('');
+g.innerHTML = items.map((item,idx)=>`<div class="product-card" style="position:relative"><span style="position:absolute;top:6px;left:6px;background:var(--primary);color:#fff;font-size:11px;font-weight:800;padding:2px 8px;border-radius:10px;z-index:1">#${idx+1}</span>${item.image?`<img src="${item.image}" class="product-card-img">`:`<div class="product-card-no-img">${getCategoryEmoji(item.category)}</div>`}<div class="product-card-body"><div class="product-card-name">${item.name}</div><div class="product-card-cat">${item.category||'Sem categoria'}</div><div class="product-card-price">${fmt(item.price)}</div>${item.description?`<div style="font-size:12px;color:var(--gray);margin-bottom:8px;line-height:1.4">${item.description}</div>`:''}<div style="font-size:11px;color:var(--gray);margin-bottom:12px"><i class="fa-solid fa-boxes-stacked"></i> Estoque: ${item.stock||0} · Mín: ${item.minStock||5}</div><div class="product-card-actions"><button class="btn btn-sm btn-primary" onclick="showMenuItemModal('${item.id}')"><i class="fa-solid fa-edit"></i> Editar</button><button class="btn btn-sm btn-danger" onclick="deleteMenuItem('${item.id}')"><i class="fa-solid fa-trash"></i></button></div></div></div>`).join('');
 }
 function copyMenuLink() {
 const url = window.location.origin + window.location.pathname + '?cardapio='+currentCompanyId;
@@ -2348,6 +2422,78 @@ navigator.clipboard.writeText(url).then(()=>{
 showToast('Link copiado!','success');
 document.getElementById('menu-link-text').textContent = url;
 }).catch(()=>showToast('Não foi possível copiar','warning'));
+}
+
+// ============================================================
+// CUPONS DE DESCONTO
+// ============================================================
+function renderCoupons() {
+    const c = currentCompany; if (!c) return;
+    const coupons = c.coupons || [];
+    const el = document.getElementById('coupons-list');
+    if (!el) return;
+    if (!coupons.length) {
+        el.innerHTML = '<div style="text-align:center;padding:60px;color:var(--gray)"><i class="fa-solid fa-tags" style="font-size:48px;display:block;margin-bottom:12px;color:var(--border)"></i><h3>Nenhum cupom cadastrado</h3><p style="font-size:13px;margin-top:8px">Crie cupões para oferecer descontos aos seus clientes</p></div>';
+        return;
+    }
+    el.innerHTML = coupons.map(cp => `
+    <div class="stock-item-row">
+        <div class="stock-item-icon" style="background:${cp.active!==false?'#dcfce7':'#f1f5f9'};color:${cp.active!==false?'var(--success)':'var(--gray)'}"><i class="fa-solid fa-tag"></i></div>
+        <div class="stock-item-info">
+            <div class="stock-item-name">${cp.code}</div>
+            <div class="stock-item-cat">${cp.percent}% de desconto ${cp.active!==false?'':' — <span style="color:var(--danger)">Inativo</span>'}</div>
+        </div>
+        <div class="flex gap-2">
+            <button class="btn btn-sm ${cp.active!==false?'btn-warning':'btn-success'}" onclick="toggleCouponActive('${cp.id}')"><i class="fa-solid fa-power-off"></i> ${cp.active!==false?'Desativar':'Ativar'}</button>
+            <button class="btn btn-sm btn-primary" onclick="showCouponModal('${cp.id}')"><i class="fa-solid fa-edit"></i></button>
+            <button class="btn btn-sm btn-danger" onclick="deleteCoupon('${cp.id}')"><i class="fa-solid fa-trash"></i></button>
+        </div>
+    </div>`).join('');
+}
+function showCouponModal(cid) {
+    const c = currentCompany;
+    const cp = cid ? (c.coupons||[]).find(x=>x.id===cid) : null;
+    showModal(`<i class="fa-solid fa-tag"></i> ${cp?'Editar':'Novo'} Cupom`,
+    `<div class="form-group"><label>Código do Cupom *</label><input type="text" id="cp-code" class="form-control" style="text-transform:uppercase" placeholder="Ex: PROMO10" value="${cp?cp.code:''}"></div>
+    <div class="form-group"><label>Percentual de Desconto (%) *</label><input type="number" id="cp-percent" class="form-control" min="1" max="100" step="1" placeholder="Ex: 10" value="${cp?cp.percent:''}"></div>
+    <div class="form-group"><label style="display:flex;align-items:center;gap:8px;cursor:pointer;text-transform:none"><input type="checkbox" id="cp-active" style="width:18px;height:18px" ${!cp||cp.active!==false?'checked':''}> Cupom ativo (disponível para uso no cardápio online)</label></div>
+    <input type="hidden" id="cp-id" value="${cp?cp.id:''}">`,
+    `<button class="btn btn-ghost" onclick="closeModal()">Cancelar</button>
+    <button class="btn btn-primary" onclick="saveCoupon()"><i class="fa-solid fa-save"></i> Salvar Cupom</button>`, false);
+}
+async function saveCoupon() {
+    const id = document.getElementById('cp-id').value;
+    const code = document.getElementById('cp-code').value.trim().toUpperCase();
+    const percent = parseFloat(document.getElementById('cp-percent').value);
+    const active = document.getElementById('cp-active').checked;
+    if (!code) { showToast('Informe o código do cupom','warning'); return; }
+    if (!percent || percent <= 0 || percent > 100) { showToast('Informe um percentual de desconto válido (1 a 100)','warning'); return; }
+    const c = currentCompany;
+    c.coupons = c.coupons || [];
+    const dup = c.coupons.find(x => x.code === code && x.id !== id);
+    if (dup) { showToast('Já existe um cupom com esse código','warning'); return; }
+    if (id) { const cp = c.coupons.find(x=>x.id===id); if (cp) { cp.code = code; cp.percent = percent; cp.active = active; } }
+    else { c.coupons.push({ id: genId(), code, percent, active, createdAt: new Date().toISOString() }); }
+    showLoading('Salvando...');
+    try { await db.collection('companies').doc(currentCompanyId).update({coupons:c.coupons}); hideLoading(); closeModal(); renderCoupons(); showToast(id?'Cupom atualizado!':'Cupom criado!','success'); }
+    catch(e) { hideLoading(); showToast('Erro: '+e.message,'danger'); }
+}
+async function toggleCouponActive(cid) {
+    const c = currentCompany;
+    const cp = (c.coupons||[]).find(x=>x.id===cid); if (!cp) return;
+    cp.active = cp.active === false ? true : false;
+    showLoading('Atualizando...');
+    try { await db.collection('companies').doc(currentCompanyId).update({coupons:c.coupons}); hideLoading(); renderCoupons(); showToast('Cupom atualizado!','success'); }
+    catch(e) { hideLoading(); showToast('Erro: '+e.message,'danger'); }
+}
+async function deleteCoupon(cid) {
+    const c = currentCompany;
+    const cp = (c.coupons||[]).find(x=>x.id===cid);
+    if (!cp || !confirm(`Remover o cupom "${cp.code}"?`)) return;
+    c.coupons = c.coupons.filter(x=>x.id!==cid);
+    showLoading('Removendo...');
+    try { await db.collection('companies').doc(currentCompanyId).update({coupons:c.coupons}); hideLoading(); renderCoupons(); showToast('Cupom removido!','success'); }
+    catch(e) { hideLoading(); showToast('Erro: '+e.message,'danger'); }
 }
 
 // ============================================================
@@ -2548,6 +2694,12 @@ function renderOrdersFromData(orders) {
             <div class="order-items-list" style="background:#f8fafc;border-radius:8px;padding:12px;margin:10px 0">
                 ${itemsHtml}
             </div>
+            ${(o.discountTotal || 0) > 0 ? `
+                <div style="padding:8px 12px;background:#dcfce7;border-radius:6px;margin:8px 0;font-size:12px;color:#166534;display:flex;justify-content:space-between;align-items:center;border:1px solid #86efac">
+                    <span><i class="fa-solid fa-tag"></i> Cupom ${o.couponCode||''}:</span>
+                    <span style="font-weight:700">- ${fmt(o.discountTotal || 0)}</span>
+                </div>
+            ` : ''}
             ${(o.deliveryTotal || 0) > 0 ? `
                 <div style="padding:8px 12px;background:#fef3c7;border-radius:6px;margin:8px 0;font-size:12px;color:#92400e;display:flex;justify-content:space-between;align-items:center;border:1px solid #fcd34d">
                     <span><i class="fa-solid fa-truck"></i> Taxa de Entrega:</span>
@@ -3288,15 +3440,19 @@ hideLoading();
 } catch(e) { hideLoading(); showToast('Erro: '+e.message, 'danger'); showPage('page-login'); }
 }
 function renderPublicMenu() {
-const items = pubCompany.menuItems || [];
+const rawItems = pubCompany.menuItems || [];
+const items = rawItems.map((p,idx)=>({...p, _num: idx+1}));
 const cats = ['Todos', ...new Set(items.map(p=>p.category).filter(Boolean))];
 document.getElementById('pub-cats').innerHTML = cats.map(c => `<div class="pub-cat ${c===pubActiveCat?'active':''}" onclick="setPubCat('${c}')">${c}</div>`).join('');
-const filtered = pubActiveCat === 'Todos' ? items : items.filter(p => p.category === pubActiveCat);
+let filtered = pubActiveCat === 'Todos' ? items : items.filter(p => p.category === pubActiveCat);
+const q = (pubSearchTerm||'').toLowerCase().trim();
+if (q) filtered = filtered.filter(p => p.name.toLowerCase().includes(q) || String(p._num) === q);
 const grid = document.getElementById('pub-items');
-if (!filtered.length) { grid.innerHTML = '<div style="grid-column:1/-1;text-align:center;padding:40px;color:var(--gray)">Nenhum item nesta categoria</div>'; return; }
+if (!filtered.length) { grid.innerHTML = '<div style="grid-column:1/-1;text-align:center;padding:40px;color:var(--gray)">Nenhum item encontrado</div>'; return; }
 grid.innerHTML = filtered.map(p => {
 const oos = (p.stock || 0) <= 0;
-return `<div class="pub-item ${oos?'out-of-stock':''}" onclick="${oos ? "showToast('Esgotado','warning')" : `showPubItemModal('${p.id}')`}">
+return `<div class="pub-item ${oos?'out-of-stock':''}" style="position:relative" onclick="${oos ? "showToast('Esgotado','warning')" : `showPubItemModal('${p.id}')`}">
+<span style="position:absolute;top:6px;left:6px;background:var(--primary);color:#fff;font-size:11px;font-weight:800;padding:2px 8px;border-radius:10px;z-index:1">#${p._num}</span>
 ${p.image ? `<img src="${p.image}">` : `<div class="pub-item-no-img">${getCategoryEmoji(p.category)}</div>`}
 <div class="pub-item-body">
 <div class="pub-item-name">${p.name}</div>
@@ -3308,6 +3464,7 @@ ${oos ? '<div style="color:var(--danger);font-size:11px;font-weight:700">Esgotad
 }).join('');
 }
 function setPubCat(cat) { pubActiveCat = cat; renderPublicMenu(); }
+function onPubSearchInput() { pubSearchTerm = document.getElementById('pub-search')?.value || ''; renderPublicMenu(); }
 function showPubItemModal(iid) {
 const p = (pubCompany.menuItems || []).find(x => x.id === iid);
 if (!p) return;
@@ -3353,6 +3510,42 @@ const count = pubCart.reduce((s, i) => s + i.qty, 0);
 document.getElementById('pub-cart-count').textContent = count;
 document.getElementById('pub-cart-btn').style.display = count > 0 ? 'flex' : 'none';
 }
+function getPubCartTotals(pay) {
+    const subtotal = pubCart.reduce((s, i) => s + (i.price * i.qty), 0);
+    const baseDeliveryFee = pubDeliveryFee || 0;
+    const delivery = pay === 'vem-buscar' ? 0 : baseDeliveryFee;
+    const discount = pubAppliedCoupon ? (subtotal * pubAppliedCoupon.percent / 100) : 0;
+    const total = Math.max(0, subtotal + delivery - discount);
+    return { subtotal, delivery, discount, total };
+}
+function applyPubCoupon() {
+    const codeInput = document.getElementById('pub-coupon-code');
+    const msgEl = document.getElementById('pub-coupon-msg');
+    if (!codeInput) return;
+    const code = codeInput.value.trim().toUpperCase();
+    if (!code) { pubAppliedCoupon = null; if (msgEl) msgEl.innerHTML = ''; showPubCartModal(); return; }
+    const coupons = pubCompany.coupons || [];
+    const cp = coupons.find(c => c.code === code && c.active !== false);
+    if (!cp) {
+        pubAppliedCoupon = null;
+        if (msgEl) msgEl.innerHTML = '<div style="color:var(--danger);font-size:12px;margin-top:6px"><i class="fa-solid fa-circle-xmark"></i> Cupom inválido ou inativo</div>';
+        updatePubTotalsDisplay();
+        return;
+    }
+    pubAppliedCoupon = { code: cp.code, percent: cp.percent };
+    showToast(`Cupom aplicado: ${cp.percent}% de desconto!`, 'success');
+    showPubCartModal();
+}
+function removePubCoupon() {
+    pubAppliedCoupon = null;
+    showPubCartModal();
+}
+function updatePubTotalsDisplay() {
+    const pay = document.getElementById('pub-order-pay')?.value;
+    const t = getPubCartTotals(pay);
+    const totalEl = document.getElementById('pub-total-val');
+    if (totalEl) totalEl.textContent = fmt(t.total);
+}
 function showPubCartModal() {
     if (!pubCart.length) { showToast('Carrinho vazio','warning'); return; }
     const html = pubCart.map((item, idx) => `
@@ -3370,20 +3563,28 @@ function showPubCartModal() {
     <button class="btn btn-sm btn-ghost" onclick="pubCart.splice(${idx},1);updatePubCartCount();showPubCartModal()"><i class="fa-solid fa-trash" style="color:var(--danger)"></i></button>
 </div>
 `).join('');
-    const subtotal = pubCart.reduce((s, i) => s + (i.price * i.qty), 0);
     const baseDeliveryFee = pubDeliveryFee || 0;
-    const total = subtotal + baseDeliveryFee;
+    const t = getPubCartTotals(document.getElementById('pub-order-pay')?.value);
+    const subtotal = t.subtotal, total = t.total;
     
     showModal('<i class="fa-solid fa-shopping-cart"></i> Seu Carrinho',
 `<div style="max-height:45vh;overflow-y:auto">${html}</div>
-<div style="margin-top:16px;padding-top:12px;border-top:2px solid var(--border)">
+<div class="form-group mt-3" style="margin-bottom:6px"><label>Cupom de Desconto</label>
+<div class="flex gap-2">
+<input type="text" id="pub-coupon-code" class="form-control" style="text-transform:uppercase" placeholder="Digite o código do cupom" value="${pubAppliedCoupon?pubAppliedCoupon.code:''}">
+${pubAppliedCoupon ? `<button class="btn btn-ghost" onclick="removePubCoupon()"><i class="fa-solid fa-times"></i></button>` : `<button class="btn btn-outline" onclick="applyPubCoupon()">Aplicar</button>`}
+</div>
+<div id="pub-coupon-msg">${pubAppliedCoupon ? `<div style="color:var(--success);font-size:12px;margin-top:6px"><i class="fa-solid fa-circle-check"></i> Cupom ${pubAppliedCoupon.code} aplicado — ${pubAppliedCoupon.percent}% de desconto</div>` : ''}</div>
+</div>
+<div style="margin-top:10px;padding-top:12px;border-top:2px solid var(--border)">
     <div class="flex justify-between items-center mb-2">
         <span style="color:var(--gray)">Subtotal:</span>
         <span style="font-weight:700">${fmt(subtotal)}</span>
     </div>
+    ${t.discount > 0 ? `<div class="flex justify-between items-center mb-2" style="color:var(--success)"><span><i class="fa-solid fa-tag"></i> Desconto (${pubAppliedCoupon.percent}%):</span><span style="font-weight:700">- ${fmt(t.discount)}</span></div>` : ''}
     <div class="flex justify-between items-center mb-3" id="pub-delivery-row" style="padding:10px;background:#f0fdf4;border-radius:8px;border:1px solid #86efac;display:${baseDeliveryFee > 0 ? 'flex' : 'none'}">
         <span style="color:#166534"><i class="fa-solid fa-truck"></i> Taxa de Entrega:</span>
-        <span style="font-weight:700;color:#166534" id="pub-delivery-val">${fmt(baseDeliveryFee)}</span>
+        <span style="font-weight:700;color:#166534" id="pub-delivery-val">${fmt(t.delivery)}</span>
     </div>
     <div class="flex justify-between items-center" style="font-size:18px;font-weight:900;color:var(--primary)">
         <span>Total:</span>
@@ -3427,9 +3628,8 @@ function handlePubPaymentChange() {
     const totalEl = document.getElementById('pub-total-val');
     const trocoBox = document.getElementById('pub-troco-box');
 
-    const subtotal = pubCart.reduce((s, i) => s + (i.price * i.qty), 0);
+    const t = getPubCartTotals(pay);
     const baseDelivery = pubDeliveryFee || 0;
-    let currentDelivery = baseDelivery;
 
     // 1. Ocultar/Mostrar campos de endereço
     if (addrFields) {
@@ -3438,13 +3638,12 @@ function handlePubPaymentChange() {
 
     // 2. Ocultar/Mostrar e calcular Taxa de Entrega
     if (pay === 'vem-buscar') {
-        currentDelivery = 0;
         if (deliveryRow) deliveryRow.style.display = 'none';
     } else {
         if (baseDelivery > 0) {
             if (deliveryRow) {
                 deliveryRow.style.display = 'flex';
-                document.getElementById('pub-delivery-val').textContent = fmt(baseDelivery);
+                document.getElementById('pub-delivery-val').textContent = fmt(t.delivery);
             }
         } else {
             if (deliveryRow) deliveryRow.style.display = 'none';
@@ -3452,7 +3651,7 @@ function handlePubPaymentChange() {
     }
 
     // 3. Atualizar o Total na tela
-    const total = subtotal + currentDelivery;
+    const total = t.total;
     if (totalEl) totalEl.textContent = fmt(total);
 
     // 4. Mostrar/Ocultar caixa de Troco e recalcular
@@ -3544,11 +3743,13 @@ async function placePubOrder() {
         }
     }
     
-    const subtotal = pubCart.reduce((s, i) => s + (i.price * i.qty), 0);
+    const t = getPubCartTotals(pay);
+    const subtotal = t.subtotal;
+    const discountTotal = t.discount;
     
     // ✅ Lógica da Taxa de Entrega: Zero se for "Vem Buscar"
-    const deliveryFee = pay === 'vem-buscar' ? 0 : (pubDeliveryFee || 0);
-    const total = subtotal + deliveryFee;
+    const deliveryFee = t.delivery;
+    const total = t.total;
     
     let valorPago = total;
     let troco = 0;
@@ -3579,6 +3780,9 @@ async function placePubOrder() {
             total: total,
             subtotal: subtotal,
             deliveryTotal: deliveryFee, // ✅ Salva 0 se for buscar
+            couponCode: pubAppliedCoupon ? pubAppliedCoupon.code : '',
+            couponPercent: pubAppliedCoupon ? pubAppliedCoupon.percent : 0,
+            discountTotal: discountTotal,
             paymentMethod: pay,
             valorPago: valorPago,
             troco: troco,
@@ -3592,6 +3796,7 @@ async function placePubOrder() {
         hideLoading();
         closeModal();
         pubCart = [];
+        pubAppliedCoupon = null;
         updatePubCartCount();
         showToast('Pedido enviado com sucesso!','success');
         showPubTab('orders');
@@ -3696,6 +3901,8 @@ async function updateOrderStatus(oid, newStatus) {
                         total: order.total || 0,
                         subtotal: order.subtotal || order.total || 0,
                         deliveryTotal: order.deliveryTotal || 0,
+                        discountTotal: order.discountTotal || 0,
+                        couponCode: order.couponCode || '',
                         paymentMethod: order.paymentMethod || 'dinheiro',
                         valorPago: order.valorPago || order.total || 0,
                         troco: order.troco || 0,
@@ -3728,6 +3935,8 @@ function printOrderFromHistory(order) {
         total: order.total,
         subtotal: order.subtotal || order.total,
         deliveryTotal: order.deliveryTotal || 0,
+        discountTotal: order.discountTotal || 0,
+        couponCode: order.couponCode || '',
         paymentMethod: order.paymentMethod,
         valorPago: order.valorPago || order.total,
         troco: order.troco || 0,
@@ -3757,6 +3966,8 @@ function printOrderFromHistory(order) {
         total: order.total,
         subtotal: order.subtotal || order.total,
         deliveryTotal: order.deliveryTotal || 0,
+        discountTotal: order.discountTotal || 0,
+        couponCode: order.couponCode || '',
         paymentMethod: order.paymentMethod,
         valorPago: order.valorPago || order.total,
         troco: order.troco || 0,
@@ -4191,6 +4402,8 @@ function printOrderFromHistoryById(orderId) {
         total: order.total,
         subtotal: order.subtotal || order.total,
         deliveryTotal: order.deliveryTotal || 0,
+        discountTotal: order.discountTotal || 0,
+        couponCode: order.couponCode || '',
         paymentMethod: order.paymentMethod,
         valorPago: order.valorPago || order.total,
         troco: order.troco || 0,
