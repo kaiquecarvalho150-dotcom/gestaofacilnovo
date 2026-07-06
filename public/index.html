@@ -307,6 +307,38 @@ table tr:hover td{background:#fafbfc}
 .pub-cart-float{position:fixed;bottom:24px;right:24px;background:var(--primary);color:#fff;border:none;border-radius:50px;padding:14px 24px;font-size:15px;font-weight:700;cursor:pointer;box-shadow:0 8px 25px rgba(37,99,235,.4);display:flex;align-items:center;gap:10px;transition:all .2s;z-index:100}
 .pub-cart-float:hover{background:var(--primary-dark);transform:translateY(-2px)}
 .pub-cart-float .cart-count{background:#fff;color:var(--primary);width:24px;height:24px;border-radius:50%;display:flex;align-items:center;justify-content:center;font-size:13px;font-weight:900}
+.pub-chat-float{position:fixed;bottom:24px;left:24px;background:#25d366;color:#fff;border:none;border-radius:50px;width:58px;height:58px;font-size:22px;cursor:pointer;box-shadow:0 8px 25px rgba(37,211,102,.45);display:flex;align-items:center;justify-content:center;transition:all .2s;z-index:100}
+.pub-chat-float:hover{transform:translateY(-2px)}
+.pub-chat-float .chat-badge{position:absolute;top:-4px;right:-4px;background:var(--danger);color:#fff;font-size:11px;font-weight:800;min-width:20px;height:20px;border-radius:50%;display:flex;align-items:center;justify-content:center;padding:0 4px}
+#chat-overlay{position:fixed;inset:0;background:rgba(0,0,0,.55);z-index:9500;display:flex;align-items:center;justify-content:center;padding:16px;backdrop-filter:blur(4px)}
+.chat-panel{background:#fff;border-radius:16px;width:100%;max-width:460px;height:80vh;max-height:640px;display:flex;flex-direction:column;overflow:hidden;box-shadow:0 25px 60px rgba(0,0,0,.3);animation:modalIn .2s ease}
+.chat-panel-header{background:#25d366;color:#fff;padding:16px 18px;display:flex;align-items:center;gap:10px;font-weight:700}
+.chat-panel-header .chat-close-btn{margin-left:auto;background:rgba(255,255,255,.2);border:none;color:#fff;width:32px;height:32px;border-radius:50%;cursor:pointer;font-size:14px}
+.chat-panel-sub{font-size:11px;font-weight:400;opacity:.85;margin-top:2px}
+.chat-panel-body{flex:1;overflow-y:auto;padding:14px;background:#e9edf1;display:flex;flex-direction:column;gap:10px}
+.chat-bubble{max-width:78%;padding:9px 12px;border-radius:12px;font-size:13.5px;line-height:1.4;position:relative;word-wrap:break-word}
+.chat-bubble.me{align-self:flex-end;background:#dcf8c6;border-bottom-right-radius:2px}
+.chat-bubble.them{align-self:flex-start;background:#fff;border-bottom-left-radius:2px}
+.chat-bubble img{max-width:100%;border-radius:8px;margin-bottom:4px;display:block;cursor:pointer}
+.chat-bubble .chat-time{display:block;font-size:10px;color:var(--gray);margin-top:3px;text-align:right}
+.chat-panel-empty{margin:auto;text-align:center;color:var(--gray);padding:24px;font-size:13px}
+.chat-panel-footer{padding:10px 12px;border-top:1px solid var(--border);display:flex;align-items:center;gap:8px;background:#fff}
+.chat-panel-footer input[type=text]{flex:1;border:1px solid var(--border);border-radius:20px;padding:10px 14px;font-size:13.5px;outline:none}
+.chat-attach-btn,.chat-send-btn{width:38px;height:38px;border-radius:50%;border:none;cursor:pointer;display:flex;align-items:center;justify-content:center;font-size:15px;flex-shrink:0}
+.chat-attach-btn{background:#f1f5f9;color:var(--gray)}
+.chat-send-btn{background:#25d366;color:#fff}
+.chat-admin-wrap{display:flex;gap:0;border:1px solid var(--border);border-radius:12px;overflow:hidden;height:72vh}
+.chat-admin-list{width:280px;min-width:220px;border-right:1px solid var(--border);overflow-y:auto;background:#fafbfc}
+.chat-admin-list-item{padding:14px 16px;border-bottom:1px solid var(--border);cursor:pointer;transition:background .15s}
+.chat-admin-list-item:hover{background:#f1f5f9}
+.chat-admin-list-item.active{background:#e0edff}
+.chat-admin-list-item .cn{font-weight:700;font-size:13.5px;display:flex;align-items:center;justify-content:space-between;gap:6px}
+.chat-admin-list-item .cm{font-size:12px;color:var(--gray);margin-top:3px;white-space:nowrap;overflow:hidden;text-overflow:ellipsis}
+.chat-admin-thread{flex:1;display:flex;flex-direction:column;background:#e9edf1}
+.chat-admin-thread-header{padding:14px 18px;background:#fff;border-bottom:1px solid var(--border);font-weight:700;font-size:14px}
+.chat-admin-thread-body{flex:1;overflow-y:auto;padding:16px;display:flex;flex-direction:column;gap:10px}
+.chat-admin-thread-footer{padding:10px 14px;border-top:1px solid var(--border);display:flex;align-items:center;gap:8px;background:#fff}
+.chat-admin-thread-footer input[type=text]{flex:1;border:1px solid var(--border);border-radius:20px;padding:10px 14px;font-size:13.5px;outline:none}
 .my-order-card{background:#fff;border-radius:12px;padding:18px;border:1px solid var(--border);margin-bottom:12px}
 .my-order-status-bar{display:flex;align-items:center;gap:0;margin-top:14px}
 .status-step{flex:1;text-align:center;position:relative}
@@ -668,6 +700,7 @@ table th,table td{padding:7px 8px;font-size:11px}
 <div class="nav-item" onclick="showSection('coupons')"><span class="nav-ic"><i class="fa-solid fa-tags"></i></span> Cupons de Desconto</div>
 <div class="nav-section-label">Operação</div>
 <div class="nav-item" onclick="showSection('orders')"><span class="nav-ic"><i class="fa-solid fa-receipt"></i></span> Pedidos <span class="nav-badge-dot" id="nb-orders">0</span></div>
+<div class="nav-item" onclick="showSection('chat')"><span class="nav-ic"><i class="fa-solid fa-comments"></i></span> Mensagens <span class="nav-badge-dot" id="nb-chat" style="display:none">0</span></div>
 <div class="nav-item" onclick="requireAuth('reports')"><span class="nav-ic"><i class="fa-solid fa-chart-bar"></i></span> Relatórios</div>
 <div class="nav-item" onclick="requireAuthEmployees()"><span class="nav-ic"><i class="fa-solid fa-users"></i></span> Funcionários</div>
 </nav>
@@ -828,6 +861,18 @@ table th,table td{padding:7px 8px;font-size:11px}
 <div id="coupons-history" style="display:none"></div>
 </div>
 
+<!-- CHAT -->
+<div id="section-chat" class="section">
+<div style="font-size:15px;font-weight:700;margin-bottom:6px"><i class="fa-solid fa-comments"></i> Mensagens dos Clientes</div>
+<p style="color:var(--gray);font-size:13px;margin-bottom:16px">Converse diretamente com os clientes que enviaram mensagens pelo cardápio online. Selecione um cliente na lista para abrir a conversa.</p>
+<div class="chat-admin-wrap">
+<div class="chat-admin-list" id="chat-admin-list"></div>
+<div class="chat-admin-thread" id="chat-admin-thread">
+<div class="chat-panel-empty" style="margin:auto"><i class="fa-solid fa-comments" style="font-size:40px;display:block;margin-bottom:10px;color:var(--border)"></i>Selecione um cliente para ver a conversa</div>
+</div>
+</div>
+</div>
+
 <!-- ORDERS -->
 <div id="section-orders" class="section">
 <div class="flex items-center justify-between mb-4 flex-wrap gap-3">
@@ -969,6 +1014,30 @@ table th,table td{padding:7px 8px;font-size:11px}
 <i class="fa-solid fa-shopping-cart"></i> Ver Carrinho
 <span class="cart-count" id="pub-cart-count">0</span>
 </button>
+<button class="pub-chat-float" id="pub-chat-btn" onclick="openPubChat()" style="display:none;position:fixed">
+<i class="fa-brands fa-whatsapp"></i>
+<span class="chat-badge" id="pub-chat-badge" style="display:none">0</span>
+</button>
+</div>
+
+<div id="chat-overlay" class="hidden" onclick="if(event.target.id==='chat-overlay') closePubChat()">
+<div class="chat-panel">
+<div class="chat-panel-header">
+<i class="fa-solid fa-store"></i>
+<div>
+<div id="pub-chat-company-name">Loja</div>
+<div class="chat-panel-sub">Fale diretamente com a loja</div>
+</div>
+<button class="chat-close-btn" onclick="closePubChat()"><i class="fa-solid fa-times"></i></button>
+</div>
+<div class="chat-panel-body" id="pub-chat-body"></div>
+<div class="chat-panel-footer">
+<input type="file" id="pub-chat-file" accept="image/*" style="display:none" onchange="handlePubChatImage(event)">
+<button class="chat-attach-btn" onclick="document.getElementById('pub-chat-file').click()" title="Enviar foto"><i class="fa-solid fa-camera"></i></button>
+<input type="text" id="pub-chat-input" placeholder="Digite sua mensagem..." onkeydown="if(event.key==='Enter') sendPubChatMessage()">
+<button class="chat-send-btn" onclick="sendPubChatMessage()" title="Enviar"><i class="fa-solid fa-paper-plane"></i></button>
+</div>
+</div>
 </div>
 
 <script>
@@ -1008,6 +1077,12 @@ let selectedReportYM = '';
 let chartInstances = {};
 let ordersUnsubscribe = null;
 let customerOrdersUnsubscribe = null;
+let pubChatUnsubscribe = null;
+let pubChatData = null;
+let pubChatId = null;
+let adminChatsUnsubscribe = null;
+let adminAllChats = [];
+let adminSelectedChatId = null;
 let allCompanyOrders = [];
 let allCompanies = [];
 let prevPendingCount = 0;
@@ -1108,11 +1183,11 @@ function showSection(name) {
 document.querySelectorAll('.section').forEach(s => s.classList.remove('active'));
 document.getElementById('section-'+name)?.classList.add('active');
 document.querySelectorAll('.nav-item').forEach(n => n.classList.remove('active'));
-const labels = {home:'Dashboard',pos:'PDV — Caixa',stock:'Estoque',menu:'Cadastrar Cardápio',coupons:'Cupons de Desconto',orders:'Pedidos',reports:'Relatórios',employees:'Funcionários'};
+const labels = {home:'Dashboard',pos:'PDV — Caixa',stock:'Estoque',menu:'Cadastrar Cardápio',coupons:'Cupons de Desconto',orders:'Pedidos',chat:'Mensagens',reports:'Relatórios',employees:'Funcionários'};
 document.getElementById('topbar-title').textContent = labels[name] || name;
 document.querySelectorAll('.nav-item').forEach(n => { if(n.textContent.trim().startsWith(labels[name]||name)) n.classList.add('active'); });
 closeSidebar();
-const renders = {home:renderHome,pos:renderPDV,stock:renderStock,menu:renderMenu,coupons:renderCoupons,employees:renderEmployees};
+const renders = {home:renderHome,pos:renderPDV,stock:renderStock,menu:renderMenu,coupons:renderCoupons,employees:renderEmployees,chat:renderAdminChatList};
 if (name !== 'home' && homeClockInterval) { clearInterval(homeClockInterval); homeClockInterval = null; }
 if (renders[name]) renders[name]();
 if (name === 'orders') {
@@ -1465,6 +1540,7 @@ function doLogout() {
     try {
         if (ordersUnsubscribe) { ordersUnsubscribe(); ordersUnsubscribe = null; }
         if (customerOrdersUnsubscribe) { customerOrdersUnsubscribe(); customerOrdersUnsubscribe = null; }
+        if (adminChatsUnsubscribe) { adminChatsUnsubscribe(); adminChatsUnsubscribe = null; }
         if (dashboardInterval) { clearInterval(dashboardInterval); dashboardInterval = null; }
         if (ordersRefreshInterval) { clearInterval(ordersRefreshInterval); ordersRefreshInterval = null; }
         if (homeClockInterval) { clearInterval(homeClockInterval); homeClockInterval = null; }
@@ -1810,6 +1886,20 @@ document.getElementById('trial-days-left').textContent = days;
 upgradeBtn.classList.add('hidden');
 trialBanner.classList.add('hidden');
 }
+if (adminChatsUnsubscribe) adminChatsUnsubscribe();
+adminChatsUnsubscribe = db.collection('chats')
+    .where('companyId','==',currentCompanyId)
+    .onSnapshot(snap => {
+        adminAllChats = snap.docs.map(d => ({ id:d.id, ...d.data() })).sort((a,b) => new Date(b.lastMessageAt||0) - new Date(a.lastMessageAt||0));
+        updateChatNavBadge();
+        const chatSection = document.getElementById('section-chat');
+        if (chatSection && chatSection.classList.contains('active')) renderAdminChatList();
+        if (adminSelectedChatId) {
+            const cur = adminAllChats.find(x => x.id === adminSelectedChatId);
+            if (cur) renderAdminChatThread(cur);
+        }
+    }, error => { console.error('Erro no chat admin:', error); });
+
 if (ordersUnsubscribe) ordersUnsubscribe();
 ordersUnsubscribe = db.collection('orders')
     .where('companyId','==',currentCompanyId)
@@ -2569,6 +2659,108 @@ async function deleteCoupon(cid) {
     showLoading('Removendo...');
     try { await db.collection('companies').doc(currentCompanyId).update({coupons:c.coupons}); hideLoading(); renderCoupons(); showToast('Cupom removido!','success'); }
     catch(e) { hideLoading(); showToast('Erro: '+e.message,'danger'); }
+}
+
+// ============================================================
+// CHAT ADMIN — CONVERSAS COM CLIENTES
+// ============================================================
+function updateChatNavBadge() {
+    const el = document.getElementById('nb-chat');
+    if (!el) return;
+    const unreadCount = adminAllChats.filter(x => x.unreadCompany).length;
+    if (unreadCount > 0) { el.style.display = 'inline-block'; el.textContent = unreadCount; }
+    else { el.style.display = 'none'; }
+}
+function renderAdminChatList() {
+    const el = document.getElementById('chat-admin-list');
+    if (!el) return;
+    if (!adminAllChats.length) {
+        el.innerHTML = '<div class="chat-panel-empty">Nenhuma conversa ainda.<br>Assim que um cliente enviar uma mensagem pelo cardápio online, ela aparecerá aqui.</div>';
+        return;
+    }
+    el.innerHTML = adminAllChats.map(ch => `
+    <div class="chat-admin-list-item ${ch.id===adminSelectedChatId?'active':''}" onclick="selectAdminChat('${ch.id}')">
+        <div class="cn"><span>${ch.customerName||'Cliente'}</span> ${ch.unreadCompany?'<span class="nav-badge-dot" style="margin-left:0">novo</span>':''}</div>
+        <div class="cm">${ch.lastMessage||''}</div>
+    </div>`).join('');
+}
+function selectAdminChat(chatId) {
+    adminSelectedChatId = chatId;
+    const chat = adminAllChats.find(x => x.id === chatId);
+    if (!chat) return;
+    renderAdminChatList();
+    renderAdminChatThread(chat);
+    if (chat.unreadCompany) {
+        db.collection('chats').doc(chatId).update({ unreadCompany: false }).catch(()=>{});
+    }
+}
+function renderAdminChatThread(chat) {
+    const el = document.getElementById('chat-admin-thread');
+    if (!el) return;
+    const msgs = chat.messages || [];
+    const msgsHtml = msgs.length ? msgs.map(m => `
+    <div class="chat-bubble ${m.sender==='company'?'me':'them'}">
+        ${m.image ? `<img src="${m.image}" onclick="window.open('${m.image}','_blank')">` : ''}
+        ${m.text ? `<span>${escapeHtml(m.text)}</span>` : ''}
+        <span class="chat-time">${fmtChatTime(m.createdAt)}</span>
+    </div>`).join('') : '<div class="chat-panel-empty">Nenhuma mensagem ainda</div>';
+    el.innerHTML = `
+    <div class="chat-admin-thread-header"><i class="fa-solid fa-user"></i> ${chat.customerName||'Cliente'}</div>
+    <div class="chat-admin-thread-body" id="chat-admin-thread-body">${msgsHtml}</div>
+    <div class="chat-admin-thread-footer">
+        <input type="file" id="chat-admin-file" accept="image/*" style="display:none" onchange="handleAdminChatImage(event,'${chat.id}')">
+        <button class="chat-attach-btn" onclick="document.getElementById('chat-admin-file').click()" title="Enviar foto"><i class="fa-solid fa-camera"></i></button>
+        <input type="text" id="chat-admin-input" placeholder="Digite sua resposta..." onkeydown="if(event.key==='Enter') sendAdminChatMessage('${chat.id}')">
+        <button class="chat-send-btn" onclick="sendAdminChatMessage('${chat.id}')" title="Enviar"><i class="fa-solid fa-paper-plane"></i></button>
+    </div>`;
+    const body = document.getElementById('chat-admin-thread-body');
+    if (body) body.scrollTop = body.scrollHeight;
+}
+async function sendAdminChatPayload(chatId, text, image) {
+    const chat = adminAllChats.find(x => x.id === chatId);
+    if (!chat) return;
+    const msg = { id: genId(), sender: 'company', text: text||'', image: image||'', createdAt: new Date().toISOString() };
+    const newMsgs = [...(chat.messages||[]), msg];
+    try {
+        await db.collection('chats').doc(chatId).update({
+            messages: newMsgs,
+            lastMessage: text ? text : '📷 Foto',
+            lastMessageAt: msg.createdAt,
+            unreadCustomer: true,
+            unreadCompany: false
+        });
+    } catch(e) { showToast('Erro ao enviar mensagem: '+e.message, 'danger'); }
+}
+function sendAdminChatMessage(chatId) {
+    const input = document.getElementById('chat-admin-input');
+    if (!input) return;
+    const text = input.value.trim();
+    if (!text) return;
+    input.value = '';
+    sendAdminChatPayload(chatId, text, '');
+}
+function handleAdminChatImage(event, chatId) {
+    const file = event.target.files[0];
+    if (!file) return;
+    if (!file.type.startsWith('image/')) { showToast('Selecione uma imagem válida','warning'); event.target.value=''; return; }
+    const reader = new FileReader();
+    reader.onload = function(e) {
+        const img = new Image();
+        img.onload = function() {
+            const maxW = 700;
+            const scale = Math.min(1, maxW / img.width);
+            const canvas = document.createElement('canvas');
+            canvas.width = img.width * scale;
+            canvas.height = img.height * scale;
+            const ctx = canvas.getContext('2d');
+            ctx.drawImage(img, 0, 0, canvas.width, canvas.height);
+            const dataUrl = canvas.toDataURL('image/jpeg', 0.6);
+            sendAdminChatPayload(chatId, '', dataUrl);
+        };
+        img.src = e.target.result;
+    };
+    reader.readAsDataURL(file);
+    event.target.value = '';
 }
 
 // ============================================================
@@ -3464,6 +3656,9 @@ clearPubCustomer();
 pubCart = [];
 pubDeliveryFee = 0;
 updatePubCartCount();
+if (pubChatUnsubscribe) { pubChatUnsubscribe(); pubChatUnsubscribe = null; }
+pubChatData = null; pubChatId = null;
+document.getElementById('pub-chat-btn').style.display = 'none';
 document.getElementById('pub-auth-view').classList.remove('hidden');
 document.getElementById('pub-main-view').classList.add('hidden');
 document.getElementById('pub-cart-btn').style.display = 'none';
@@ -3472,6 +3667,8 @@ function showPubMain() {
 document.getElementById('pub-auth-view').classList.add('hidden');
 document.getElementById('pub-main-view').classList.remove('hidden');
 renderPublicMenu();
+document.getElementById('pub-chat-btn').style.display = 'flex';
+setupCustomerChatListener();
 }
 function showPubTab(tab) {
 pubActiveTab = tab;
@@ -3495,6 +3692,117 @@ renderMyOrders(orders);
 console.error('Erro ao ouvir pedidos:', error);
 showToast('Erro ao carregar pedidos','danger');
 });
+}
+
+// ============================================================
+// CHAT CLIENTE ↔ LOJA (Cardápio Online)
+// ============================================================
+function getChatDocId(companyId, customerId) { return companyId + '__' + customerId; }
+function fmtChatTime(iso) {
+    if (!iso) return '';
+    const d = new Date(iso);
+    if (isNaN(d)) return '';
+    const now = new Date();
+    const sameDay = d.toDateString() === now.toDateString();
+    return sameDay ? d.toLocaleTimeString('pt-BR',{hour:'2-digit',minute:'2-digit'}) : d.toLocaleString('pt-BR',{day:'2-digit',month:'2-digit',hour:'2-digit',minute:'2-digit'});
+}
+function setupCustomerChatListener() {
+    if (!currentCustomer || !pubCompanyId) return;
+    pubChatId = getChatDocId(pubCompanyId, currentCustomer.id);
+    if (pubChatUnsubscribe) pubChatUnsubscribe();
+    pubChatUnsubscribe = db.collection('chats').doc(pubChatId).onSnapshot(doc => {
+        pubChatData = doc.exists ? doc.data() : null;
+        const badge = document.getElementById('pub-chat-badge');
+        if (badge) {
+            if (pubChatData && pubChatData.unreadCustomer) { badge.style.display='flex'; badge.textContent = '!'; }
+            else { badge.style.display = 'none'; }
+        }
+        const overlay = document.getElementById('chat-overlay');
+        if (overlay && !overlay.classList.contains('hidden')) renderPubChatMessages();
+    }, error => { console.error('Erro no chat:', error); });
+}
+function openPubChat() {
+    if (!currentCustomer || !pubCompanyId) return;
+    document.getElementById('pub-chat-company-name').textContent = pubCompany ? pubCompany.companyName : 'Loja';
+    document.getElementById('chat-overlay').classList.remove('hidden');
+    renderPubChatMessages();
+    if (pubChatData && pubChatData.unreadCustomer) {
+        db.collection('chats').doc(pubChatId).update({ unreadCustomer: false }).catch(()=>{});
+    }
+    setTimeout(() => { const inp = document.getElementById('pub-chat-input'); if (inp) inp.focus(); }, 150);
+}
+function closePubChat() {
+    document.getElementById('chat-overlay').classList.add('hidden');
+}
+function renderPubChatMessages() {
+    const body = document.getElementById('pub-chat-body');
+    if (!body) return;
+    const msgs = (pubChatData && pubChatData.messages) || [];
+    if (!msgs.length) {
+        body.innerHTML = '<div class="chat-panel-empty"><i class="fa-solid fa-comment-dots" style="font-size:36px;display:block;margin-bottom:8px;color:#c8d0d8"></i>Envie uma mensagem para a loja.<br>Pergunte sobre seu pedido, mande uma foto ou deixe seu feedback!</div>';
+        return;
+    }
+    body.innerHTML = msgs.map(m => `
+    <div class="chat-bubble ${m.sender==='customer'?'me':'them'}">
+        ${m.image ? `<img src="${m.image}" onclick="window.open('${m.image}','_blank')">` : ''}
+        ${m.text ? `<span>${escapeHtml(m.text)}</span>` : ''}
+        <span class="chat-time">${fmtChatTime(m.createdAt)}</span>
+    </div>`).join('');
+    body.scrollTop = body.scrollHeight;
+}
+function escapeHtml(str) {
+    const d = document.createElement('div'); d.textContent = str; return d.innerHTML;
+}
+async function sendPubChatPayload(text, image) {
+    if (!currentCustomer || !pubCompanyId) return;
+    const msg = { id: genId(), sender: 'customer', text: text||'', image: image||'', createdAt: new Date().toISOString() };
+    const existingMsgs = (pubChatData && pubChatData.messages) || [];
+    const newMsgs = [...existingMsgs, msg];
+    const payload = {
+        companyId: pubCompanyId,
+        customerId: currentCustomer.id,
+        customerName: currentCustomer.name,
+        messages: newMsgs,
+        lastMessage: text ? text : '📷 Foto',
+        lastMessageAt: msg.createdAt,
+        unreadCompany: true,
+        unreadCustomer: false
+    };
+    try {
+        await db.collection('chats').doc(pubChatId).set(payload, { merge: true });
+        pubChatData = { ...(pubChatData||{}), ...payload };
+        renderPubChatMessages();
+    } catch(e) { showToast('Erro ao enviar mensagem: '+e.message, 'danger'); }
+}
+function sendPubChatMessage() {
+    const input = document.getElementById('pub-chat-input');
+    const text = input.value.trim();
+    if (!text) return;
+    input.value = '';
+    sendPubChatPayload(text, '');
+}
+function handlePubChatImage(event) {
+    const file = event.target.files[0];
+    if (!file) return;
+    if (!file.type.startsWith('image/')) { showToast('Selecione uma imagem válida','warning'); event.target.value=''; return; }
+    const reader = new FileReader();
+    reader.onload = function(e) {
+        const img = new Image();
+        img.onload = function() {
+            const maxW = 700;
+            const scale = Math.min(1, maxW / img.width);
+            const canvas = document.createElement('canvas');
+            canvas.width = img.width * scale;
+            canvas.height = img.height * scale;
+            const ctx = canvas.getContext('2d');
+            ctx.drawImage(img, 0, 0, canvas.width, canvas.height);
+            const dataUrl = canvas.toDataURL('image/jpeg', 0.6);
+            sendPubChatPayload('', dataUrl);
+        };
+        img.src = e.target.result;
+    };
+    reader.readAsDataURL(file);
+    event.target.value = '';
 }
 async function showPublicMenu(cid) {
 pubCompanyId = cid;
