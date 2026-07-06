@@ -819,8 +819,13 @@ table th,table td{padding:7px 8px;font-size:11px}
 <div style="font-size:15px;font-weight:700">Cupons de Desconto</div>
 <button class="btn btn-primary" onclick="showCouponModal()"><i class="fa-solid fa-plus"></i> Novo Cupom</button>
 </div>
-<p style="color:var(--gray);font-size:13px;margin-bottom:16px">Crie cupões de desconto para seus clientes usarem no cardápio online ao finalizar o pedido. Você define o código, a porcentagem de desconto e se ele está ativo.</p>
+<p style="color:var(--gray);font-size:13px;margin-bottom:16px">Crie cupões de desconto para seus clientes usarem no cardápio online ao finalizar o pedido. Você define o código, a porcentagem de desconto, o período de validade e se o cupom é de uso único.</p>
+<div class="flex gap-2" style="margin-bottom:16px">
+<button class="btn btn-sm" id="coupon-tab-available" onclick="showCouponTab('available')"><i class="fa-solid fa-tags"></i> Disponíveis</button>
+<button class="btn btn-sm" id="coupon-tab-history" onclick="showCouponTab('history')"><i class="fa-solid fa-clock-rotate-left"></i> Histórico de Uso</button>
+</div>
 <div id="coupons-list"></div>
+<div id="coupons-history" style="display:none"></div>
 </div>
 
 <!-- ORDERS -->
@@ -834,6 +839,7 @@ table th,table td{padding:7px 8px;font-size:11px}
 <div class="filter-chip active" onclick="filterOrders(this,'all')">Todos</div>
 <div class="filter-chip" onclick="filterOrders(this,'pending')">Aguardando Pagto</div>
 <div class="filter-chip" onclick="filterOrders(this,'paid')">Pagos</div>
+<div class="filter-chip" onclick="filterOrders(this,'cancelled')">Cancelados</div>
 <button class="btn btn-sm btn-danger" onclick="deleteAllOrders()"><i class="fa-solid fa-trash"></i> Excluir Todos</button>
 </div>
 </div>
@@ -2427,6 +2433,37 @@ document.getElementById('menu-link-text').textContent = url;
 // ============================================================
 // CUPONS DE DESCONTO
 // ============================================================
+function couponStatusInfo(cp) {
+    // Retorna {label, color, valid} descrevendo a situação atual do cupom
+    const now = new Date();
+    if (cp.active === false) return { label: 'Inativo', color: 'var(--gray)', bg: '#f1f5f9', valid: false };
+    if (cp.singleUse && cp.used) return { label: 'Utilizado (uso único)', color: 'var(--gray)', bg: '#f1f5f9', valid: false };
+    if (cp.startDate && now < new Date(cp.startDate)) return { label: 'Aguardando início', color: '#b45309', bg: '#fef3c7', valid: false };
+    if (cp.endDate && now > new Date(cp.endDate)) return { label: 'Expirado', color: 'var(--danger)', bg: '#fee2e2', valid: false };
+    return { label: 'Ativo', color: 'var(--success)', bg: '#dcfce7', valid: true };
+}
+function fmtCouponDate(iso) {
+    if (!iso) return '';
+    const d = new Date(iso);
+    if (isNaN(d)) return '';
+    return d.toLocaleString('pt-BR', { day:'2-digit', month:'2-digit', year:'numeric', hour:'2-digit', minute:'2-digit' });
+}
+function showCouponTab(tab) {
+    const listEl = document.getElementById('coupons-list');
+    const histEl = document.getElementById('coupons-history');
+    const btnAvail = document.getElementById('coupon-tab-available');
+    const btnHist = document.getElementById('coupon-tab-history');
+    if (!listEl || !histEl) return;
+    if (tab === 'history') {
+        listEl.style.display = 'none'; histEl.style.display = 'block';
+        btnAvail.className = 'btn btn-sm btn-outline'; btnHist.className = 'btn btn-sm btn-primary';
+        renderCouponHistory();
+    } else {
+        listEl.style.display = 'block'; histEl.style.display = 'none';
+        btnAvail.className = 'btn btn-sm btn-primary'; btnHist.className = 'btn btn-sm btn-outline';
+        renderCoupons();
+    }
+}
 function renderCoupons() {
     const c = currentCompany; if (!c) return;
     const coupons = c.coupons || [];
@@ -2436,17 +2473,46 @@ function renderCoupons() {
         el.innerHTML = '<div style="text-align:center;padding:60px;color:var(--gray)"><i class="fa-solid fa-tags" style="font-size:48px;display:block;margin-bottom:12px;color:var(--border)"></i><h3>Nenhum cupom cadastrado</h3><p style="font-size:13px;margin-top:8px">Crie cupões para oferecer descontos aos seus clientes</p></div>';
         return;
     }
-    el.innerHTML = coupons.map(cp => `
+    el.innerHTML = coupons.map(cp => {
+        const st = couponStatusInfo(cp);
+        const periodParts = [];
+        if (cp.startDate) periodParts.push('De ' + fmtCouponDate(cp.startDate));
+        if (cp.endDate) periodParts.push('Até ' + fmtCouponDate(cp.endDate));
+        const periodHtml = periodParts.length ? `<div class="stock-item-cat" style="margin-top:2px"><i class="fa-solid fa-calendar"></i> ${periodParts.join(' &nbsp;•&nbsp; ')}</div>` : '';
+        const usedHtml = cp.singleUse && cp.used ? `<div class="stock-item-cat" style="margin-top:2px"><i class="fa-solid fa-user-check"></i> Utilizado por ${cp.usedBy||'cliente'} em ${fmtCouponDate(cp.usedAt)}</div>` : '';
+        return `
     <div class="stock-item-row">
-        <div class="stock-item-icon" style="background:${cp.active!==false?'#dcfce7':'#f1f5f9'};color:${cp.active!==false?'var(--success)':'var(--gray)'}"><i class="fa-solid fa-tag"></i></div>
+        <div class="stock-item-icon" style="background:${st.bg};color:${st.color}"><i class="fa-solid fa-tag"></i></div>
         <div class="stock-item-info">
-            <div class="stock-item-name">${cp.code}</div>
-            <div class="stock-item-cat">${cp.percent}% de desconto ${cp.active!==false?'':' — <span style="color:var(--danger)">Inativo</span>'}</div>
+            <div class="stock-item-name">${cp.code} ${cp.singleUse?'<span style="font-size:11px;background:#ede9fe;color:#6d28d9;padding:2px 6px;border-radius:4px;margin-left:4px"><i class="fa-solid fa-user"></i> Uso único</span>':''}</div>
+            <div class="stock-item-cat">${cp.percent}% de desconto — <span style="color:${st.color};font-weight:600">${st.label}</span></div>
+            ${periodHtml}
+            ${usedHtml}
         </div>
         <div class="flex gap-2">
             <button class="btn btn-sm ${cp.active!==false?'btn-warning':'btn-success'}" onclick="toggleCouponActive('${cp.id}')"><i class="fa-solid fa-power-off"></i> ${cp.active!==false?'Desativar':'Ativar'}</button>
             <button class="btn btn-sm btn-primary" onclick="showCouponModal('${cp.id}')"><i class="fa-solid fa-edit"></i></button>
             <button class="btn btn-sm btn-danger" onclick="deleteCoupon('${cp.id}')"><i class="fa-solid fa-trash"></i></button>
+        </div>
+    </div>`;
+    }).join('');
+}
+function renderCouponHistory() {
+    const c = currentCompany; if (!c) return;
+    const el = document.getElementById('coupons-history');
+    if (!el) return;
+    const hist = (c.couponUsageHistory || []).slice().sort((a,b) => new Date(b.usedAt) - new Date(a.usedAt));
+    if (!hist.length) {
+        el.innerHTML = '<div style="text-align:center;padding:60px;color:var(--gray)"><i class="fa-solid fa-clock-rotate-left" style="font-size:48px;display:block;margin-bottom:12px;color:var(--border)"></i><h3>Nenhum cupom utilizado ainda</h3><p style="font-size:13px;margin-top:8px">Assim que um cliente usar um cupom no pedido, ele aparecerá aqui</p></div>';
+        return;
+    }
+    el.innerHTML = hist.map(h => `
+    <div class="stock-item-row">
+        <div class="stock-item-icon" style="background:#dcfce7;color:var(--success)"><i class="fa-solid fa-check"></i></div>
+        <div class="stock-item-info">
+            <div class="stock-item-name">${h.code} — ${h.percent}% de desconto</div>
+            <div class="stock-item-cat">Cliente: ${h.customerName||'-'} ${h.orderNumber?(' • Pedido: '+h.orderNumber):''}</div>
+            <div class="stock-item-cat">Utilizado em: ${fmtCouponDate(h.usedAt)}</div>
         </div>
     </div>`).join('');
 }
@@ -2456,7 +2522,12 @@ function showCouponModal(cid) {
     showModal(`<i class="fa-solid fa-tag"></i> ${cp?'Editar':'Novo'} Cupom`,
     `<div class="form-group"><label>Código do Cupom *</label><input type="text" id="cp-code" class="form-control" style="text-transform:uppercase" placeholder="Ex: PROMO10" value="${cp?cp.code:''}"></div>
     <div class="form-group"><label>Percentual de Desconto (%) *</label><input type="number" id="cp-percent" class="form-control" min="1" max="100" step="1" placeholder="Ex: 10" value="${cp?cp.percent:''}"></div>
+    <div class="form-group"><label>Início da Validade (opcional)</label><input type="datetime-local" id="cp-start" class="form-control" value="${cp&&cp.startDate?cp.startDate:''}"></div>
+    <div class="form-group"><label>Fim da Validade (opcional)</label><input type="datetime-local" id="cp-end" class="form-control" value="${cp&&cp.endDate?cp.endDate:''}"></div>
+    <p style="color:var(--gray);font-size:12px;margin:-8px 0 12px">Deixe em branco para o cupom não ter data de início e/ou fim. Se preenchido, o cupom só fica disponível dentro do período informado.</p>
     <div class="form-group"><label style="display:flex;align-items:center;gap:8px;cursor:pointer;text-transform:none"><input type="checkbox" id="cp-active" style="width:18px;height:18px" ${!cp||cp.active!==false?'checked':''}> Cupom ativo (disponível para uso no cardápio online)</label></div>
+    <div class="form-group"><label style="display:flex;align-items:center;gap:8px;cursor:pointer;text-transform:none"><input type="checkbox" id="cp-singleuse" style="width:18px;height:18px" ${cp&&cp.singleUse?'checked':''}> Cupom de uso único (somente 1 pessoa pode utilizar; após o uso ele é suspenso automaticamente, sem afetar os demais cupons)</label></div>
+    ${cp&&cp.singleUse&&cp.used?`<p style="color:var(--danger);font-size:12px;margin-top:-8px"><i class="fa-solid fa-circle-info"></i> Este cupom já foi utilizado por ${cp.usedBy||'um cliente'} em ${fmtCouponDate(cp.usedAt)} e está suspenso.</p>`:''}
     <input type="hidden" id="cp-id" value="${cp?cp.id:''}">`,
     `<button class="btn btn-ghost" onclick="closeModal()">Cancelar</button>
     <button class="btn btn-primary" onclick="saveCoupon()"><i class="fa-solid fa-save"></i> Salvar Cupom</button>`, false);
@@ -2466,14 +2537,18 @@ async function saveCoupon() {
     const code = document.getElementById('cp-code').value.trim().toUpperCase();
     const percent = parseFloat(document.getElementById('cp-percent').value);
     const active = document.getElementById('cp-active').checked;
+    const startDate = document.getElementById('cp-start').value || '';
+    const endDate = document.getElementById('cp-end').value || '';
+    const singleUse = document.getElementById('cp-singleuse').checked;
     if (!code) { showToast('Informe o código do cupom','warning'); return; }
     if (!percent || percent <= 0 || percent > 100) { showToast('Informe um percentual de desconto válido (1 a 100)','warning'); return; }
+    if (startDate && endDate && new Date(endDate) < new Date(startDate)) { showToast('A data de fim não pode ser anterior à data de início','warning'); return; }
     const c = currentCompany;
     c.coupons = c.coupons || [];
     const dup = c.coupons.find(x => x.code === code && x.id !== id);
     if (dup) { showToast('Já existe um cupom com esse código','warning'); return; }
-    if (id) { const cp = c.coupons.find(x=>x.id===id); if (cp) { cp.code = code; cp.percent = percent; cp.active = active; } }
-    else { c.coupons.push({ id: genId(), code, percent, active, createdAt: new Date().toISOString() }); }
+    if (id) { const cp = c.coupons.find(x=>x.id===id); if (cp) { cp.code = code; cp.percent = percent; cp.active = active; cp.startDate = startDate; cp.endDate = endDate; cp.singleUse = singleUse; if (!singleUse) { cp.used = false; cp.usedBy=''; cp.usedAt=''; cp.usedOrderId=''; } } }
+    else { c.coupons.push({ id: genId(), code, percent, active, startDate, endDate, singleUse, used:false, usedBy:'', usedAt:'', usedOrderId:'', createdAt: new Date().toISOString() }); }
     showLoading('Salvando...');
     try { await db.collection('companies').doc(currentCompanyId).update({coupons:c.coupons}); hideLoading(); closeModal(); renderCoupons(); showToast(id?'Cupom atualizado!':'Cupom criado!','success'); }
     catch(e) { hideLoading(); showToast('Erro: '+e.message,'danger'); }
@@ -2609,6 +2684,8 @@ function renderOrdersFromData(orders) {
         filtered = orders.filter(o => o.status === 'paid');
     } else if (orderFilter === 'pending') {
         filtered = orders.filter(o => o.status === 'pending' && o.orderStatus !== 'finalizado');
+    } else if (orderFilter === 'cancelled') {
+        filtered = orders.filter(o => o.status === 'cancelled');
     } else {
         filtered = orders.filter(o => o.orderStatus !== 'finalizado');
     }
@@ -2617,7 +2694,8 @@ function renderOrdersFromData(orders) {
     if (!el) return;
     
     if (!filtered.length) {
-        el.innerHTML = `<div class="text-center" style="padding:60px;color:var(--gray)"><i class="fa-solid fa-receipt" style="font-size:48px;display:block;margin-bottom:12px;color:var(--border)"></i><h3>Nenhum pedido ${orderFilter==='all'?'ativo':'aguardando pagamento'}</h3><p style="font-size:13px;margin-top:8px">Os pedidos finalizados aparecem no Histórico</p></div>`;
+        const emptyLabel = orderFilter==='all' ? 'ativo' : orderFilter==='cancelled' ? 'cancelado' : 'aguardando pagamento';
+        el.innerHTML = `<div class="text-center" style="padding:60px;color:var(--gray)"><i class="fa-solid fa-receipt" style="font-size:48px;display:block;margin-bottom:12px;color:var(--border)"></i><h3>Nenhum pedido ${emptyLabel}</h3><p style="font-size:13px;margin-top:8px">Os pedidos finalizados aparecem no Histórico</p></div>`;
         return;
     }
     
@@ -3525,14 +3603,26 @@ function applyPubCoupon() {
     const code = codeInput.value.trim().toUpperCase();
     if (!code) { pubAppliedCoupon = null; if (msgEl) msgEl.innerHTML = ''; showPubCartModal(); return; }
     const coupons = pubCompany.coupons || [];
-    const cp = coupons.find(c => c.code === code && c.active !== false);
+    const cp = coupons.find(c => c.code === code);
+    let errorMsg = '';
     if (!cp) {
+        errorMsg = 'Cupom inválido';
+    } else if (cp.active === false) {
+        errorMsg = 'Cupom inativo';
+    } else if (cp.singleUse && cp.used) {
+        errorMsg = 'Este cupom já foi utilizado e não está mais disponível';
+    } else if (cp.startDate && new Date() < new Date(cp.startDate)) {
+        errorMsg = 'Este cupom ainda não está disponível';
+    } else if (cp.endDate && new Date() > new Date(cp.endDate)) {
+        errorMsg = 'Este cupom expirou';
+    }
+    if (errorMsg) {
         pubAppliedCoupon = null;
-        if (msgEl) msgEl.innerHTML = '<div style="color:var(--danger);font-size:12px;margin-top:6px"><i class="fa-solid fa-circle-xmark"></i> Cupom inválido ou inativo</div>';
+        if (msgEl) msgEl.innerHTML = `<div style="color:var(--danger);font-size:12px;margin-top:6px"><i class="fa-solid fa-circle-xmark"></i> ${errorMsg}</div>`;
         updatePubTotalsDisplay();
         return;
     }
-    pubAppliedCoupon = { code: cp.code, percent: cp.percent };
+    pubAppliedCoupon = { id: cp.id, code: cp.code, percent: cp.percent, singleUse: !!cp.singleUse };
     showToast(`Cupom aplicado: ${cp.percent}% de desconto!`, 'success');
     showPubCartModal();
 }
@@ -3767,7 +3857,7 @@ async function placePubOrder() {
     try {
         const now = new Date();
         const osNum = genOSNumber();
-        await db.collection('orders').add({
+        const orderRef = await db.collection('orders').add({
             companyId: pubCompanyId,
             customerId: currentCustomer.id,
             customerName: name,
@@ -3793,6 +3883,32 @@ async function placePubOrder() {
             source: 'pub_menu',
             orderStatus: 'novo'
         });
+        // Registra o uso do cupom (histórico + suspensão automática se for de uso único)
+        if (pubAppliedCoupon) {
+            try {
+                pubCompany.coupons = pubCompany.coupons || [];
+                pubCompany.couponUsageHistory = pubCompany.couponUsageHistory || [];
+                const cp = pubCompany.coupons.find(x => x.id === pubAppliedCoupon.id || x.code === pubAppliedCoupon.code);
+                if (cp && cp.singleUse) {
+                    cp.used = true;
+                    cp.usedBy = name;
+                    cp.usedAt = now.toISOString();
+                    cp.usedOrderId = orderRef.id;
+                }
+                pubCompany.couponUsageHistory.push({
+                    id: genId(),
+                    couponId: cp ? cp.id : (pubAppliedCoupon.id||''),
+                    code: pubAppliedCoupon.code,
+                    percent: pubAppliedCoupon.percent,
+                    customerId: currentCustomer.id,
+                    customerName: name,
+                    orderId: orderRef.id,
+                    orderNumber: osNum,
+                    usedAt: now.toISOString()
+                });
+                await db.collection('companies').doc(pubCompanyId).update({coupons: pubCompany.coupons, couponUsageHistory: pubCompany.couponUsageHistory});
+            } catch(e) { console.error('Erro ao registrar uso do cupom:', e); }
+        }
         hideLoading();
         closeModal();
         pubCart = [];
