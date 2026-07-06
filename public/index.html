@@ -321,6 +321,14 @@ table tr:hover td{background:#fafbfc}
 .chat-bubble.them{align-self:flex-start;background:#fff;border-bottom-left-radius:2px}
 .chat-bubble img{max-width:100%;border-radius:8px;margin-bottom:4px;display:block;cursor:pointer}
 .chat-bubble .chat-time{display:block;font-size:10px;color:var(--gray);margin-top:3px;text-align:right}
+.chat-msg-name{font-size:11px;font-weight:800;margin-bottom:3px;opacity:.8}
+.chat-bubble.me .chat-msg-name{color:#0a6b1f}
+.chat-bubble.them .chat-msg-name{color:var(--primary)}
+.chat-img-wrap{position:relative;display:inline-block;max-width:100%}
+.chat-img-wrap img{max-width:100%}
+.chat-img-dl{position:absolute;top:6px;right:6px;background:rgba(0,0,0,.55);color:#fff;border:none;width:26px;height:26px;border-radius:50%;cursor:pointer;font-size:11px;display:flex;align-items:center;justify-content:center}
+.chat-img-dl:hover{background:rgba(0,0,0,.8)}
+.chat-closed-note{background:#fef3c7;color:#92400e;border:1px solid #fcd34d;border-radius:10px;padding:8px 12px;font-size:12px;text-align:center;margin-bottom:8px}
 .chat-panel-empty{margin:auto;text-align:center;color:var(--gray);padding:24px;font-size:13px}
 .chat-panel-footer{padding:10px 12px;border-top:1px solid var(--border);display:flex;align-items:center;gap:8px;background:#fff}
 .chat-panel-footer input[type=text]{flex:1;border:1px solid var(--border);border-radius:20px;padding:10px 14px;font-size:13.5px;outline:none}
@@ -836,6 +844,7 @@ table th,table td{padding:7px 8px;font-size:11px}
 <h3 style="font-size:15px;font-weight:700;margin-bottom:4px"><i class="fa-solid fa-link"></i> Link do Cardápio Digital</h3>
 <p style="font-size:13px;opacity:.85">Compartilhe com seus clientes — eles fazem o pedido direto no cardápio</p>
 <div class="menu-link-url"><span id="menu-link-text">Carregando...</span><button class="btn btn-sm" style="background:rgba(255,255,255,.2);color:#fff;flex-shrink:0" onclick="copyMenuLink()"><i class="fa-solid fa-copy"></i> Copiar</button></div>
+<button class="btn btn-sm" style="background:rgba(255,255,255,.2);color:#fff;margin-top:10px" onclick="showBusinessHoursModal()"><i class="fa-solid fa-clock"></i> Horário de Funcionamento</button>
 </div>
 </div>
 <div class="flex items-center justify-between mb-4 flex-wrap gap-3">
@@ -865,6 +874,10 @@ table th,table td{padding:7px 8px;font-size:11px}
 <div id="section-chat" class="section">
 <div style="font-size:15px;font-weight:700;margin-bottom:6px"><i class="fa-solid fa-comments"></i> Mensagens dos Clientes</div>
 <p style="color:var(--gray);font-size:13px;margin-bottom:16px">Converse diretamente com os clientes que enviaram mensagens pelo cardápio online. Selecione um cliente na lista para abrir a conversa.</p>
+<div class="flex gap-2" style="margin-bottom:12px">
+<button class="btn btn-sm" id="chat-tab-active" onclick="showAdminChatTab('active')"><i class="fa-solid fa-comments"></i> Conversas Ativas</button>
+<button class="btn btn-sm" id="chat-tab-archived" onclick="showAdminChatTab('archived')"><i class="fa-solid fa-box-archive"></i> Arquivadas</button>
+</div>
 <div class="chat-admin-wrap">
 <div class="chat-admin-list" id="chat-admin-list"></div>
 <div class="chat-admin-thread" id="chat-admin-thread">
@@ -1083,6 +1096,10 @@ let pubChatId = null;
 let adminChatsUnsubscribe = null;
 let adminAllChats = [];
 let adminSelectedChatId = null;
+let adminChatsMsgCount = {};
+let adminChatsFirstSnapshot = true;
+let pubChatFirstSnapshot = true;
+let adminChatListFilter = 'active';
 let allCompanyOrders = [];
 let allCompanies = [];
 let prevPendingCount = 0;
@@ -1887,16 +1904,29 @@ upgradeBtn.classList.add('hidden');
 trialBanner.classList.add('hidden');
 }
 if (adminChatsUnsubscribe) adminChatsUnsubscribe();
+adminChatsFirstSnapshot = true;
 adminChatsUnsubscribe = db.collection('chats')
     .where('companyId','==',currentCompanyId)
     .onSnapshot(snap => {
         adminAllChats = snap.docs.map(d => ({ id:d.id, ...d.data() })).sort((a,b) => new Date(b.lastMessageAt||0) - new Date(a.lastMessageAt||0));
+        if (!adminChatsFirstSnapshot) {
+            adminAllChats.forEach(ch => {
+                const prevCount = adminChatsMsgCount[ch.id] || 0;
+                const msgs = ch.messages || [];
+                if (msgs.length > prevCount) {
+                    const lastMsg = msgs[msgs.length-1];
+                    if (lastMsg && lastMsg.sender === 'customer') playChatSound();
+                }
+            });
+        }
+        adminAllChats.forEach(ch => { adminChatsMsgCount[ch.id] = (ch.messages||[]).length; });
+        adminChatsFirstSnapshot = false;
         updateChatNavBadge();
         const chatSection = document.getElementById('section-chat');
         if (chatSection && chatSection.classList.contains('active')) renderAdminChatList();
         if (adminSelectedChatId) {
             const cur = adminAllChats.find(x => x.id === adminSelectedChatId);
-            if (cur) renderAdminChatThread(cur);
+            if (cur) { renderAdminChatThread(cur); markCustomerMsgsRead(cur); }
         }
     }, error => { console.error('Erro no chat admin:', error); });
 
@@ -2428,6 +2458,92 @@ const payIcons = {dinheiro:'💵',cartao:'',pix:'📱'};
 showModal('<i class="fa-solid fa-clock-rotate-left"></i> Histórico de Vendas — Hoje', `<div style="max-height:65vh;overflow-y:auto"><div style="font-size:13px;color:var(--gray);margin-bottom:10px">${sales.length} venda(s) hoje · Total: <strong style="color:var(--success)">${fmt(sales.reduce((s,x)=>s+x.total,0))}</strong></div>${sales.map((s,i) => { const t = new Date(s.date); const timeStr = t.toLocaleTimeString('pt-BR',{hour:'2-digit',minute:'2-digit'}); return `<div style="background:#f8fafc;border-radius:10px;padding:12px;margin-bottom:8px;border:1px solid var(--border)"><div style="display:flex;align-items:center;justify-content:space-between;margin-bottom:6px"><div><div style="font-size:11px;font-family:monospace;font-weight:700;color:var(--primary)">${s.orderNumber||s.id}</div><div style="font-size:11px;color:var(--gray)">${timeStr}${s.customerName?' · '+s.customerName:''}</div></div><div style="text-align:right"><div style="font-size:15px;font-weight:900;color:var(--success)">${fmt(s.total)}</div><div style="font-size:11px;color:var(--gray)">${payIcons[s.paymentMethod]||''} ${s.paymentMethod||''}</div></div></div><div style="font-size:11px;color:var(--dark3);margin-bottom:8px">${(s.items||[]).map(i=>`${i.qty}x ${i.name}`).join(', ')}</div><button class="btn btn-sm btn-ghost w-full" onclick="printOS(${JSON.stringify(s).replace(/"/g,'&quot;')})"><i class="fa-solid fa-print"></i> Reimprimir OS</button></div>`; }).join('')}</div>`, `<button class="btn btn-primary w-full" onclick="closeModal()">Fechar</button>`, false);
 } catch(e) { hideLoading(); showToast('Erro: '+e.message,'danger'); }
 }
+function isCompanyOpen(company) {
+    const bh = company && company.businessHours;
+    if (!bh) return true;
+    const now = new Date();
+    const cfg = bh[now.getDay()];
+    if (!cfg || cfg.closed) return false;
+    if (!cfg.open || !cfg.close) return true;
+    const cur = now.getHours()*60 + now.getMinutes();
+    const [oh,om] = cfg.open.split(':').map(Number);
+    const [ch,cm] = cfg.close.split(':').map(Number);
+    const openMin = oh*60+om, closeMin = ch*60+cm;
+    if (closeMin > openMin) return cur >= openMin && cur < closeMin;
+    return cur >= openMin || cur < closeMin;
+}
+function showBusinessHoursModal() {
+    const c = currentCompany;
+    const bh = (c && c.businessHours) || {};
+    const days = [
+        {k:0,l:'Domingo'},{k:1,l:'Segunda-feira'},{k:2,l:'Ter\u00e7a-feira'},{k:3,l:'Quarta-feira'},
+        {k:4,l:'Quinta-feira'},{k:5,l:'Sexta-feira'},{k:6,l:'S\u00e1bado'}
+    ];
+    const rowsHtml = days.map(d => {
+        const cfg = bh[d.k] || { open:'08:00', close:'18:00', closed:(d.k===0) };
+        return `
+        <div style="display:flex;align-items:center;gap:10px;padding:10px 0;border-bottom:1px solid #f1f5f9;flex-wrap:wrap">
+            <label style="display:flex;align-items:center;gap:6px;min-width:140px;font-size:13px;font-weight:600;cursor:pointer">
+                <input type="checkbox" id="bh-open-${d.k}" ${!cfg.closed?'checked':''} onchange="document.getElementById('bh-times-${d.k}').style.display=this.checked?'flex':'none'">
+                ${d.l}
+            </label>
+            <div id="bh-times-${d.k}" style="display:${!cfg.closed?'flex':'none'};gap:6px;align-items:center;flex:1;min-width:180px">
+                <input type="time" id="bh-from-${d.k}" class="form-control" style="padding:6px 8px" value="${cfg.open||'08:00'}">
+                <span style="font-size:12px;color:var(--gray)">at\u00e9</span>
+                <input type="time" id="bh-to-${d.k}" class="form-control" style="padding:6px 8px" value="${cfg.close||'18:00'}">
+            </div>
+        </div>`;
+    }).join('');
+    showModal('<i class="fa-solid fa-clock" style="color:var(--primary)"></i> Hor\u00e1rio de Funcionamento',
+    `<p style="color:var(--gray);font-size:13px;margin-bottom:12px">Defina os dias e hor\u00e1rios em que sua empresa est\u00e1 aberta. Fora desse hor\u00e1rio, os clientes que enviarem mensagem no chat receber\u00e3o automaticamente um aviso informando que a empresa est\u00e1 fechada no momento.</p>
+    ${rowsHtml}`,
+    `<button class="btn btn-ghost" onclick="closeModal()">Cancelar</button>
+    <button class="btn btn-primary" onclick="saveBusinessHours()"><i class="fa-solid fa-check"></i> Salvar Hor\u00e1rio</button>`, false);
+}
+async function saveBusinessHours() {
+    const businessHours = {};
+    for (let k=0;k<=6;k++) {
+        const openChk = document.getElementById('bh-open-'+k)?.checked;
+        const from = document.getElementById('bh-from-'+k)?.value || '08:00';
+        const to = document.getElementById('bh-to-'+k)?.value || '18:00';
+        businessHours[k] = { closed: !openChk, open: from, close: to };
+    }
+    showLoading('Salvando...');
+    try {
+        await db.collection('companies').doc(currentCompanyId).update({ businessHours });
+        currentCompany.businessHours = businessHours;
+        hideLoading(); closeModal();
+        showToast('Hor\u00e1rio de funcionamento atualizado!','success');
+    } catch(e) { hideLoading(); showToast('Erro: '+e.message,'danger'); }
+}
+function playChatSound() {
+    try {
+        unlockAudio();
+        if (!sharedAudioCtx) return;
+        const start = sharedAudioCtx.currentTime;
+        const osc = sharedAudioCtx.createOscillator();
+        const gn = sharedAudioCtx.createGain();
+        osc.connect(gn); gn.connect(sharedAudioCtx.destination);
+        osc.type = 'sine';
+        osc.frequency.setValueAtTime(900, start);
+        osc.frequency.exponentialRampToValueAtTime(650, start + 0.3);
+        gn.gain.setValueAtTime(0.0001, start);
+        gn.gain.exponentialRampToValueAtTime(0.9, start + 0.03);
+        gn.gain.exponentialRampToValueAtTime(0.0001, start + 1.9);
+        osc.start(start);
+        osc.stop(start + 2);
+    } catch(e) {}
+}
+function downloadChatImage(dataUrl) {
+    try {
+        const a = document.createElement('a');
+        a.href = dataUrl;
+        a.download = 'foto-chat-' + Date.now() + '.jpg';
+        document.body.appendChild(a);
+        a.click();
+        a.remove();
+    } catch(e) { showToast('N\u00e3o foi poss\u00edvel salvar a imagem','danger'); }
+}
 function showSetDeliveryFeeModal() {
 const pdvFee = pdvDeliveryFee || 0;
 const pubFee = pubDeliveryFee || 0;
@@ -2667,21 +2783,36 @@ async function deleteCoupon(cid) {
 function updateChatNavBadge() {
     const el = document.getElementById('nb-chat');
     if (!el) return;
-    const unreadCount = adminAllChats.filter(x => x.unreadCompany).length;
+    const unreadCount = adminAllChats.filter(x => x.unreadCompany && !x.archived).length;
     if (unreadCount > 0) { el.style.display = 'inline-block'; el.textContent = unreadCount; }
     else { el.style.display = 'none'; }
+}
+function showAdminChatTab(tab) {
+    adminChatListFilter = tab;
+    const bA = document.getElementById('chat-tab-active');
+    const bH = document.getElementById('chat-tab-archived');
+    if (bA) bA.className = 'btn btn-sm' + (tab==='active' ? ' btn-primary' : '');
+    if (bH) bH.className = 'btn btn-sm' + (tab==='archived' ? ' btn-primary' : '');
+    renderAdminChatList();
 }
 function renderAdminChatList() {
     const el = document.getElementById('chat-admin-list');
     if (!el) return;
-    if (!adminAllChats.length) {
-        el.innerHTML = '<div class="chat-panel-empty">Nenhuma conversa ainda.<br>Assim que um cliente enviar uma mensagem pelo cardápio online, ela aparecerá aqui.</div>';
+    const bA = document.getElementById('chat-tab-active');
+    const bH = document.getElementById('chat-tab-archived');
+    if (bA) bA.className = 'btn btn-sm' + (adminChatListFilter==='active' ? ' btn-primary' : '');
+    if (bH) bH.className = 'btn btn-sm' + (adminChatListFilter==='archived' ? ' btn-primary' : '');
+    const list = adminAllChats.filter(ch => adminChatListFilter === 'archived' ? !!ch.archived : !ch.archived);
+    if (!list.length) {
+        el.innerHTML = adminChatListFilter === 'archived'
+            ? '<div class="chat-panel-empty">Nenhuma conversa arquivada.</div>'
+            : '<div class="chat-panel-empty">Nenhuma conversa ainda.<br>Assim que um cliente enviar uma mensagem pelo cardápio online, ela aparecerá aqui.</div>';
         return;
     }
-    el.innerHTML = adminAllChats.map(ch => `
+    el.innerHTML = list.map(ch => `
     <div class="chat-admin-list-item ${ch.id===adminSelectedChatId?'active':''}" onclick="selectAdminChat('${ch.id}')">
         <div class="cn"><span>${ch.customerName||'Cliente'}</span> ${ch.unreadCompany?'<span class="nav-badge-dot" style="margin-left:0">novo</span>':''}</div>
-        <div class="cm">${ch.lastMessage||''}</div>
+        <div class="cm">${ch.archived?'<i class="fa-solid fa-box-archive" style="margin-right:4px"></i>':''}${ch.lastMessage||''}</div>
     </div>`).join('');
 }
 function selectAdminChat(chatId) {
@@ -2690,22 +2821,48 @@ function selectAdminChat(chatId) {
     if (!chat) return;
     renderAdminChatList();
     renderAdminChatThread(chat);
+    markCustomerMsgsRead(chat);
     if (chat.unreadCompany) {
         db.collection('chats').doc(chatId).update({ unreadCompany: false }).catch(()=>{});
+    }
+}
+async function markCustomerMsgsRead(chat) {
+    if (!chat) return;
+    const msgs = chat.messages || [];
+    let changed = false;
+    const updated = msgs.map(m => {
+        if (m.sender === 'customer' && !m.read) { changed = true; return { ...m, read: true }; }
+        return m;
+    });
+    if (changed) {
+        try { await db.collection('chats').doc(chat.id).update({ messages: updated }); } catch(e) {}
     }
 }
 function renderAdminChatThread(chat) {
     const el = document.getElementById('chat-admin-thread');
     if (!el) return;
     const msgs = chat.messages || [];
-    const msgsHtml = msgs.length ? msgs.map(m => `
-    <div class="chat-bubble ${m.sender==='company'?'me':'them'}">
-        ${m.image ? `<img src="${m.image}" onclick="window.open('${m.image}','_blank')">` : ''}
+    const companyName = (currentCompany && currentCompany.companyName) || 'Empresa';
+    const msgsHtml = msgs.length ? msgs.map(m => {
+        const isCompany = m.sender === 'company';
+        const name = isCompany ? companyName : (chat.customerName||'Cliente');
+        const ticks = isCompany ? `<i class="fa-solid ${m.read?'fa-check-double':'fa-check'}" style="color:${m.read?'#34b7f1':'#94a3b8'};font-size:11px;margin-left:4px"></i>` : '';
+        return `
+    <div class="chat-bubble ${isCompany?'me':'them'}">
+        <div class="chat-msg-name">${escapeHtml(name)}</div>
+        ${m.image ? `<div class="chat-img-wrap"><img src="${m.image}" onclick="window.open('${m.image}','_blank')"><button class="chat-img-dl" onclick="event.stopPropagation();downloadChatImage('${m.image}')" title="Salvar imagem"><i class="fa-solid fa-download"></i></button></div>` : ''}
         ${m.text ? `<span>${escapeHtml(m.text)}</span>` : ''}
-        <span class="chat-time">${fmtChatTime(m.createdAt)}</span>
-    </div>`).join('') : '<div class="chat-panel-empty">Nenhuma mensagem ainda</div>';
+        <span class="chat-time">${fmtChatTime(m.createdAt)}${ticks}</span>
+    </div>`;
+    }).join('') : '<div class="chat-panel-empty">Nenhuma mensagem ainda</div>';
     el.innerHTML = `
-    <div class="chat-admin-thread-header"><i class="fa-solid fa-user"></i> ${chat.customerName||'Cliente'}</div>
+    <div class="chat-admin-thread-header" style="display:flex;align-items:center;justify-content:space-between;gap:8px;flex-wrap:wrap">
+        <span><i class="fa-solid fa-user"></i> ${chat.customerName||'Cliente'}</span>
+        <div class="flex gap-2">
+            <button class="btn btn-sm btn-ghost" onclick="toggleArchiveChat('${chat.id}')" title="${chat.archived?'Desarquivar conversa':'Arquivar conversa'}"><i class="fa-solid fa-box-archive"></i> ${chat.archived?'Desarquivar':'Arquivar'}</button>
+            <button class="btn btn-sm btn-danger" onclick="confirmClearChatMessages('${chat.id}')" title="Limpar mensagens"><i class="fa-solid fa-trash"></i> Limpar</button>
+        </div>
+    </div>
     <div class="chat-admin-thread-body" id="chat-admin-thread-body">${msgsHtml}</div>
     <div class="chat-admin-thread-footer">
         <input type="file" id="chat-admin-file" accept="image/*" style="display:none" onchange="handleAdminChatImage(event,'${chat.id}')">
@@ -2716,10 +2873,40 @@ function renderAdminChatThread(chat) {
     const body = document.getElementById('chat-admin-thread-body');
     if (body) body.scrollTop = body.scrollHeight;
 }
+function confirmClearChatMessages(chatId) {
+    const chat = adminAllChats.find(x => x.id === chatId);
+    if (!chat) return;
+    showModal('<i class="fa-solid fa-trash" style="color:var(--danger)"></i> Limpar Conversa',
+    `<div class="alert alert-danger"><i class="fa-solid fa-exclamation-triangle"></i> A\u00e7\u00e3o irrevers\u00edvel!</div><p>Isso apagar\u00e1 permanentemente todas as mensagens trocadas com <strong>${chat.customerName||'este cliente'}</strong>. O hist\u00f3rico de conversa n\u00e3o poder\u00e1 ser recuperado.</p>`,
+    `<button class="btn btn-ghost" onclick="closeModal()">Cancelar</button><button class="btn btn-danger" onclick="clearChatMessages('${chatId}')"><i class="fa-solid fa-trash"></i> Limpar Conversa</button>`, false);
+}
+async function clearChatMessages(chatId) {
+    closeModal();
+    showLoading('Limpando conversa...');
+    try {
+        await db.collection('chats').doc(chatId).update({ messages: [], lastMessage: '', unreadCompany: false, unreadCustomer: false });
+        hideLoading();
+        showToast('Conversa limpa com sucesso!', 'success');
+    } catch(e) { hideLoading(); showToast('Erro: '+e.message, 'danger'); }
+}
+async function toggleArchiveChat(chatId) {
+    const chat = adminAllChats.find(x => x.id === chatId);
+    if (!chat) return;
+    const archived = !chat.archived;
+    try {
+        await db.collection('chats').doc(chatId).update({ archived });
+        showToast(archived ? 'Conversa arquivada!' : 'Conversa restaurada!', 'success');
+        if (archived) {
+            adminSelectedChatId = null;
+            const el = document.getElementById('chat-admin-thread');
+            if (el) el.innerHTML = '<div class="chat-panel-empty" style="margin:auto"><i class="fa-solid fa-comments" style="font-size:40px;display:block;margin-bottom:10px;color:var(--border)"></i>Selecione um cliente para ver a conversa</div>';
+        }
+    } catch(e) { showToast('Erro: '+e.message, 'danger'); }
+}
 async function sendAdminChatPayload(chatId, text, image) {
     const chat = adminAllChats.find(x => x.id === chatId);
     if (!chat) return;
-    const msg = { id: genId(), sender: 'company', text: text||'', image: image||'', createdAt: new Date().toISOString() };
+    const msg = { id: genId(), sender: 'company', text: text||'', image: image||'', createdAt: new Date().toISOString(), read: false };
     const newMsgs = [...(chat.messages||[]), msg];
     try {
         await db.collection('chats').doc(chatId).update({
@@ -3710,15 +3897,26 @@ function setupCustomerChatListener() {
     if (!currentCustomer || !pubCompanyId) return;
     pubChatId = getChatDocId(pubCompanyId, currentCustomer.id);
     if (pubChatUnsubscribe) pubChatUnsubscribe();
+    pubChatFirstSnapshot = true;
     pubChatUnsubscribe = db.collection('chats').doc(pubChatId).onSnapshot(doc => {
-        pubChatData = doc.exists ? doc.data() : null;
+        const newData = doc.exists ? doc.data() : null;
+        if (!pubChatFirstSnapshot) {
+            const prevMsgs = (pubChatData && pubChatData.messages) || [];
+            const newMsgs = (newData && newData.messages) || [];
+            if (newMsgs.length > prevMsgs.length) {
+                const last = newMsgs[newMsgs.length-1];
+                if (last && last.sender === 'company') playChatSound();
+            }
+        }
+        pubChatFirstSnapshot = false;
+        pubChatData = newData;
         const badge = document.getElementById('pub-chat-badge');
         if (badge) {
             if (pubChatData && pubChatData.unreadCustomer) { badge.style.display='flex'; badge.textContent = '!'; }
             else { badge.style.display = 'none'; }
         }
         const overlay = document.getElementById('chat-overlay');
-        if (overlay && !overlay.classList.contains('hidden')) renderPubChatMessages();
+        if (overlay && !overlay.classList.contains('hidden')) { renderPubChatMessages(); markCompanyMsgsRead(); }
     }, error => { console.error('Erro no chat:', error); });
 }
 function openPubChat() {
@@ -3726,6 +3924,7 @@ function openPubChat() {
     document.getElementById('pub-chat-company-name').textContent = pubCompany ? pubCompany.companyName : 'Loja';
     document.getElementById('chat-overlay').classList.remove('hidden');
     renderPubChatMessages();
+    markCompanyMsgsRead();
     if (pubChatData && pubChatData.unreadCustomer) {
         db.collection('chats').doc(pubChatId).update({ unreadCustomer: false }).catch(()=>{});
     }
@@ -3733,6 +3932,19 @@ function openPubChat() {
 }
 function closePubChat() {
     document.getElementById('chat-overlay').classList.add('hidden');
+}
+async function markCompanyMsgsRead() {
+    if (!pubChatData || !pubChatId) return;
+    const msgs = pubChatData.messages || [];
+    let changed = false;
+    const updated = msgs.map(m => {
+        if (m.sender === 'company' && !m.read) { changed = true; return { ...m, read: true }; }
+        return m;
+    });
+    if (changed) {
+        pubChatData = { ...pubChatData, messages: updated };
+        try { await db.collection('chats').doc(pubChatId).update({ messages: updated }); } catch(e) {}
+    }
 }
 function renderPubChatMessages() {
     const body = document.getElementById('pub-chat-body');
@@ -3742,12 +3954,20 @@ function renderPubChatMessages() {
         body.innerHTML = '<div class="chat-panel-empty"><i class="fa-solid fa-comment-dots" style="font-size:36px;display:block;margin-bottom:8px;color:#c8d0d8"></i>Envie uma mensagem para a loja.<br>Pergunte sobre seu pedido, mande uma foto ou deixe seu feedback!</div>';
         return;
     }
-    body.innerHTML = msgs.map(m => `
-    <div class="chat-bubble ${m.sender==='customer'?'me':'them'}">
-        ${m.image ? `<img src="${m.image}" onclick="window.open('${m.image}','_blank')">` : ''}
+    const companyName = (pubCompany && pubCompany.companyName) || 'Loja';
+    const customerName = (currentCustomer && currentCustomer.name) || 'Voc\u00ea';
+    body.innerHTML = msgs.map(m => {
+        const isCustomer = m.sender === 'customer';
+        const name = isCustomer ? customerName : companyName;
+        const ticks = isCustomer ? `<i class="fa-solid ${m.read?'fa-check-double':'fa-check'}" style="color:${m.read?'#34b7f1':'#94a3b8'};font-size:11px;margin-left:4px"></i>` : '';
+        return `
+    <div class="chat-bubble ${isCustomer?'me':'them'}">
+        <div class="chat-msg-name">${escapeHtml(name)}</div>
+        ${m.image ? `<div class="chat-img-wrap"><img src="${m.image}" onclick="window.open('${m.image}','_blank')"><button class="chat-img-dl" onclick="event.stopPropagation();downloadChatImage('${m.image}')" title="Salvar imagem"><i class="fa-solid fa-download"></i></button></div>` : ''}
         ${m.text ? `<span>${escapeHtml(m.text)}</span>` : ''}
-        <span class="chat-time">${fmtChatTime(m.createdAt)}</span>
-    </div>`).join('');
+        <span class="chat-time">${fmtChatTime(m.createdAt)}${ticks}</span>
+    </div>`;
+    }).join('');
     body.scrollTop = body.scrollHeight;
 }
 function escapeHtml(str) {
@@ -3755,7 +3975,7 @@ function escapeHtml(str) {
 }
 async function sendPubChatPayload(text, image) {
     if (!currentCustomer || !pubCompanyId) return;
-    const msg = { id: genId(), sender: 'customer', text: text||'', image: image||'', createdAt: new Date().toISOString() };
+    const msg = { id: genId(), sender: 'customer', text: text||'', image: image||'', createdAt: new Date().toISOString(), read: false };
     const existingMsgs = (pubChatData && pubChatData.messages) || [];
     const newMsgs = [...existingMsgs, msg];
     const payload = {
@@ -3772,7 +3992,30 @@ async function sendPubChatPayload(text, image) {
         await db.collection('chats').doc(pubChatId).set(payload, { merge: true });
         pubChatData = { ...(pubChatData||{}), ...payload };
         renderPubChatMessages();
+        maybeSendClosedAutoReply(newMsgs);
     } catch(e) { showToast('Erro ao enviar mensagem: '+e.message, 'danger'); }
+}
+async function maybeSendClosedAutoReply(afterMsgs) {
+    if (!pubCompany || isCompanyOpen(pubCompany)) return;
+    const lastAuto = (pubChatData && pubChatData.lastAutoReplyAt) ? new Date(pubChatData.lastAutoReplyAt).getTime() : 0;
+    if (Date.now() - lastAuto < 20*60*1000) return;
+    const companyName = pubCompany.companyName || 'Nossa empresa';
+    const autoMsg = {
+        id: genId(),
+        sender: 'company',
+        text: `${companyName} agradece o seu contato! No momento estamos fechados. Assim que pudermos, responderemos sua mensagem.`,
+        image: '',
+        createdAt: new Date().toISOString(),
+        read: false,
+        auto: true
+    };
+    const finalMsgs = [...afterMsgs, autoMsg];
+    const autoPayload = { messages: finalMsgs, lastMessage: autoMsg.text, lastMessageAt: autoMsg.createdAt, unreadCustomer: true, lastAutoReplyAt: autoMsg.createdAt };
+    try {
+        await db.collection('chats').doc(pubChatId).set(autoPayload, { merge: true });
+        pubChatData = { ...(pubChatData||{}), ...autoPayload };
+        renderPubChatMessages();
+    } catch(e) {}
 }
 function sendPubChatMessage() {
     const input = document.getElementById('pub-chat-input');
