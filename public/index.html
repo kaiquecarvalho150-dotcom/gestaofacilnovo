@@ -2093,7 +2093,8 @@ const c = currentCompany;
 const globalAdds = c.globalAdditionals || [];
 const product = (c.menuItems||[]).find(p=>p.id===itemId);
 if (!product) return;
-if (globalAdds.length > 0) { showAdditionalsModal(itemId, product); }
+const isBebida = (product.category||'').trim().toLowerCase() === 'bebidas';
+if (globalAdds.length > 0 && !isBebida) { showAdditionalsModal(itemId, product); }
 else { addToCartDirect(itemId, product); }
 }
 function showAdditionalsModal(itemId, product) {
@@ -4080,7 +4081,8 @@ const grid = document.getElementById('pub-items');
 if (!filtered.length) { grid.innerHTML = '<div style="grid-column:1/-1;text-align:center;padding:40px;color:var(--gray)">Nenhum item encontrado</div>'; return; }
 grid.innerHTML = filtered.map(p => {
 const oos = (p.stock || 0) <= 0;
-return `<div class="pub-item ${oos?'out-of-stock':''}" style="position:relative" onclick="${oos ? "showToast('Esgotado','warning')" : `showPubItemModal('${p.id}')`}">
+const isBebida = (p.category||'').trim().toLowerCase() === 'bebidas';
+return `<div class="pub-item ${oos?'out-of-stock':''}" style="position:relative" onclick="${oos ? "showToast('Esgotado','warning')" : (isBebida ? `quickAddPubCart('${p.id}')` : `showPubItemModal('${p.id}')`)}">
 <span style="position:absolute;top:6px;left:6px;background:var(--primary);color:#fff;font-size:11px;font-weight:800;padding:2px 8px;border-radius:10px;z-index:1">#${p._num}</span>
 ${p.image ? `<img src="${p.image}">` : `<div class="pub-item-no-img">${getCategoryEmoji(p.category)}</div>`}
 <div class="pub-item-body">
@@ -4094,6 +4096,16 @@ ${oos ? '<div style="color:var(--danger);font-size:11px;font-weight:700">Esgotad
 }
 function setPubCat(cat) { pubActiveCat = cat; renderPublicMenu(); }
 function onPubSearchInput() { pubSearchTerm = document.getElementById('pub-search')?.value || ''; renderPublicMenu(); }
+function quickAddPubCart(iid) {
+const p = (pubCompany.menuItems || []).find(x => x.id === iid);
+if (!p) return;
+const sigKey = iid + '|';
+const existing = pubCart.find(i => i._sigKey === sigKey);
+if (existing) existing.qty += 1;
+else pubCart.push({ id: iid, name: p.name, price: p.price, qty: 1, additionals: [], _sigKey: sigKey });
+updatePubCartCount();
+showToast('Adicionado ao carrinho!', 'success');
+}
 function showPubItemModal(iid) {
 const p = (pubCompany.menuItems || []).find(x => x.id === iid);
 if (!p) return;
