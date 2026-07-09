@@ -222,6 +222,12 @@ table tr:hover td{background:#fafbfc}
 .pay-btn:hover{border-color:var(--primary)}
 .troco-box{background:#f0fdf4;border:2px solid #86efac;border-radius:10px;padding:12px;margin-bottom:10px;display:none}
 .troco-result{font-size:16px;font-weight:800;color:var(--success);margin-top:8px}
+.pub-with-banners{display:flex;gap:16px;align-items:flex-start;justify-content:center}
+.pub-menu-center{flex:1;min-width:0;max-width:900px}
+.pub-side-banner{width:160px;flex-shrink:0;position:sticky;top:16px;border-radius:12px;overflow:hidden;pointer-events:none}
+.pub-side-banner img{width:100%;height:auto;display:block;border-radius:12px;box-shadow:0 4px 12px rgba(0,0,0,.08)}
+.pub-side-banner:empty{display:none}
+@media (max-width:1100px){.pub-side-banner{display:none}}
 .stock-item-row{background:#fff;border-radius:10px;padding:14px 16px;border:1px solid var(--border);display:flex;align-items:center;gap:14px;margin-bottom:8px;transition:box-shadow .2s}
 .stock-item-row:hover{box-shadow:0 4px 12px rgba(0,0,0,.07)}
 .stock-item-icon{width:44px;height:44px;border-radius:10px;background:linear-gradient(135deg,#dbeafe,#ede9fe);display:flex;align-items:center;justify-content:center;font-size:20px;flex-shrink:0}
@@ -786,6 +792,7 @@ table th,table td{padding:7px 8px;font-size:11px}
 <h3><i class="fa-solid fa-shopping-cart"></i> Carrinho</h3>
 <div class="flex gap-2">
 <button class="btn btn-sm btn-warning" onclick="showSetDeliveryFeeModal()" title="Taxa de Entrega"><i class="fa-solid fa-truck"></i></button>
+<button class="btn btn-sm" style="background:#ede9fe;color:#7c3aed" onclick="showPubBannersModal()" title="Banners Publicitários do Cardápio Online"><i class="fa-solid fa-image"></i></button>
 <button class="btn btn-sm" style="background:#f1f5f9;color:var(--dark3)" onclick="printOS()" title="Reimprimir última OS"><i class="fa-solid fa-print"></i></button>
 <button class="btn btn-sm" style="background:#f1f5f9;color:var(--dark3)" onclick="showDailyHistory()" title="Histórico do dia"><i class="fa-solid fa-clock-rotate-left"></i></button>
 <button class="btn btn-sm btn-ghost" onclick="clearCart()"><i class="fa-solid fa-trash"></i></button>
@@ -898,6 +905,7 @@ table th,table td{padding:7px 8px;font-size:11px}
 <div class="filter-chip" onclick="filterOrders(this,'pending')">Aguardando Pagto</div>
 <div class="filter-chip" onclick="filterOrders(this,'paid')">Pagos</div>
 <div class="filter-chip" onclick="filterOrders(this,'cancelled')">Cancelados</div>
+<button class="btn btn-sm btn-warning" onclick="deleteCancelledOrders()"><i class="fa-solid fa-broom"></i> Excluir Cancelados</button>
 <button class="btn btn-sm btn-danger" onclick="deleteAllOrders()"><i class="fa-solid fa-trash"></i> Excluir Todos</button>
 </div>
 </div>
@@ -1014,9 +1022,15 @@ table th,table td{padding:7px 8px;font-size:11px}
 </div>
 </div>
 <div id="pub-tab-menu" class="pub-body">
+<div class="pub-with-banners">
+<div class="pub-side-banner pub-side-banner-left" id="pub-banner-left"></div>
+<div class="pub-menu-center">
 <div class="form-group" style="margin-top:16px"><input type="text" id="pub-search" class="form-control" placeholder="Buscar por nome ou número (#) do lanche..." oninput="onPubSearchInput()"></div>
 <div class="pub-cats" id="pub-cats"></div>
 <div class="pub-items-grid" id="pub-items"></div>
+</div>
+<div class="pub-side-banner pub-side-banner-right" id="pub-banner-right"></div>
+</div>
 </div>
 <div id="pub-tab-orders" class="pub-body hidden">
 <h3 style="font-size:18px;font-weight:800;margin-bottom:16px"><i class="fa-solid fa-receipt"></i> Meus Pedidos</h3>
@@ -1078,6 +1092,8 @@ let cart = [];
 let selectedPayment = null;
 let pendingPlan = null;
 let pubCompanyId = null;
+let pubChatAuthTab = 'login';
+let pubPendingCheckout = false;
 let pubCompany = null;
 let currentCustomer = null;
 let pubCart = [];
@@ -2583,6 +2599,29 @@ renderCart();
 showToast(`Taxas salvas! PDV: ${fmt(pdvFee)} | Online: ${fmt(pubFee)}`, 'success');
 }
 
+function showPubBannersModal() {
+const c = currentCompany;
+const leftUrl = (c.adBanners && c.adBanners.left) || '';
+const rightUrl = (c.adBanners && c.adBanners.right) || '';
+showModal('<i class="fa-solid fa-image" style="color:#7c3aed"></i> Banners Publicitários — Cardápio Online',
+`<p style="color:var(--gray);margin-bottom:16px;font-size:13px">Adicione imagens informativas que aparecem nas laterais do cardápio online para chamar atenção dos clientes. São apenas banners visuais, sem link/clique.</p>
+<div class="form-group"><label>Imagem Lateral Esquerda (URL)</label><input type="text" id="ban-left" class="form-control" placeholder="https://..." value="${leftUrl.replace(/"/g,'&quot;')}"></div>
+<div class="form-group"><label>Imagem Lateral Direita (URL)</label><input type="text" id="ban-right" class="form-control" placeholder="https://..." value="${rightUrl.replace(/"/g,'&quot;')}"></div>
+<div style="font-size:11px;color:var(--gray)">Dica: use imagens verticais (ex: 300x600px) para melhor encaixe.</div>`,
+`<button class="btn btn-ghost" onclick="closeModal()">Cancelar</button><button class="btn btn-primary" onclick="savePubBanners()"><i class="fa-solid fa-save"></i> Salvar Banners</button>`, false);
+}
+async function savePubBanners() {
+const left = document.getElementById('ban-left').value.trim();
+const right = document.getElementById('ban-right').value.trim();
+const c = currentCompany;
+c.adBanners = { left, right };
+showLoading('Salvando...');
+try {
+await db.collection('companies').doc(currentCompanyId).update({ adBanners: c.adBanners });
+hideLoading(); closeModal(); showToast('Banners salvos!', 'success');
+} catch(e) { hideLoading(); showToast('Erro: '+e.message, 'danger'); }
+}
+
 // ============================================================
 // STOCK
 // ============================================================
@@ -3060,6 +3099,14 @@ function renderOrdersFromData(orders) {
     let filtered;
     if (orderFilter === 'all') {
         filtered = orders.filter(o => o.orderStatus !== 'finalizado');
+        // OS em aberto (não pagas/canceladas) sempre no topo, demais (pagas/canceladas) abaixo
+        filtered = filtered.slice().sort((a, b) => {
+            const isOpen = (o) => o.status !== 'paid' && o.status !== 'cancelled';
+            const aOpen = isOpen(a) ? 0 : 1;
+            const bOpen = isOpen(b) ? 0 : 1;
+            if (aOpen !== bOpen) return aOpen - bOpen;
+            return new Date(b.date) - new Date(a.date);
+        });
     } else if (orderFilter === 'paid') {
         filtered = orders.filter(o => o.status === 'paid');
     } else if (orderFilter === 'pending') {
@@ -3199,6 +3246,8 @@ function filterOrders(el, filter) { orderFilter = filter; document.querySelector
 async function deleteOrder(oid) { if (!confirm('Excluir este pedido permanentemente?')) return; showLoading('Excluindo pedido...'); try { await db.collection('orders').doc(oid).delete(); hideLoading(); showToast('Pedido excluído!','success'); } catch(e) { hideLoading(); showToast('Erro: '+e.message,'danger'); } }
 async function deleteAllOrders() { const count = allCompanyOrders.length; if (!count) { showToast('Nenhum pedido para excluir','warning'); return; } showModal('<i class="fa-solid fa-trash" style="color:var(--danger)"></i> Excluir Todos os Pedidos', `<div class="alert alert-danger"><i class="fa-solid fa-exclamation-triangle"></i> Ação irreversível!</div><p>Isso excluirá permanentemente <strong>${count} pedido(s)</strong> de todos os status.</p>`, `<button class="btn btn-ghost" onclick="closeModal()">Cancelar</button><button class="btn btn-danger" onclick="confirmDeleteAllOrders()"><i class="fa-solid fa-trash"></i> Excluir Todos</button>`, false); }
 async function confirmDeleteAllOrders() { closeModal(); showLoading('Excluindo todos os pedidos...'); try { const batchSize = 500; const orders = [...allCompanyOrders]; for (let i=0; i<orders.length; i+=batchSize) { const batch = db.batch(); orders.slice(i, i+batchSize).forEach(o => batch.delete(db.collection('orders').doc(o.id))); await batch.commit(); } hideLoading(); showToast(`${orders.length} pedido(s) excluídos com sucesso!`,'success'); } catch(e) { hideLoading(); showToast('Erro: '+e.message,'danger'); } }
+function deleteCancelledOrders() { const cancelled = allCompanyOrders.filter(o => o.status === 'cancelled'); if (!cancelled.length) { showToast('Nenhuma OS cancelada para excluir','warning'); return; } showModal('<i class="fa-solid fa-broom" style="color:var(--warning)"></i> Excluir OS Canceladas', `<div class="alert alert-danger"><i class="fa-solid fa-exclamation-triangle"></i> Ação irreversível!</div><p>Isso excluirá permanentemente <strong>${cancelled.length} OS cancelada(s)</strong>.</p>`, `<button class="btn btn-ghost" onclick="closeModal()">Cancelar</button><button class="btn btn-danger" onclick="confirmDeleteCancelledOrders()"><i class="fa-solid fa-trash"></i> Excluir Canceladas</button>`, false); }
+async function confirmDeleteCancelledOrders() { closeModal(); const cancelled = allCompanyOrders.filter(o => o.status === 'cancelled'); if (!cancelled.length) return; showLoading('Excluindo OS canceladas...'); try { const batchSize = 500; for (let i=0; i<cancelled.length; i+=batchSize) { const batch = db.batch(); cancelled.slice(i, i+batchSize).forEach(o => batch.delete(db.collection('orders').doc(o.id))); await batch.commit(); } hideLoading(); showToast(`${cancelled.length} OS cancelada(s) excluída(s)!`,'success'); } catch(e) { hideLoading(); showToast('Erro: '+e.message,'danger'); } }
 async function updateOrderStatus(oid, status) { try { await db.collection('orders').doc(oid).update({ status, updatedAt: new Date().toISOString() }); showToast(status==='cancelled'?'Pedido cancelado':'Status atualizado',status==='cancelled'?'warning':'success'); } catch(e) { showToast('Erro: '+e.message,'danger'); } }
 async function finalizePendingPayment(orderId) {
 const order = allCompanyOrders.find(o=>o.id===orderId);
@@ -3303,7 +3352,7 @@ const sales = sSnap.docs.map(d => ({ id: d.id, ...d.data() }));
 const c = currentCompany;
 const expenses = (c.expenses || []).filter(e => e.yearMonth === ym);
 const employees = c.employees || [];
-const totalSalary = employees.reduce((s, e) => s + (e.salary || 0), 0);
+const totalSalary = employees.reduce((s, e) => s + ((e.payments||[]).filter(p => p.yearMonth === ym).reduce((ps,p)=>ps+(p.amount||0),0)), 0);
 renderReportData(sales, expenses, totalSalary);
 } catch (e) {
 showToast('Erro ao carregar relatórios: ' + e.message, 'danger');
@@ -3417,12 +3466,24 @@ callback: function(value) { return 'R$' + value; }
 }
 });
 }
+function normalizeProductNameForChart(s) {
+return (s||'').toString().toLowerCase().normalize('NFD').replace(/[\u0300-\u036f]/g,'').replace(/[-_]+/g,' ').replace(/\s+/g,' ').trim();
+}
 function buildItemsChart(sales) {
 if (chartInstances.items) chartInstances.items.destroy();
+// Mapa de nome normalizado -> nome atualmente cadastrado no Estoque/Cardápio
+const menuItems = (currentCompany && currentCompany.menuItems) || [];
+const canonicalMap = {};
+menuItems.forEach(p => { canonicalMap[normalizeProductNameForChart(p.name)] = p.name; });
 const itemsMap = {};
 sales.forEach(s => {
 (s.items || []).forEach(i => {
-itemsMap[i.name] = (itemsMap[i.name] || 0) + (i.qty || 1);
+let baseName = (i.name || '').trim();
+const m = baseName.match(/^(.+?)\s*\(\+(.+?)\)$/);
+if (m) baseName = m[1].trim();
+const norm = normalizeProductNameForChart(baseName);
+const displayName = canonicalMap[norm] || baseName;
+itemsMap[displayName] = (itemsMap[displayName] || 0) + (i.qty || 1);
 });
 });
 const sortedItems = Object.entries(itemsMap).sort((a, b) => b[1] - a[1]).slice(0, 10);
@@ -3705,7 +3766,13 @@ if (!emps.length) {
 el.innerHTML = '<div style="grid-column:1/-1;text-align:center;padding:60px;color:var(--gray)"><i class="fa-solid fa-users" style="font-size:48px;display:block;margin-bottom:12px;color:var(--border)"></i><h3>Nenhum funcionário cadastrado</h3></div>';
 return;
 }
-el.innerHTML = emps.map(e => `
+const curYM = ymFromDate(new Date());
+el.innerHTML = emps.map(e => {
+const payments = e.payments || [];
+const paidThisMonth = payments.filter(p => p.yearMonth === curYM).reduce((s,p) => s + (p.amount||0), 0);
+const balance = Math.max(0, (e.salary||0) - paidThisMonth);
+const lastPayments = payments.slice().sort((a,b)=> new Date(b.date)-new Date(a.date)).slice(0,3);
+return `
 <div class="emp-card">
 <div class="emp-avatar">${e.name.charAt(0).toUpperCase()}</div>
 <div style="flex:1">
@@ -3716,13 +3783,49 @@ el.innerHTML = emps.map(e => `
 <div><i class="fa-solid fa-envelope"></i> ${e.email || '—'}</div>
 </div>
 <div class="emp-salary">${fmt(e.salary || 0)} / mês</div>
+<div style="background:#f8fafc;border:1px solid var(--border);border-radius:8px;padding:8px 10px;margin-top:8px;font-size:12px">
+<div style="display:flex;justify-content:space-between"><span>Pago este mês:</span><strong style="color:var(--success)">${fmt(paidThisMonth)}</strong></div>
+<div style="display:flex;justify-content:space-between;margin-top:2px"><span>Saldo a pagar:</span><strong style="color:${balance>0?'var(--warning)':'var(--success)'}">${fmt(balance)}</strong></div>
+${lastPayments.length ? `<div style="margin-top:6px;border-top:1px dashed var(--border);padding-top:6px">${lastPayments.map(p=>`<div style="display:flex;justify-content:space-between;color:var(--gray)"><span>${new Date(p.date).toLocaleDateString('pt-BR')}</span><span>${fmt(p.amount)}</span></div>`).join('')}</div>` : ''}
+</div>
 <div class="flex gap-2 mt-3">
+<button class="btn btn-sm btn-success flex-1" onclick="showEmployeePaymentModal('${e.id}')"><i class="fa-solid fa-money-bill-wave"></i> Registrar Pagamento</button>
+</div>
+<div class="flex gap-2 mt-2">
 <button class="btn btn-sm btn-primary flex-1" onclick="showEmployeeModal('${e.id}')"><i class="fa-solid fa-edit"></i> Editar</button>
 <button class="btn btn-sm btn-danger" onclick="deleteEmployee('${e.id}')"><i class="fa-solid fa-trash"></i></button>
 </div>
 </div>
 </div>
-`).join('');
+`;
+}).join('');
+}
+function showEmployeePaymentModal(eid) {
+const c = currentCompany;
+const e = (c.employees||[]).find(x=>x.id===eid);
+if (!e) return;
+const today = new Date().toISOString().slice(0,10);
+showModal(`<i class="fa-solid fa-money-bill-wave"></i> Registrar Pagamento — ${e.name}`,
+`<div class="form-group"><label>Valor Pago (R$) *</label><input type="number" id="pay-amount" class="form-control" step="0.01" min="0"></div>
+<div class="form-group"><label>Data</label><input type="date" id="pay-date" class="form-control" value="${today}"></div>
+<div class="form-group"><label>Observação</label><input type="text" id="pay-note" class="form-control" placeholder="Ex: adiantamento, vale..."></div>`,
+`<button class="btn btn-ghost" onclick="closeModal()">Cancelar</button><button class="btn btn-primary" onclick="saveEmployeePayment('${eid}')"><i class="fa-solid fa-save"></i> Salvar Pagamento</button>`, false);
+}
+async function saveEmployeePayment(eid) {
+const amount = parseFloat(document.getElementById('pay-amount').value) || 0;
+const date = document.getElementById('pay-date').value || new Date().toISOString().slice(0,10);
+const note = document.getElementById('pay-note').value.trim();
+if (amount <= 0) { showToast('Informe um valor válido', 'warning'); return; }
+const c = currentCompany;
+const e = (c.employees||[]).find(x=>x.id===eid);
+if (!e) return;
+e.payments = e.payments || [];
+e.payments.push({ id: genId(), amount, date: new Date(date).toISOString(), yearMonth: ymFromDate(new Date(date)), note });
+showLoading('Salvando pagamento...');
+try {
+await db.collection('companies').doc(currentCompanyId).update({ employees: c.employees });
+hideLoading(); closeModal(); renderEmployees(); showToast('Pagamento registrado!', 'success');
+} catch (e2) { hideLoading(); showToast('Erro: ' + e2.message, 'danger'); }
 }
 function showEmployeeModal(eid) {
 const c = currentCompany;
@@ -3856,7 +3959,9 @@ document.getElementById('pub-auth-view').classList.add('hidden');
 document.getElementById('pub-main-view').classList.remove('hidden');
 renderPublicMenu();
 document.getElementById('pub-chat-btn').style.display = 'flex';
+if (currentCustomer) {
 setupCustomerChatListener();
+}
 }
 function showPubTab(tab) {
 pubActiveTab = tab;
@@ -3921,7 +4026,8 @@ function setupCustomerChatListener() {
     }, error => { console.error('Erro no chat:', error); });
 }
 function openPubChat() {
-    if (!currentCustomer || !pubCompanyId) return;
+    if (!pubCompanyId) return;
+    if (!currentCustomer) { showPubChatAuthPrompt(); return; }
     document.getElementById('pub-chat-company-name').textContent = pubCompany ? pubCompany.companyName : 'Loja';
     document.getElementById('chat-overlay').classList.remove('hidden');
     renderPubChatMessages();
@@ -3933,6 +4039,72 @@ function openPubChat() {
 }
 function closePubChat() {
     document.getElementById('chat-overlay').classList.add('hidden');
+}
+function showPubChatAuthPrompt() {
+    showModal('<i class="fa-solid fa-comment-dots"></i> Fale com a Loja',
+    `<p style="color:var(--gray);font-size:13px;margin-bottom:14px">${pubPendingCheckout ? 'Para finalizar seu pedido, entre com sua conta ou crie um cadastro rápido.' : 'Para conversar com a loja pelo chat, entre com sua conta ou crie um cadastro rápido.'}</p>
+    <div class="flex gap-2 mb-3">
+        <div class="filter-chip active" id="pca-tab-login" onclick="switchPubChatAuthTab('login')" style="cursor:pointer">Entrar</div>
+        <div class="filter-chip" id="pca-tab-register" onclick="switchPubChatAuthTab('register')" style="cursor:pointer">Criar Conta</div>
+    </div>
+    <div id="pca-login-form">
+        <div class="form-group"><label>E-mail</label><input type="email" id="pca-login-email" class="form-control"></div>
+        <div class="form-group"><label>Senha</label><input type="password" id="pca-login-password" class="form-control"></div>
+    </div>
+    <div id="pca-register-form" class="hidden">
+        <div class="form-group"><label>Nome</label><input type="text" id="pca-reg-name" class="form-control"></div>
+        <div class="form-group"><label>E-mail</label><input type="email" id="pca-reg-email" class="form-control"></div>
+        <div class="form-group"><label>Senha</label><input type="password" id="pca-reg-password" class="form-control"></div>
+    </div>`,
+    `<button class="btn btn-ghost" onclick="closeModal()">Cancelar</button><button class="btn btn-primary" onclick="doPubChatAuth()">Continuar</button>`, false);
+}
+function switchPubChatAuthTab(tab) {
+    document.getElementById('pca-tab-login').classList.toggle('active', tab==='login');
+    document.getElementById('pca-tab-register').classList.toggle('active', tab==='register');
+    document.getElementById('pca-login-form').classList.toggle('hidden', tab!=='login');
+    document.getElementById('pca-register-form').classList.toggle('hidden', tab!=='register');
+    pubChatAuthTab = tab;
+}
+async function doPubChatAuth() {
+    const tab = pubChatAuthTab || 'login';
+    if (tab === 'login') {
+        const email = document.getElementById('pca-login-email').value.trim();
+        const pass = document.getElementById('pca-login-password').value.trim();
+        if (!email || !pass) { showToast('Preencha e-mail e senha', 'warning'); return; }
+        showLoading('Entrando...');
+        try {
+            const snap = await db.collection('pub_customers').where('companyId','==',pubCompanyId).where('email','==',email).get();
+            if (snap.empty) { hideLoading(); showToast('E-mail ou senha incorretos', 'danger'); return; }
+            const cust = { id: snap.docs[0].id, ...snap.docs[0].data() };
+            if (cust.password !== pass) { hideLoading(); showToast('E-mail ou senha incorretos', 'danger'); return; }
+            currentCustomer = cust; savePubCustomer(cust);
+            hideLoading(); closeModal();
+            document.getElementById('pub-chat-btn').style.display = 'flex';
+            setupCustomerChatListener();
+            if (pubPendingCheckout) { pubPendingCheckout = false; showPubCartModal(); }
+            else openPubChat();
+        } catch(e) { hideLoading(); showToast('Erro: '+e.message, 'danger'); }
+    } else {
+        const name = document.getElementById('pca-reg-name').value.trim();
+        const email = document.getElementById('pca-reg-email').value.trim();
+        const pass = document.getElementById('pca-reg-password').value.trim();
+        if (!name || !email || !pass) { showToast('Preencha todos os campos', 'warning'); return; }
+        showLoading('Criando conta...');
+        try {
+            const snap = await db.collection('pub_customers').where('companyId','==',pubCompanyId).where('email','==',email).get();
+            if (!snap.empty) { hideLoading(); showToast('E-mail já cadastrado', 'danger'); return; }
+            const id = genId();
+            const cust = { id, companyId: pubCompanyId, name, email, password: pass, phone: '', createdAt: new Date().toISOString() };
+            await db.collection('pub_customers').doc(id).set(cust);
+            currentCustomer = cust; savePubCustomer(cust);
+            hideLoading(); closeModal();
+            document.getElementById('pub-chat-btn').style.display = 'flex';
+            setupCustomerChatListener();
+            if (pubPendingCheckout) { pubPendingCheckout = false; showPubCartModal(); }
+            else openPubChat();
+            showToast('Conta criada com sucesso!', 'success');
+        } catch(e) { hideLoading(); showToast('Erro: '+e.message, 'danger'); }
+    }
 }
 async function markCompanyMsgsRead() {
     if (!pubChatData || !pubChatId) return;
@@ -4059,17 +4231,23 @@ pubDeliveryFee = parseFloat(pubCompany.pubDeliveryFee)||0;
 document.getElementById('pub-company-name').textContent = pubCompany.companyName;
 document.getElementById('pub-company-sub').textContent = pubCompany.address || 'Faça seu pedido online';
 showPage('page-public-menu');
+// Acesso direto ao cardápio: o cliente vê os produtos e já pode montar o carrinho sem precisar logar.
+// O login/cadastro só é solicitado se o cliente quiser usar o chat com a loja.
 const cust = loadPubCustomer();
-if (cust) { currentCustomer = cust; showPubMain(); }
-else {
-document.getElementById('pub-auth-view').classList.remove('hidden');
-document.getElementById('pub-main-view').classList.add('hidden');
-document.getElementById('pub-cart-btn').style.display = 'none';
-}
+if (cust) { currentCustomer = cust; }
+showPubMain();
 hideLoading();
 } catch(e) { hideLoading(); showToast('Erro: '+e.message, 'danger'); showPage('page-login'); }
 }
+function renderPubBanners() {
+const banners = (pubCompany && pubCompany.adBanners) || {};
+const leftEl = document.getElementById('pub-banner-left');
+const rightEl = document.getElementById('pub-banner-right');
+if (leftEl) leftEl.innerHTML = banners.left ? `<img src="${banners.left}" alt="Banner promocional">` : '';
+if (rightEl) rightEl.innerHTML = banners.right ? `<img src="${banners.right}" alt="Banner promocional">` : '';
+}
 function renderPublicMenu() {
+renderPubBanners();
 const rawItems = pubCompany.menuItems || [];
 const items = rawItems.map((p,idx)=>({...p, _num: idx+1}));
 const cats = ['Todos', ...new Set(items.map(p=>p.category).filter(Boolean))];
@@ -4247,10 +4425,10 @@ ${pubAppliedCoupon ? `<button class="btn btn-ghost" onclick="removePubCoupon()">
 <div class="form-group mt-3"><label>Nome para o Pedido *</label><input type="text" id="pub-order-name" class="form-control" value="${currentCustomer?.name || ''}"></div>
 <div class="form-group"><label>Telefone *</label><input type="text" id="pub-order-phone" class="form-control" value="${currentCustomer?.phone || ''}" oninput="maskPhone(this)"></div>
 <div id="pub-address-fields">
-    <div class="form-group"><label>Endereço de Entrega *</label><input type="text" id="pub-order-address" class="form-control" placeholder="Rua, número, bairro"></div>
+    <div class="form-group"><label>Endereço de Entrega *</label><input type="text" id="pub-order-address" class="form-control" placeholder="Rua, número, bairro" value="${currentCustomer?.address || ''}"></div>
     <div class="form-row">
-        <div class="form-group"><label>Número</label><input type="text" id="pub-order-house" class="form-control"></div>
-        <div class="form-group"><label>Complemento</label><input type="text" id="pub-order-comp" class="form-control"></div>
+        <div class="form-group"><label>Número</label><input type="text" id="pub-order-house" class="form-control" value="${currentCustomer?.houseNumber || ''}"></div>
+        <div class="form-group"><label>Complemento</label><input type="text" id="pub-order-comp" class="form-control" value="${currentCustomer?.complement || ''}"></div>
     </div>
 </div>
 <div class="form-group"><label>Forma de Pagamento *</label>
@@ -4370,7 +4548,7 @@ showPubCartModal();
 }
 async function placePubOrder() {
     if (!pubCart.length) { showToast('Carrinho vazio','warning'); return; }
-    if (!currentCustomer) { showToast('Faça login para continuar','warning'); return; }
+    if (!currentCustomer) { pubPendingCheckout = true; showPubChatAuthPrompt(); return; }
     const name = document.getElementById('pub-order-name').value.trim();
     const phone = document.getElementById('pub-order-phone').value.trim();
     const pay = document.getElementById('pub-order-pay').value;
@@ -4472,6 +4650,12 @@ async function placePubOrder() {
                 await db.collection('companies').doc(pubCompanyId).update({coupons: pubCompany.coupons, couponUsageHistory: pubCompany.couponUsageHistory});
             } catch(e) { console.error('Erro ao registrar uso do cupom:', e); }
         }
+        // Salva endereço/telefone no perfil do cliente para agilizar próximas compras
+        try {
+            currentCustomer.address = address; currentCustomer.houseNumber = house; currentCustomer.complement = comp; currentCustomer.phone = phone; currentCustomer.name = name;
+            await db.collection('pub_customers').doc(currentCustomer.id).update({ address, houseNumber: house, complement: comp, phone, name });
+            savePubCustomer(currentCustomer);
+        } catch(e) { console.error('Erro ao salvar dados do cliente:', e); }
         hideLoading();
         closeModal();
         pubCart = [];
