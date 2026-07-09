@@ -439,7 +439,7 @@ table th,table td{padding:7px 8px;font-size:11px}
     padding: 14px 16px;
     border: 1px solid var(--border);
     display: grid;
-    grid-template-columns: 2fr 1fr 1fr 1fr auto;
+    grid-template-columns: 1.8fr 1.8fr 1fr 1fr 1fr auto;
     gap: 12px;
     align-items: center;
     margin-bottom: 8px;
@@ -457,10 +457,14 @@ table th,table td{padding:7px 8px;font-size:11px}
     padding: 10px 16px;
     border-radius: 8px;
     display: grid;
-    grid-template-columns: 2fr 1fr 1fr 1fr auto;
+    grid-template-columns: 1.8fr 1.8fr 1fr 1fr 1fr auto;
     gap: 12px;
     margin-bottom: 8px;
 }
+.insumo-tag{display:inline-block;background:#eef2ff;color:#4338ca;font-size:11px;font-weight:600;padding:2px 8px;border-radius:8px;margin:2px 4px 2px 0}
+.insumo-row{display:grid;grid-template-columns:1.6fr 1fr 1fr 1fr auto;gap:10px;align-items:center;padding:10px 0;border-bottom:1px solid #f1f5f9;font-size:13px}
+.insumo-row-header{display:grid;grid-template-columns:1.6fr 1fr 1fr 1fr auto;gap:10px;font-size:11px;text-transform:uppercase;color:var(--gray);font-weight:700;padding-bottom:6px;border-bottom:2px solid var(--border)}
+.recipe-item-row{display:grid;grid-template-columns:auto 1.6fr 1fr 90px 90px;gap:10px;align-items:center;padding:8px 0;border-bottom:1px solid #f1f5f9;font-size:13px}
 .lanche-lucro-input {
     width: 100%;
     padding: 8px 10px;
@@ -949,8 +953,8 @@ table th,table td{padding:7px 8px;font-size:11px}
      <div class="card mt-4">
          <div class="card-header">
 		 <div class="card-title"><i class="fa-solid fa-hamburger"></i> Lucro por Lanche</div>
-             <button class="btn btn-primary btn-sm" onclick="showAddLancheLucroModal()">
-                 <i class="fa-solid fa-plus"></i> Adicionar Lanche
+             <button class="btn btn-primary btn-sm" onclick="showInsumosModal()">
+                 <i class="fa-solid fa-carrot"></i> Gerenciar Insumos
              </button>
          </div>
          <div id="lucro-lanches-list">
@@ -5352,219 +5356,433 @@ ${(o.items||[]).map(i => `
     }).join('');
 }
 
-// ========== CONTROLE DE LUCRO POR LANCHE ==========
-let lanchesLucro = [];
+// ========== CONTROLE DE LUCRO POR LANCHE (baseado em Insumos + Estoque) ==========
+// currentCompany.insumos: [{id, nome, tipo:'peso'|'unidade', qtdTotal (kg ou un, aceita frações <1 ex: 0.4), valorPorMedida (R$/Kg ou R$/un), valorTotal (calculado), porcaoTamanho (g ou un por porção), desperdicioPct (% estimado de perda/manipulação), createdAt}]
+// currentCompany.menuItems[i].recipe: [{insumoId, porcoes}] (número de porções do insumo usadas no produto)
+// currentCompany.menuItems[i].lucroVenda: valor de venda usado no cálculo de lucro (independente do preço do PDV)
+// currentCompany.menuItems[i].bebidaCusto: custo manual (usado quando o produto é Bebida)
 
-function showAddLancheLucroModal() {
+function getInsumos() { return (currentCompany && currentCompany.insumos) || []; }
+function isBebidaProduct(p) { return (p.category || '').toLowerCase().includes('bebida'); }
+
+// Custo por grama (peso) ou por unidade (unidade) do insumo, sem considerar desperdício (custo de compra puro)
+function getInsumoUnitCost(insumo) {
+    if (!insumo) return 0;
+    if (insumo.tipo === 'peso') {
+        const gramasTotal = parseFloat(insumo.qtdTotal) || 0; // qtdTotal armazenado diretamente em GRAMAS (ex: 400 = 400g)
+        return gramasTotal > 0 ? (insumo.valorTotal || 0) / gramasTotal : 0;
+    }
+    const un = parseFloat(insumo.qtdTotal) || 0;
+    return un > 0 ? (insumo.valorTotal || 0) / un : 0;
+}
+// Fator de aproveitamento (1 - % de desperdício), limitado para nunca zerar o denominador
+function getInsumoYieldFactor(insumo) {
+    const pct = Math.min(99, Math.max(0, parseFloat(insumo?.desperdicioPct) || 0));
+    return 1 - (pct / 100);
+}
+// Custo por grama/unidade já considerando o desperdício estimado (custo efetivo real)
+function getInsumoEffectiveUnitCost(insumo) {
+    if (!insumo) return 0;
+    const yieldFactor = getInsumoYieldFactor(insumo);
+    return yieldFactor > 0 ? getInsumoUnitCost(insumo) / yieldFactor : getInsumoUnitCost(insumo);
+}
+// Custo de 1 porção do insumo (ex: 40g de muçarela), já com o desperdício embutido
+function getInsumoPortionCost(insumo) {
+    if (!insumo) return 0;
+    const porcao = parseFloat(insumo.porcaoTamanho) || 0;
+    return getInsumoEffectiveUnitCost(insumo) * porcao;
+}
+// Quantas porções cabem no total comprado do insumo (descontando o desperdício estimado)
+function getInsumoTotalPortions(insumo) {
+    if (!insumo) return 0;
+    const porcao = parseFloat(insumo.porcaoTamanho) || 0;
+    if (porcao <= 0) return 0;
+    const totalQtd = parseFloat(insumo.qtdTotal) || 0; // gramas (peso) ou unidades (unidade)
+    const totalQtdAproveitavel = totalQtd * getInsumoYieldFactor(insumo);
+    return totalQtdAproveitavel / porcao;
+}
+
+function computeRecipeCost(p) {
+    const recipe = p.recipe || [];
+    const insumos = getInsumos();
+    return recipe.reduce((sum, r) => {
+        const insumo = insumos.find(i => i.id === r.insumoId);
+        if (!insumo) return sum;
+        return sum + getInsumoPortionCost(insumo) * (parseFloat(r.porcoes) || 0);
+    }, 0);
+}
+
+// ---------- GESTÃO DE INSUMOS ----------
+function showInsumosModal() {
     showModal(
-        '<i class="fa-solid fa-hamburger"></i> Adicionar Lanche',
-        `<div class="form-group">
-            <label>Nome do Lanche *</label>
-            <input type="text" id="ll-nome" class="form-control" placeholder="Ex: X-Salada, Hamburguer...">
+        '<i class="fa-solid fa-carrot"></i> Insumos (Ingredientes)',
+        `<p style="color:var(--gray);font-size:13px;margin-bottom:14px">Cadastre suas compras de insumos (ex: muçarela, pão, carne...) informando o peso em gramas (ou unidades) total comprado e o valor total que você realmente pagou por essa quantidade. O sistema calcula automaticamente o custo por porção e quantas porções rendem no total.</p>
+        <div style="background:#f8fafc;border:2px solid var(--border);border-radius:10px;padding:14px;margin-bottom:16px">
+            <div class="form-group"><label>Nome do Insumo *</label><input type="text" id="ins-nome" class="form-control" placeholder="Ex: Muçarela, Pão, Carne 100g..."></div>
+            <div class="form-group"><label>Tipo de Medida *</label>
+                <select id="ins-tipo" class="form-control" onchange="toggleInsumoTipoFields()">
+                    <option value="peso">Por Peso (Gramas)</option>
+                    <option value="unidade">Por Unidade</option>
+                </select>
+            </div>
+            <div class="form-row">
+                <div class="form-group" id="ins-qtd-wrap"><label id="ins-qtd-label">Peso Total Comprado (gramas) *</label><input type="number" id="ins-qtd" class="form-control" step="1" min="1" placeholder="Ex: 400"></div>
+                <div class="form-group"><label id="ins-valormedida-label">Valor Total Pago (R$) *</label><input type="number" id="ins-valormedida" class="form-control" step="0.01" min="0" placeholder="Ex: 5,00"></div>
+            </div>
+            <div class="form-group"><label id="ins-porcao-label">Quantas gramas usa em cada porção/lanche? *</label><input type="number" id="ins-porcao" class="form-control" step="1" min="0" placeholder="Ex: 40"></div>
+            <div class="form-group"><label>Desperdício/Perda estimada na manipulação (%)</label><input type="number" id="ins-desperdicio" class="form-control" step="0.1" min="0" max="99" placeholder="Ex: 5" value="0"></div>
+            <div class="alert alert-info" id="ins-preview" style="display:none;font-size:12px"></div>
+            <div class="flex gap-2 mt-2">
+                <button class="btn btn-primary flex-1" id="ins-save-btn" onclick="saveInsumo()"><i class="fa-solid fa-save"></i> Salvar Insumo</button>
+                <button class="btn btn-ghost hidden" id="ins-cancel-edit-btn" onclick="resetInsumoForm()">Cancelar Edição</button>
+            </div>
         </div>
-        <div class="form-row">
-            <div class="form-group">
-                <label>Custo (R$) *</label>
-                <input type="number" id="ll-custo" class="form-control" step="0.01" min="0" placeholder="0,00" oninput="calcLucroPreview()">
-            </div>
-            <div class="form-group">
-                <label>Valor de Venda (R$) *</label>
-                <input type="number" id="ll-venda" class="form-control" step="0.01" min="0" placeholder="0,00" oninput="calcLucroPreview()">
-            </div>
-        </div>
-        <div class="alert alert-info mt-3" id="ll-preview" style="display:none">
-            <div style="font-size:13px;margin-bottom:6px"><strong>Pré-visualização:</strong></div>
-            <div style="display:flex;justify-content:space-between;align-items:center">
-                <span>Custo: <strong id="prev-custo">R$ 0,00</strong></span>
-                <span>Venda: <strong id="prev-venda">R$ 0,00</strong></span>
-                <span>Lucro: <strong id="prev-lucro" style="color:var(--success)">R$ 0,00</strong></span>
-            </div>
-        </div>`,
-        `<button class="btn btn-ghost" onclick="closeModal()">Cancelar</button>
-        <button class="btn btn-primary" onclick="saveLancheLucro()"><i class="fa-solid fa-save"></i> Salvar</button>`,
-        false
+        <div class="insumo-row-header"><div>NOME</div><div>QTD TOTAL</div><div>VALOR PAGO</div><div>CUSTO/PORÇÃO</div><div></div></div>
+        <div id="insumos-list" style="max-height:260px;overflow-y:auto"></div>`,
+        `<button class="btn btn-ghost" onclick="closeModal()">Fechar</button>`,
+        true
     );
+    setTimeout(() => {
+        renderInsumosList();
+        toggleInsumoTipoFields();
+        ['ins-qtd','ins-valormedida','ins-porcao','ins-desperdicio'].forEach(id => document.getElementById(id)?.addEventListener('input', updateInsumoPreview));
+    }, 50);
 }
-
-function calcLucroPreview() {
-    const custo = parseFloat(document.getElementById('ll-custo').value) || 0;
-    const venda = parseFloat(document.getElementById('ll-venda').value) || 0;
-    const lucro = venda - custo;
-    
-    const preview = document.getElementById('ll-preview');
-    if (custo > 0 || venda > 0) {
-        preview.style.display = 'block';
-        document.getElementById('prev-custo').textContent = fmt(custo);
-        document.getElementById('prev-venda').textContent = fmt(venda);
-        const elLucro = document.getElementById('prev-lucro');
-        elLucro.textContent = fmt(lucro);
-        elLucro.style.color = lucro >= 0 ? 'var(--success)' : 'var(--danger)';
+function toggleInsumoTipoFields() {
+    const tipo = document.getElementById('ins-tipo').value;
+    const qtdInput = document.getElementById('ins-qtd');
+    const valorInput = document.getElementById('ins-valormedida');
+    document.getElementById('ins-qtd-label').textContent = tipo === 'peso' ? 'Peso Total Comprado (gramas) *' : 'Quantidade da Embalagem (un) *';
+    document.getElementById('ins-valormedida-label').textContent = tipo === 'peso' ? 'Valor Total Pago (R$) *' : 'Valor Pago na Embalagem (R$) *';
+    document.getElementById('ins-porcao-label').textContent = tipo === 'peso' ? 'Quantas gramas usa em cada porção/lanche? *' : 'Quantas unidades usa em cada porção/lanche? *';
+    if (qtdInput) { qtdInput.step = tipo === 'peso' ? '1' : '1'; qtdInput.placeholder = tipo === 'peso' ? 'Ex: 400' : 'Ex: 15'; }
+    if (valorInput) { valorInput.placeholder = tipo === 'peso' ? 'Ex: 5,00' : 'Ex: 27,75'; }
+    updateInsumoPreview();
+}
+function updateInsumoPreview() {
+    const tipo = document.getElementById('ins-tipo')?.value;
+    const qtd = parseFloat(document.getElementById('ins-qtd')?.value) || 0;
+    const valorMedida = parseFloat(document.getElementById('ins-valormedida')?.value) || 0;
+    const porcao = parseFloat(document.getElementById('ins-porcao')?.value) || 0;
+    const desperdicioPct = Math.min(99, Math.max(0, parseFloat(document.getElementById('ins-desperdicio')?.value) || 0));
+    const yieldFactor = 1 - (desperdicioPct / 100);
+    const prev = document.getElementById('ins-preview');
+    if (!prev) return;
+    if (qtd > 0 && valorMedida > 0) {
+        const wasteNote = desperdicioPct > 0 ? ` <span style="color:var(--warning)">(+${desperdicioPct}% desperdício embutido)</span>` : '';
+        if (tipo === 'peso') {
+            // Aqui "qtd" já é o peso total em gramas e "valorMedida" é o valor TOTAL realmente pago por essa quantidade
+            const gramas = qtd;
+            const valorTotal = valorMedida;
+            const custoGrama = gramas > 0 ? valorTotal / gramas : 0;
+            const custoGramaEfetivo = yieldFactor > 0 ? custoGrama / yieldFactor : custoGrama;
+            let html = `<i class="fa-solid fa-calculator"></i> ${gramas.toLocaleString('pt-BR')}g no total — Valor total pago: <strong>${fmt(valorTotal)}</strong> (R$ ${custoGrama.toFixed(4)}/g)${wasteNote}`;
+            if (porcao > 0) {
+                const custoPorcao = custoGramaEfetivo * porcao;
+                const totalPorcoes = (gramas * yieldFactor) / porcao;
+                html += `<br><i class="fa-solid fa-slice"></i> Cada porção de ${porcao}g custa <strong>${fmt(custoPorcao)}</strong> — rende <strong>${totalPorcoes.toFixed(1)} porções</strong> no total (já descontando o desperdício)`;
+            }
+            prev.style.display = 'block';
+            prev.innerHTML = html;
+        } else {
+            // Aqui "qtd" é a quantidade de unidades da embalagem e "valorMedida" é o valor TOTAL pago pela embalagem inteira
+            const valorTotal = valorMedida;
+            const custoUn = qtd > 0 ? valorTotal / qtd : 0;
+            const custoUnEfetivo = yieldFactor > 0 ? custoUn / yieldFactor : custoUn;
+            let html = `<i class="fa-solid fa-calculator"></i> Valor total pago na embalagem: <strong>${fmt(valorTotal)}</strong> — cada unidade custa <strong>${fmt(custoUn)}</strong>${wasteNote}`;
+            if (porcao > 0) {
+                const custoPorcao = custoUnEfetivo * porcao;
+                const totalPorcoes = (qtd * yieldFactor) / porcao;
+                html += `<br><i class="fa-solid fa-slice"></i> Cada porção de ${porcao} un custa <strong>${fmt(custoPorcao)}</strong> — rende <strong>${totalPorcoes.toFixed(1)} porções</strong> no total (já descontando o desperdício)`;
+            }
+            prev.style.display = 'block';
+            prev.innerHTML = html;
+        }
+    } else { prev.style.display = 'none'; }
+}
+let editingInsumoId = null;
+function resetInsumoForm() {
+    editingInsumoId = null;
+    document.getElementById('ins-nome').value = '';
+    document.getElementById('ins-tipo').value = 'peso';
+    document.getElementById('ins-qtd').value = '';
+    document.getElementById('ins-valormedida').value = '';
+    document.getElementById('ins-porcao').value = '';
+    document.getElementById('ins-desperdicio').value = '0';
+    document.getElementById('ins-save-btn').innerHTML = '<i class="fa-solid fa-save"></i> Salvar Insumo';
+    document.getElementById('ins-cancel-edit-btn').classList.add('hidden');
+    toggleInsumoTipoFields();
+}
+function editInsumo(id) {
+    const insumo = getInsumos().find(i => i.id === id);
+    if (!insumo) return;
+    editingInsumoId = id;
+    document.getElementById('ins-nome').value = insumo.nome;
+    document.getElementById('ins-tipo').value = insumo.tipo;
+    document.getElementById('ins-qtd').value = insumo.qtdTotal;
+    document.getElementById('ins-valormedida').value = insumo.valorPorMedida;
+    document.getElementById('ins-porcao').value = insumo.porcaoTamanho || '';
+    document.getElementById('ins-desperdicio').value = insumo.desperdicioPct || 0;
+    document.getElementById('ins-save-btn').innerHTML = '<i class="fa-solid fa-save"></i> Atualizar Insumo';
+    document.getElementById('ins-cancel-edit-btn').classList.remove('hidden');
+    toggleInsumoTipoFields();
+    updateInsumoPreview();
+}
+async function saveInsumo() {
+    const nome = document.getElementById('ins-nome').value.trim();
+    const tipo = document.getElementById('ins-tipo').value;
+    const qtdTotal = parseFloat(document.getElementById('ins-qtd').value) || 0;
+    const valorPorMedida = parseFloat(document.getElementById('ins-valormedida').value) || 0;
+    const porcaoTamanho = parseFloat(document.getElementById('ins-porcao').value) || 0;
+    const desperdicioPct = Math.min(99, Math.max(0, parseFloat(document.getElementById('ins-desperdicio').value) || 0));
+    if (!nome || qtdTotal <= 0 || valorPorMedida <= 0) { showToast('Preencha todos os campos obrigatórios', 'warning'); return; }
+    // Para insumos por peso, o valor informado já é o valor TOTAL realmente pago pela quantidade em gramas.
+    // Para insumos por unidade, o valor informado é o valor TOTAL pago pela embalagem inteira (não o preço por unidade).
+    const valorTotal = valorPorMedida;
+    const c = currentCompany;
+    c.insumos = c.insumos || [];
+    if (editingInsumoId) {
+        const idx = c.insumos.findIndex(i => i.id === editingInsumoId);
+        if (idx !== -1) Object.assign(c.insumos[idx], { nome, tipo, qtdTotal, valorPorMedida, valorTotal, porcaoTamanho, desperdicioPct });
     } else {
-        preview.style.display = 'none';
+        c.insumos.push({ id: genId(), nome, tipo, qtdTotal, valorPorMedida, valorTotal, porcaoTamanho, desperdicioPct, createdAt: new Date().toISOString() });
     }
-}
-
-async function saveLancheLucro() {
-    const nome = document.getElementById('ll-nome').value.trim();
-    const custo = parseFloat(document.getElementById('ll-custo').value) || 0;
-    const venda = parseFloat(document.getElementById('ll-venda').value) || 0;
-    
-    if (!nome || !custo || !venda) {
-        showToast('Preencha todos os campos obrigatórios', 'warning');
-        return;
-    }
-    
-    const lucro = venda - custo;
-    const newLanche = {
-        id: genId(),
-        nome,
-        custo,
-        venda,
-        lucro,
-        createdAt: new Date().toISOString()
-    };
-    
-    lanchesLucro.push(newLanche);
-    
     showLoading('Salvando...');
     try {
-        await db.collection('companies').doc(currentCompanyId).update({
-            lanchesLucro: lanchesLucro
-        });
+        await db.collection('companies').doc(currentCompanyId).update({ insumos: c.insumos });
+        hideLoading();
+        resetInsumoForm();
+        renderInsumosList();
+        renderLanchesLucro();
+        showToast('Insumo salvo!', 'success');
+    } catch(e) { hideLoading(); showToast('Erro: ' + e.message, 'danger'); }
+}
+async function deleteInsumo(id) {
+    if (!confirm('Excluir este insumo? Ele será removido das receitas dos produtos que o utilizam.')) return;
+    const c = currentCompany;
+    c.insumos = (c.insumos || []).filter(i => i.id !== id);
+    (c.menuItems || []).forEach(p => { if (p.recipe) p.recipe = p.recipe.filter(r => r.insumoId !== id); });
+    showLoading('Excluindo...');
+    try {
+        await db.collection('companies').doc(currentCompanyId).update({ insumos: c.insumos, menuItems: c.menuItems });
+        hideLoading();
+        renderInsumosList();
+        renderLanchesLucro();
+        showToast('Insumo excluído!', 'success');
+    } catch(e) { hideLoading(); showToast('Erro: ' + e.message, 'danger'); }
+}
+function renderInsumosList() {
+    const el = document.getElementById('insumos-list');
+    if (!el) return;
+    const insumos = getInsumos();
+    if (!insumos.length) { el.innerHTML = '<div class="text-center" style="padding:20px;color:var(--gray);font-size:13px">Nenhum insumo cadastrado ainda.</div>'; return; }
+    el.innerHTML = insumos.map(i => {
+        const porcaoCusto = getInsumoPortionCost(i);
+        const totalPorcoes = getInsumoTotalPortions(i);
+        const unidLabel = i.tipo === 'peso' ? 'g' : 'un';
+        const custoLabel = i.porcaoTamanho ? `${fmt(porcaoCusto)} <span style="font-size:10px;color:var(--gray)">(${i.porcaoTamanho}${unidLabel})</span>` : `${fmt(getInsumoUnitCost(i))}/${unidLabel}`;
+        const qtdLabel = i.tipo === 'peso' ? `${i.qtdTotal} g` : `${i.qtdTotal} un`;
+        return `<div class="insumo-row">
+            <div style="font-weight:700">${i.nome}${(i.desperdicioPct||0) > 0 ? ` <span style="font-size:10px;color:var(--warning);font-weight:700">(+${i.desperdicioPct}% desperdício)</span>` : ''}${totalPorcoes > 0 ? `<div style="font-size:10px;color:var(--gray);font-weight:400">rende ${totalPorcoes.toFixed(1)} porções</div>` : ''}</div>
+            <div>${qtdLabel}</div>
+            <div>${fmt(i.valorTotal)}</div>
+            <div style="font-weight:700;color:var(--primary)">${custoLabel}</div>
+            <div class="flex gap-1">
+                <button class="btn btn-sm btn-ghost" onclick="editInsumo('${i.id}')"><i class="fa-solid fa-edit"></i></button>
+                <button class="btn btn-sm btn-danger" onclick="deleteInsumo('${i.id}')"><i class="fa-solid fa-trash"></i></button>
+            </div>
+        </div>`;
+    }).join('');
+}
+
+// ---------- SELETOR DE INSUMOS POR PRODUTO (RECEITA) ----------
+function showRecipeModal(productId) {
+    const c = currentCompany;
+    const p = (c.menuItems || []).find(x => x.id === productId);
+    if (!p) return;
+    const insumos = getInsumos().filter(i => (parseFloat(i.porcaoTamanho) || 0) > 0);
+    if (!insumos.length) { showToast('Cadastre insumos com o tamanho da porção em "Gerenciar Insumos" primeiro', 'warning'); return; }
+    const recipe = p.recipe || [];
+    const rows = insumos.map(i => {
+        const existing = recipe.find(r => r.insumoId === i.id);
+        const unitLabel = i.tipo === 'peso' ? 'g' : 'un';
+        const porcaoCusto = getInsumoPortionCost(i);
+        return `<div class="recipe-item-row">
+            <input type="checkbox" class="rec-check" data-id="${i.id}" ${existing ? 'checked' : ''} onchange="calcRecipePreview('${productId}')">
+            <div style="font-weight:700">${i.nome} <span style="color:var(--gray);font-weight:400;font-size:11px">(porção de ${i.porcaoTamanho}${unitLabel} = ${fmt(porcaoCusto)}${(i.desperdicioPct||0) > 0 ? `, já com +${i.desperdicioPct}% desperdício` : ''})</span></div>
+            <div style="font-size:11px;color:var(--gray)">porções</div>
+            <input type="number" class="form-control rec-qtd" data-id="${i.id}" data-tipo="${i.tipo}" value="${existing ? existing.porcoes : ''}" min="0" step="0.5" placeholder="Ex: 1" oninput="calcRecipePreview('${productId}')">
+            <div></div>
+        </div>`;
+    }).join('');
+    showModal(`<i class="fa-solid fa-list-check"></i> Receita — ${p.name}`,
+    `<p style="color:var(--gray);font-size:13px;margin-bottom:12px">Marque os insumos usados neste produto e informe quantas porções de cada um são usadas (ex: 1 porção de 40g de muçarela).</p>
+    <div style="max-height:340px;overflow-y:auto">${rows}</div>
+    <div class="alert alert-info mt-3"><i class="fa-solid fa-calculator"></i> Custo total da receita: <strong id="recipe-total-preview">${fmt(computeRecipeCost(p))}</strong></div>`,
+    `<button class="btn btn-ghost" onclick="closeModal()">Cancelar</button><button class="btn btn-primary" onclick="saveRecipe('${productId}')"><i class="fa-solid fa-save"></i> Salvar Receita</button>`, false);
+}
+function calcRecipePreview(productId) {
+    const insumos = getInsumos();
+    let total = 0;
+    document.querySelectorAll('.rec-check').forEach(chk => {
+        if (!chk.checked) return;
+        const id = chk.dataset.id;
+        const qtdInput = document.querySelector(`.rec-qtd[data-id="${id}"]`);
+        const porcoes = parseFloat(qtdInput?.value) || 0;
+        const insumo = insumos.find(i => i.id === id);
+        if (insumo) total += getInsumoPortionCost(insumo) * porcoes;
+    });
+    const el = document.getElementById('recipe-total-preview');
+    if (el) el.textContent = fmt(total);
+}
+async function saveRecipe(productId) {
+    const c = currentCompany;
+    const p = (c.menuItems || []).find(x => x.id === productId);
+    if (!p) return;
+    const newRecipe = [];
+    document.querySelectorAll('.rec-check').forEach(chk => {
+        if (!chk.checked) return;
+        const id = chk.dataset.id;
+        const qtdInput = document.querySelector(`.rec-qtd[data-id="${id}"]`);
+        const porcoes = parseFloat(qtdInput?.value) || 0;
+        if (porcoes > 0) newRecipe.push({ insumoId: id, porcoes });
+    });
+    p.recipe = newRecipe;
+    showLoading('Salvando receita...');
+    try {
+        await db.collection('companies').doc(currentCompanyId).update({ menuItems: c.menuItems });
         hideLoading();
         closeModal();
         renderLanchesLucro();
-        showToast('Lanche adicionado com sucesso!', 'success');
-    } catch(e) {
-        hideLoading();
-        showToast('Erro: ' + e.message, 'danger');
-    }
+        showToast('Receita salva! Custo recalculado.', 'success');
+    } catch(e) { hideLoading(); showToast('Erro: ' + e.message, 'danger'); }
 }
 
+// ---------- LISTAGEM "LUCRO POR LANCHE" (produtos do Estoque, na ordem cadastrada) ----------
 function renderLanchesLucro() {
     const el = document.getElementById('lucro-lanches-list');
     if (!el) return;
-    
-    if (!lanchesLucro.length) {
+    const c = currentCompany;
+    const items = (c && c.menuItems) || [];
+
+    if (!items.length) {
         el.innerHTML = `
             <div class="text-center" style="padding:40px;color:var(--gray)">
                 <i class="fa-solid fa-hamburger" style="font-size:48px;display:block;margin-bottom:12px;opacity:0.3"></i>
-                <p>Nenhum lanche cadastrado</p>
-                <p style="font-size:13px;margin-top:8px">Adicione seus lanches para controlar o lucro</p>
+                <p>Nenhum produto cadastrado no estoque</p>
+                <p style="font-size:13px;margin-top:8px">Cadastre produtos em Cadastrar Cardápio / Estoque para controlá-los aqui</p>
             </div>
         `;
         return;
     }
-    
-    const totalLucro = lanchesLucro.reduce((sum, l) => sum + l.lucro, 0);
-    
+
+    let totalLucro = 0;
     let html = `
         <div class="lanche-lucro-header">
-            <div>NOME LANCHE</div>
+            <div>NOME PRODUTO</div>
+            <div>RECEITA (INSUMOS)</div>
             <div>CUSTO</div>
             <div>VAL VENDA</div>
             <div>LUCRO</div>
             <div></div>
         </div>
     `;
-    
-    html += lanchesLucro.map(l => `
+
+    html += items.map(p => {
+        const insumos = getInsumos();
+        const isBebida = isBebidaProduct(p);
+        const recipe = p.recipe || [];
+        const custo = isBebida ? (parseFloat(p.bebidaCusto) || 0) : computeRecipeCost(p);
+        const venda = (p.lucroVenda !== undefined && p.lucroVenda !== null && p.lucroVenda !== '') ? parseFloat(p.lucroVenda) : (p.price || 0);
+        const lucro = venda - custo;
+        totalLucro += lucro;
+        const tags = recipe.slice(0, 3).map(r => { const ins = insumos.find(i => i.id === r.insumoId); return ins ? `<span class="insumo-tag">${ins.nome} (${r.porcoes}x ${ins.porcaoTamanho}${ins.tipo==='peso'?'g':'un'})</span>` : ''; }).join('');
+        const moreCount = recipe.length > 3 ? recipe.length - 3 : 0;
+        return `
         <div class="lanche-lucro-row">
-            <div data-label="Nome:">
-                <input type="text" class="lanche-lucro-input" value="${l.nome}" 
-                    onchange="updateLancheLucro('${l.id}', 'nome', this.value)"
-                    placeholder="Nome do lanche">
+            <div data-label="Produto:" style="font-weight:700">${p.name}${isBebida ? '<div style="font-size:10px;color:var(--info);font-weight:600"><i class="fa-solid fa-bottle-water"></i> Bebida</div>' : ''}</div>
+            <div data-label="Receita:">
+                ${isBebida ? '<span style="color:var(--gray);font-size:12px">Custo manual (bebida)</span>' : (recipe.length ? `${tags}${moreCount ? `<span class="insumo-tag">+${moreCount}</span>` : ''}` : '<span style="color:var(--gray);font-size:12px">Sem receita</span>')}
+                ${isBebida ? '' : `<button class="btn btn-sm btn-ghost" style="margin-top:4px" onclick="showRecipeModal('${p.id}')"><i class="fa-solid fa-list-check"></i> ${recipe.length ? 'Editar' : 'Selecionar Insumos'}</button>`}
             </div>
             <div data-label="Custo:">
-                <input type="number" class="lanche-lucro-input" value="${l.custo}" step="0.01" min="0"
-                    onchange="updateLancheLucro('${l.id}', 'custo', parseFloat(this.value))">
+                ${isBebida ? `<input type="number" class="lanche-lucro-input" value="${custo}" step="0.01" min="0" onchange="updateBebidaCusto('${p.id}', this.value)">` : `<div class="lanche-lucro-valor">${fmt(custo)}</div>`}
             </div>
             <div data-label="Venda:">
-                <input type="number" class="lanche-lucro-input" value="${l.venda}" step="0.01" min="0"
-                    onchange="updateLancheLucro('${l.id}', 'venda', parseFloat(this.value))">
+                <input type="number" class="lanche-lucro-input" value="${venda}" step="0.01" min="0"
+                    onchange="updateLancheVenda('${p.id}', this.value)">
             </div>
             <div data-label="Lucro:">
-                <div class="lanche-lucro-valor ${l.lucro < 0 ? 'lanche-lucro-prejuizo' : ''}">
-                    ${fmt(l.lucro)}
+                <div class="lanche-lucro-valor ${lucro < 0 ? 'lanche-lucro-prejuizo' : ''}">
+                    ${fmt(lucro)}
                 </div>
             </div>
             <div>
-                <button class="btn btn-sm btn-danger" onclick="deleteLancheLucro('${l.id}')">
-                    <i class="fa-solid fa-trash"></i>
-                </button>
+                ${(!isBebida && recipe.length) ? `<button class="btn btn-sm btn-ghost" title="Limpar receita" onclick="clearRecipe('${p.id}')"><i class="fa-solid fa-broom"></i></button>` : ''}
             </div>
         </div>
-    `).join('');
-    
+    `;
+    }).join('');
+
     html += `
         <div class="lanche-lucro-total">
             <div class="lanche-lucro-total-label">
                 <i class="fa-solid fa-chart-line"></i> 
-                Lucro Total (${lanchesLucro.length} lanche${lanchesLucro.length !== 1 ? 's' : ''})
+                Lucro Total (${items.length} produto${items.length !== 1 ? 's' : ''})
             </div>
             <div class="lanche-lucro-total-valor ${totalLucro < 0 ? 'lanche-lucro-prejuizo' : ''}">
                 ${fmt(totalLucro)}
             </div>
         </div>
     `;
-    
+
     el.innerHTML = html;
 }
 
-async function updateLancheLucro(id, field, value) {
-    const lanche = lanchesLucro.find(l => l.id === id);
-    if (!lanche) return;
-    
-    lanche[field] = value;
-    
-    // Recalcular lucro se custo ou venda mudou
-    if (field === 'custo' || field === 'venda') {
-        lanche.lucro = lanche.venda - lanche.custo;
-    }
-    
+async function updateLancheVenda(productId, value) {
+    const c = currentCompany;
+    const p = (c.menuItems || []).find(x => x.id === productId);
+    if (!p) return;
+    p.lucroVenda = parseFloat(value) || 0;
     showLoading('Atualizando...');
     try {
-        await db.collection('companies').doc(currentCompanyId).update({
-            lanchesLucro: lanchesLucro
-        });
+        await db.collection('companies').doc(currentCompanyId).update({ menuItems: c.menuItems });
         hideLoading();
         renderLanchesLucro();
-    } catch(e) {
-        hideLoading();
-        showToast('Erro: ' + e.message, 'danger');
-    }
+    } catch(e) { hideLoading(); showToast('Erro: ' + e.message, 'danger'); }
 }
 
-async function deleteLancheLucro(id) {
-    if (!confirm('Excluir este lanche?')) return;
-    
-    lanchesLucro = lanchesLucro.filter(l => l.id !== id);
-    
-    showLoading('Excluindo...');
+async function updateBebidaCusto(productId, value) {
+    const c = currentCompany;
+    const p = (c.menuItems || []).find(x => x.id === productId);
+    if (!p) return;
+    p.bebidaCusto = parseFloat(value) || 0;
+    showLoading('Atualizando...');
     try {
-        await db.collection('companies').doc(currentCompanyId).update({
-            lanchesLucro: lanchesLucro
-        });
+        await db.collection('companies').doc(currentCompanyId).update({ menuItems: c.menuItems });
         hideLoading();
         renderLanchesLucro();
-        showToast('Lanche excluído!', 'success');
-    } catch(e) {
-        hideLoading();
-        showToast('Erro: ' + e.message, 'danger');
-    }
+    } catch(e) { hideLoading(); showToast('Erro: ' + e.message, 'danger'); }
 }
 
-// Carregar lanchesLucro ao inicializar o dashboard
+async function clearRecipe(productId) {
+    if (!confirm('Limpar a receita (insumos) deste produto?')) return;
+    const c = currentCompany;
+    const p = (c.menuItems || []).find(x => x.id === productId);
+    if (!p) return;
+    p.recipe = [];
+    showLoading('Atualizando...');
+    try {
+        await db.collection('companies').doc(currentCompanyId).update({ menuItems: c.menuItems });
+        hideLoading();
+        renderLanchesLucro();
+        showToast('Receita limpa!', 'success');
+    } catch(e) { hideLoading(); showToast('Erro: ' + e.message, 'danger'); }
+}
+
+// Mantido por compatibilidade de inicialização (dados já vem em currentCompany)
 async function loadLanchesLucro() {
-    try {
-        const doc = await db.collection('companies').doc(currentCompanyId).get();
-        if (doc.exists) {
-            const data = doc.data();
-            lanchesLucro = data.lanchesLucro || [];
-        }
-    } catch(e) {
-        console.error('Erro ao carregar lanches:', e);
-    }
+    if (currentCompany && !currentCompany.insumos) currentCompany.insumos = [];
 }
 
 // ============================================================
