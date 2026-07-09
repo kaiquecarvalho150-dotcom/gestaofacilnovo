@@ -511,6 +511,33 @@ table th,table td{padding:7px 8px;font-size:11px}
     font-weight: 900;
     color: var(--success);
 }
+.custolucro-row {
+    background: #fff;
+    border-radius: 10px;
+    padding: 14px 16px;
+    border: 1px solid var(--border);
+    display: grid;
+    grid-template-columns: 2fr 1fr 1fr 1fr;
+    gap: 12px;
+    align-items: center;
+    margin-bottom: 8px;
+}
+.custolucro-header {
+    background: #f8fafc;
+    font-weight: 700;
+    font-size: 11px;
+    text-transform: uppercase;
+    color: var(--gray);
+    padding: 10px 16px;
+    border-radius: 8px;
+    display: grid;
+    grid-template-columns: 2fr 1fr 1fr 1fr;
+    gap: 12px;
+    margin-bottom: 8px;
+}
+@media (max-width: 768px) {
+    .custolucro-row, .custolucro-header { grid-template-columns: 1fr; gap: 6px; }
+}
 @media (max-width: 768px) {
     .lanche-lucro-row,
     .lanche-lucro-header {
@@ -962,6 +989,20 @@ table th,table td{padding:7px 8px;font-size:11px}
                  <i class="fa-solid fa-hamburger" style="font-size:48px;display:block;margin-bottom:12px;opacity:0.3"></i>
                  <p>Nenhum lanche cadastrado</p>
                  <p style="font-size:13px;margin-top:8px">Adicione seus lanches para controlar o lucro</p>
+             </div>
+         </div>
+		 </div>
+
+<!-- CUSTO E LUCRO POR PRODUTO VENDIDO (baseado nas OS pagas do mês) -->
+     <div class="card mt-4">
+         <div class="card-header">
+		 <div class="card-title"><i class="fa-solid fa-coins"></i> Custo e Lucro por Produto Vendido</div>
+         </div>
+         <p style="color:var(--gray);font-size:13px;margin:-8px 0 12px">Calculado com base nas OS pagas do mês selecionado, usando o custo/lucro definido em "Lucro por Lanche" para cada produto.</p>
+         <div id="custo-lucro-produto-list">
+             <div class="text-center" style="padding:40px;color:var(--gray)">
+                 <i class="fa-solid fa-coins" style="font-size:48px;display:block;margin-bottom:12px;opacity:0.3"></i>
+                 <p>Nenhuma venda paga neste mês ainda</p>
              </div>
          </div>
 		 </div>
@@ -3402,7 +3443,10 @@ async function clearReportData() {
         showToast('Erro: ' + e.message, 'danger'); 
     }
 }
+let lastReportSales = [];
+function refreshCustoLucroReport() { renderCustoLucroPorProduto(lastReportSales); }
 function renderReportData(sales, expenses, totalSalary) {
+lastReportSales = sales || [];
 const totalRevenue = sales.reduce((s, x) => s + (x.total || 0), 0);
 const totalExpenses = expenses.reduce((s, x) => s + (x.amount || 0), 0);
 const totalCosts = totalExpenses + totalSalary;
@@ -3429,6 +3473,7 @@ buildProfitChart(totalRevenue, totalCosts);
 buildAnnualChartAsync(year);
 buildEarningsTable(sales, year, monthIdx);
 renderExpensesList(expenses, currentCompany);
+renderCustoLucroPorProduto(sales);
 }
 function buildDailyChart(sales, year, monthIdx) {
 if (chartInstances.daily) chartInstances.daily.destroy();
@@ -5554,6 +5599,7 @@ async function saveInsumo() {
         resetInsumoForm();
         renderInsumosList();
         renderLanchesLucro();
+        refreshCustoLucroReport();
         showToast('Insumo salvo!', 'success');
     } catch(e) { hideLoading(); showToast('Erro: ' + e.message, 'danger'); }
 }
@@ -5568,6 +5614,7 @@ async function deleteInsumo(id) {
         hideLoading();
         renderInsumosList();
         renderLanchesLucro();
+        refreshCustoLucroReport();
         showToast('Insumo excluído!', 'success');
     } catch(e) { hideLoading(); showToast('Erro: ' + e.message, 'danger'); }
 }
@@ -5654,6 +5701,7 @@ async function saveRecipe(productId) {
         hideLoading();
         closeModal();
         renderLanchesLucro();
+        refreshCustoLucroReport();
         showToast('Receita salva! Custo recalculado.', 'success');
     } catch(e) { hideLoading(); showToast('Erro: ' + e.message, 'danger'); }
 }
@@ -5739,6 +5787,95 @@ function renderLanchesLucro() {
     el.innerHTML = html;
 }
 
+// Retorna custo/venda/lucro unitário de um produto, igual ao usado em "Lucro por Lanche"
+function getProductUnitEconomics(p) {
+    const isBebida = isBebidaProduct(p);
+    const custo = isBebida ? (parseFloat(p.bebidaCusto) || 0) : computeRecipeCost(p);
+    const venda = (p.lucroVenda !== undefined && p.lucroVenda !== null && p.lucroVenda !== '') ? parseFloat(p.lucroVenda) : (p.price || 0);
+    const lucro = venda - custo;
+    return { custo, venda, lucro };
+}
+
+// ---------- CUSTO E LUCRO POR PRODUTO VENDIDO (baseado nas OS pagas / vendas do mês) ----------
+function renderCustoLucroPorProduto(sales) {
+    const el = document.getElementById('custo-lucro-produto-list');
+    if (!el) return;
+    const c = currentCompany;
+    const items = (c && c.menuItems) || [];
+
+    if (!items.length) {
+        el.innerHTML = `
+            <div class="text-center" style="padding:40px;color:var(--gray)">
+                <i class="fa-solid fa-coins" style="font-size:48px;display:block;margin-bottom:12px;opacity:0.3"></i>
+                <p>Nenhum produto cadastrado no estoque</p>
+            </div>
+        `;
+        return;
+    }
+
+    // Conta quantos de cada produto foram vendidos nas OS pagas do mês, casando pelo nome
+    // normalizado (mesma lógica do gráfico "Itens Mais Vendidos") para lidar com produtos
+    // excluídos/recadastrados com pequenas variações de nome.
+    const canonicalMap = {};
+    items.forEach(p => { canonicalMap[normalizeProductNameForChart(p.name)] = p.id; });
+    const qtyByProductId = {};
+    (sales || []).forEach(s => {
+        (s.items || []).forEach(i => {
+            let baseName = (i.name || '').trim();
+            const m = baseName.match(/^(.+?)\s*\(\+(.+?)\)$/);
+            if (m) baseName = m[1].trim();
+            const norm = normalizeProductNameForChart(baseName);
+            const pid = canonicalMap[norm];
+            if (pid) qtyByProductId[pid] = (qtyByProductId[pid] || 0) + (i.qty || 1);
+        });
+    });
+
+    let totalCustoGeral = 0, totalLucroGeral = 0;
+    let html = `
+        <div class="custolucro-header">
+            <div>PRODUTO</div>
+            <div>VENDIDOS</div>
+            <div>CUSTO TOTAL</div>
+            <div>LUCRO TOTAL</div>
+        </div>
+    `;
+
+    html += items.map(p => {
+        const qty = qtyByProductId[p.id] || 0;
+        const isBebida = isBebidaProduct(p);
+        const recipe = p.recipe || [];
+        // Para lanches (não-bebida), só mostramos custo/lucro depois de pelo menos 1 insumo selecionado
+        // na receita (mesma ideia das bebidas, que já têm custo manual sempre definido).
+        const semReceitaAinda = !isBebida && recipe.length === 0;
+        const { custo, lucro } = getProductUnitEconomics(p);
+        const custoTotal = semReceitaAinda ? 0 : custo * qty;
+        const lucroTotal = semReceitaAinda ? 0 : lucro * qty;
+        if (!semReceitaAinda) { totalCustoGeral += custoTotal; totalLucroGeral += lucroTotal; }
+        return `
+        <div class="custolucro-row">
+            <div data-label="Produto:" style="font-weight:700">${p.name}${isBebidaProduct(p) ? '<div style="font-size:10px;color:var(--info);font-weight:600"><i class="fa-solid fa-bottle-water"></i> Bebida</div>' : ''}</div>
+            <div data-label="Vendidos:" style="font-weight:700">${qty}</div>
+            <div data-label="Custo Total:" style="font-weight:700;color:${semReceitaAinda ? 'var(--gray)' : 'var(--danger)'}">${semReceitaAinda ? '—' : fmt(custoTotal)}</div>
+            <div data-label="Lucro Total:" style="font-weight:700;color:${semReceitaAinda ? 'var(--gray)' : (lucroTotal < 0 ? 'var(--danger)' : 'var(--success)')}">${semReceitaAinda ? '<span style="font-size:11px;font-weight:400">Selecione os insumos</span>' : fmt(lucroTotal)}</div>
+        </div>`;
+    }).join('');
+
+    html += `
+        <div class="lanche-lucro-total">
+            <div class="lanche-lucro-total-label">
+                <i class="fa-solid fa-coins"></i>
+                Total Geral (${items.length} produto${items.length !== 1 ? 's' : ''})
+            </div>
+            <div style="display:flex;gap:20px;align-items:center">
+                <div style="text-align:right"><div style="font-size:11px;color:var(--gray)">Custo Total</div><div class="lanche-lucro-total-valor" style="color:var(--danger);font-size:20px">${fmt(totalCustoGeral)}</div></div>
+                <div style="text-align:right"><div style="font-size:11px;color:var(--gray)">Lucro Total</div><div class="lanche-lucro-total-valor ${totalLucroGeral < 0 ? 'lanche-lucro-prejuizo' : ''}" style="font-size:20px">${fmt(totalLucroGeral)}</div></div>
+            </div>
+        </div>
+    `;
+
+    el.innerHTML = html;
+}
+
 async function updateLancheVenda(productId, value) {
     const c = currentCompany;
     const p = (c.menuItems || []).find(x => x.id === productId);
@@ -5749,6 +5886,7 @@ async function updateLancheVenda(productId, value) {
         await db.collection('companies').doc(currentCompanyId).update({ menuItems: c.menuItems });
         hideLoading();
         renderLanchesLucro();
+        refreshCustoLucroReport();
     } catch(e) { hideLoading(); showToast('Erro: ' + e.message, 'danger'); }
 }
 
@@ -5762,6 +5900,7 @@ async function updateBebidaCusto(productId, value) {
         await db.collection('companies').doc(currentCompanyId).update({ menuItems: c.menuItems });
         hideLoading();
         renderLanchesLucro();
+        refreshCustoLucroReport();
     } catch(e) { hideLoading(); showToast('Erro: ' + e.message, 'danger'); }
 }
 
@@ -5776,6 +5915,7 @@ async function clearRecipe(productId) {
         await db.collection('companies').doc(currentCompanyId).update({ menuItems: c.menuItems });
         hideLoading();
         renderLanchesLucro();
+        refreshCustoLucroReport();
         showToast('Receita limpa!', 'success');
     } catch(e) { hideLoading(); showToast('Erro: ' + e.message, 'danger'); }
 }
