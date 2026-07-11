@@ -748,6 +748,7 @@ table th,table td{padding:7px 8px;font-size:11px}
 <div class="nav-item" onclick="showSection('chat')"><span class="nav-ic"><i class="fa-solid fa-comments"></i></span> Mensagens <span class="nav-badge-dot" id="nb-chat" style="display:none">0</span></div>
 <div class="nav-item" onclick="requireAuth('reports')"><span class="nav-ic"><i class="fa-solid fa-chart-bar"></i></span> Relatórios</div>
 <div class="nav-item" onclick="requireAuthEmployees()"><span class="nav-ic"><i class="fa-solid fa-users"></i></span> Funcionários</div>
+<div class="nav-item" onclick="requireAuth('fiados')"><span class="nav-ic"><i class="fa-solid fa-hand-holding-dollar"></i></span> Fiados</div>
 </nav>
 <div class="sidebar-footer">
 <div class="nav-item" onclick="doLogout()"><span class="nav-ic"><i class="fa-solid fa-sign-out-alt"></i></span> Sair do Sistema</div>
@@ -1032,6 +1033,16 @@ table th,table td{padding:7px 8px;font-size:11px}
 </div>
 </div>
 
+<!-- FIADOS -->
+<div id="section-fiados" class="section">
+<div class="flex items-center justify-between mb-4 flex-wrap gap-3">
+<div style="font-size:15px;font-weight:700"><i class="fa-solid fa-hand-holding-dollar"></i> Contas de Fiado</div>
+<button class="btn btn-primary" onclick="showFiadoClientModal()"><i class="fa-solid fa-plus"></i> Abrir Conta de Fiado</button>
+</div>
+<p style="color:var(--gray);font-size:13px;margin:-8px 0 12px">Área restrita ao dono da empresa. Cadastre clientes com conta de fiado, defina limite de compra e vencimento, e marque OS pagas para receber depois. A OS fica registrada aqui e só entra nos Relatórios quando você der baixa (marcar como recebido).</p>
+<div class="employees-grid" id="fiados-grid"></div>
+</div>
+
 </div>
 </div>
 </div>
@@ -1273,11 +1284,11 @@ function showSection(name) {
 document.querySelectorAll('.section').forEach(s => s.classList.remove('active'));
 document.getElementById('section-'+name)?.classList.add('active');
 document.querySelectorAll('.nav-item').forEach(n => n.classList.remove('active'));
-const labels = {home:'Dashboard',pos:'PDV — Caixa',stock:'Estoque',menu:'Cadastrar Cardápio',coupons:'Cupons de Desconto',orders:'Pedidos',chat:'Mensagens',reports:'Relatórios',employees:'Funcionários'};
+const labels = {home:'Dashboard',pos:'PDV — Caixa',stock:'Estoque',menu:'Cadastrar Cardápio',coupons:'Cupons de Desconto',orders:'Pedidos',chat:'Mensagens',reports:'Relatórios',employees:'Funcionários',fiados:'Fiados'};
 document.getElementById('topbar-title').textContent = labels[name] || name;
 document.querySelectorAll('.nav-item').forEach(n => { if(n.textContent.trim().startsWith(labels[name]||name)) n.classList.add('active'); });
 closeSidebar();
-const renders = {home:renderHome,pos:renderPDV,stock:renderStock,menu:renderMenu,coupons:renderCoupons,employees:renderEmployees,chat:renderAdminChatList};
+const renders = {home:renderHome,pos:renderPDV,stock:renderStock,menu:renderMenu,coupons:renderCoupons,employees:renderEmployees,chat:renderAdminChatList,fiados:renderFiadoClients};
 if (name !== 'home' && homeClockInterval) { clearInterval(homeClockInterval); homeClockInterval = null; }
 if (renders[name]) renders[name]();
 if (name === 'orders') {
@@ -1358,7 +1369,7 @@ const company = {
 companyName: co, ownerName: own, cnpj, phone: ph, address: addr, email: em, password: pw,
 plan: pendingPlan.plan, planPrice: pendingPlan.price, accessDays: pendingPlan.days,
 startDate: new Date().toISOString(), createdAt: new Date().toISOString(),
-blocked: false, menuItems: [], employees: [], expenses: [], globalAdditionals: [], motoboys: []
+blocked: false, menuItems: [], employees: [], expenses: [], globalAdditionals: [], motoboys: [], fiadoClients: []
 };
 await db.collection('companies').doc(id).set(company);
 hideLoading();
@@ -1761,7 +1772,7 @@ const snap = await db.collection('companies').where('email','==',em).get();
 if (!snap.empty) { hideLoading(); showToast('E-mail já cadastrado','danger'); return; }
 const id = genId();
 const prices = {trial:0, starter:29.90, professional:59.90};
-const company = { companyName:co, ownerName:own, cnpj, phone:ph, address:addr, email:em, password:pw, plan, planPrice:prices[plan]||0, accessDays:days, startDate:new Date().toISOString(), createdAt:new Date().toISOString(), blocked:false, menuItems:[], employees:[], expenses:[], globalAdditionals:[], motoboys:[] };
+const company = { companyName:co, ownerName:own, cnpj, phone:ph, address:addr, email:em, password:pw, plan, planPrice:prices[plan]||0, accessDays:days, startDate:new Date().toISOString(), createdAt:new Date().toISOString(), blocked:false, menuItems:[], employees:[], expenses:[], globalAdditionals:[], motoboys:[], fiadoClients:[] };
 await db.collection('companies').doc(id).set(company);
 // Somar valor cobrado na receita manual
 if (chargedValue > 0) {
@@ -2118,7 +2129,8 @@ document.getElementById('home-quick').innerHTML = `
 <div class="quick-card" onclick="showSection('menu')"><div class="qc-icon" style="background:#fef3c7;color:var(--warning)"><i class="fa-solid fa-utensils"></i></div><h3>Cardápio Digital</h3><p>Gerenciar cardápio</p></div>
 <div class="quick-card" onclick="showSection('orders')"><div class="qc-icon" style="background:#fee2e2;color:var(--danger)"><i class="fa-solid fa-receipt"></i></div><h3>Pedidos <span class="badge badge-danger">${pending}</span></h3><p>Pedidos de clientes</p></div>
 <div class="quick-card" onclick="requireAuth('reports')"><div class="qc-icon" style="background:#f0fdf4;color:var(--success)"><i class="fa-solid fa-chart-bar"></i></div><h3>Relatórios</h3><p>Análises financeiras</p></div>
-<div class="quick-card" onclick="requireAuthEmployees()"><div class="qc-icon" style="background:#e0f2fe;color:var(--info)"><i class="fa-solid fa-users"></i></div><h3>Funcionários</h3><p>Equipe e salários</p></div>`;
+<div class="quick-card" onclick="requireAuthEmployees()"><div class="qc-icon" style="background:#e0f2fe;color:var(--info)"><i class="fa-solid fa-users"></i></div><h3>Funcionários</h3><p>Equipe e salários</p></div>
+<div class="quick-card" onclick="requireAuth('fiados')"><div class="qc-icon" style="background:#fef3c7;color:var(--warning)"><i class="fa-solid fa-hand-holding-dollar"></i></div><h3>Fiados</h3><p>Contas e recebimentos</p></div>`;
 startHomeClock();
 }
 function startHomeClock() {
@@ -3407,8 +3419,10 @@ selectedReportYM = ym;
 showLoading('Carregando relatórios...');
 try {
 const sSnap = await db.collection('sales').where('companyId', '==', currentCompanyId).where('yearMonth', '==', ym).get();
-const sales = sSnap.docs.map(d => ({ id: d.id, ...d.data() }));
 const c = currentCompany;
+// OS marcadas como fiado e ainda não recebidas não contam nos relatórios (só passam a contar quando o dono dá baixa)
+const fiadoPendingIds = getFiadoPendingSaleIds(c);
+const sales = sSnap.docs.map(d => ({ id: d.id, ...d.data() })).filter(s => !fiadoPendingIds.has(s.id));
 const expenses = (c.expenses || []).filter(e => e.yearMonth === ym);
 const employees = c.employees || [];
 // Folha de pagamento = despesas de salário já lançadas (cada pagamento de funcionário gera uma despesa em Relatórios)
@@ -3433,7 +3447,13 @@ else if (m.type === 'app' && saleIdsThisPeriod.has(o.saleId)) totalMotoboyAppExt
 }));
 });
 const totalMotoboyExtra = totalMotoboyAppExtra + totalMotoboyManualExtra;
-renderReportData(sales, expenses, totalSalary, totalMotoboyExpense, totalMotoboyExtra);
+// Taxa extra de fiado recebida (acréscimo cobrado do cliente) referente a OS deste período, já dada baixa
+const fiadoClients = c.fiadoClients || [];
+let totalFiadoFeeReceived = 0;
+fiadoClients.forEach(cl => {
+(cl.paymentsHistory||[]).forEach(o => { if (ymFromDate(new Date(o.date)) === ym) totalFiadoFeeReceived += Math.max(0, (o.valorCobrado||0) - (o.valorOS||0)); });
+});
+renderReportData(sales, expenses, totalSalary, totalMotoboyExpense, totalMotoboyExtra, totalFiadoFeeReceived);
 } catch (e) {
 showToast('Erro ao carregar relatórios: ' + e.message, 'danger');
 }
@@ -3482,8 +3502,9 @@ let lastReportSales = [];
 let lastMotoboyExpenseTotal = 0;
 let lastMotoboyAppExtraTotal = 0;
 let lastFolhaPagamentoTotal = 0;
-function refreshCustoLucroReport() { renderCustoLucroPorProduto(lastReportSales, lastMotoboyExpenseTotal, lastMotoboyAppExtraTotal, lastFolhaPagamentoTotal); }
-function renderReportData(sales, expenses, totalSalary, totalMotoboyExpense, totalMotoboyAppExtra) {
+let lastFiadoFeeReceivedTotal = 0;
+function refreshCustoLucroReport() { renderCustoLucroPorProduto(lastReportSales, lastMotoboyExpenseTotal, lastMotoboyAppExtraTotal, lastFolhaPagamentoTotal, lastFiadoFeeReceivedTotal); }
+function renderReportData(sales, expenses, totalSalary, totalMotoboyExpense, totalMotoboyAppExtra, totalFiadoFeeReceived) {
 lastReportSales = sales || [];
 const totalRevenue = sales.reduce((s, x) => s + (x.total || 0), 0);
 const totalExpenses = expenses.reduce((s, x) => s + (x.amount || 0), 0);
@@ -3515,7 +3536,8 @@ renderExpensesList(expenses, currentCompany);
 lastMotoboyExpenseTotal = totalMotoboyExpense || 0;
 lastMotoboyAppExtraTotal = totalMotoboyAppExtra || 0;
 lastFolhaPagamentoTotal = totalSalary || 0;
-renderCustoLucroPorProduto(sales, lastMotoboyExpenseTotal, lastMotoboyAppExtraTotal, lastFolhaPagamentoTotal);
+lastFiadoFeeReceivedTotal = totalFiadoFeeReceived || 0;
+renderCustoLucroPorProduto(sales, lastMotoboyExpenseTotal, lastMotoboyAppExtraTotal, lastFolhaPagamentoTotal, lastFiadoFeeReceivedTotal);
 }
 function buildDailyChart(sales, year, monthIdx) {
 if (chartInstances.daily) chartInstances.daily.destroy();
@@ -4365,6 +4387,276 @@ if (document.getElementById('section-reports')?.classList.contains('active')) lo
 } catch (e) { hideLoading(); showToast('Erro: ' + e.message, 'danger'); }
 }
 
+// ============================================================
+// FIADOS — CONTAS DE CLIENTES (área restrita ao dono, protegida por senha)
+// ============================================================
+function renderFiadoClients() {
+const c = currentCompany;
+const list = c.fiadoClients || [];
+const el = document.getElementById('fiados-grid');
+if (!el) return;
+if (!list.length) {
+el.innerHTML = '<div style="grid-column:1/-1;text-align:center;padding:60px;color:var(--gray)"><i class="fa-solid fa-hand-holding-dollar" style="font-size:48px;display:block;margin-bottom:12px;color:var(--border)"></i><h3>Nenhuma conta de fiado cadastrada</h3></div>';
+return;
+}
+const today = new Date().toISOString().slice(0,10);
+el.innerHTML = list.map(cl => {
+const orders = cl.assignedOrders || [];
+const saldoDevedor = orders.reduce((s,o) => s + (o.valorCobrado || 0), 0);
+const limiteDisponivel = Math.max(0, (cl.limit || 0) - saldoDevedor);
+const isOverdue = orders.length > 0 && cl.dueDate && cl.dueDate < today;
+const paymentsCount = (cl.paymentsHistory||[]).length;
+return `
+<div class="emp-card">
+<div class="emp-avatar" style="background:var(--warning)">${(cl.name||'?').charAt(0).toUpperCase()}</div>
+<div style="flex:1">
+<div class="emp-name">${cl.name}${isOverdue ? ' <span class="badge badge-danger" style="font-size:10px"><i class="fa-solid fa-triangle-exclamation"></i> Vencido</span>' : ''}</div>
+<div class="emp-role">Conta de Fiado${cl.feePct > 0 ? ` · Taxa +${cl.feePct}%` : ''}</div>
+<div class="emp-details">
+<div><i class="fa-solid fa-id-card"></i> ${cl.cpf || '—'}</div>
+<div><i class="fa-solid fa-phone"></i> ${cl.phone || '—'}</div>
+<div><i class="fa-solid fa-envelope"></i> ${cl.email || '—'}</div>
+<div><i class="fa-solid fa-location-dot"></i> ${cl.address || '—'}</div>
+</div>
+<div style="background:#f8fafc;border:1px solid var(--border);border-radius:8px;padding:8px 10px;margin-top:8px;font-size:12px">
+<div style="display:flex;justify-content:space-between"><span>Limite de Compra:</span><strong>${fmt(cl.limit || 0)}</strong></div>
+<div style="display:flex;justify-content:space-between;margin-top:2px"><span>Saldo Devedor:</span><strong style="color:${saldoDevedor>0?'var(--danger)':'var(--success)'}">${fmt(saldoDevedor)}</strong></div>
+<div style="display:flex;justify-content:space-between;margin-top:2px"><span>Limite Disponível:</span><strong style="color:${limiteDisponivel>0?'var(--success)':'var(--danger)'}">${fmt(limiteDisponivel)}</strong></div>
+<div style="display:flex;justify-content:space-between;margin-top:2px"><span>Vencimento:</span><strong style="color:${isOverdue?'var(--danger)':'var(--dark3)'}">${cl.dueDate ? new Date(cl.dueDate+'T00:00:00').toLocaleDateString('pt-BR') : '—'}</strong></div>
+<div style="display:flex;justify-content:space-between;margin-top:2px"><span>OS pendentes:</span><strong>${orders.length}</strong></div>
+${paymentsCount ? `<div style="margin-top:4px;font-size:11px;color:var(--gray)">${paymentsCount} recebimento(s) no histórico</div>` : ''}
+</div>
+<div class="flex gap-2 mt-3">
+<button class="btn btn-sm btn-primary flex-1" onclick="showFiadoOrderSelector('${cl.id}')"><i class="fa-solid fa-list-check"></i> Selecionar OS</button>
+</div>
+<div class="flex gap-2 mt-2">
+<button class="btn btn-sm btn-info flex-1" onclick="showFiadoManageModal('${cl.id}')"><i class="fa-solid fa-clipboard-list"></i> Ver OS / Dar Baixa</button>
+</div>
+<div class="flex gap-2 mt-2">
+<button class="btn btn-sm btn-primary flex-1" onclick="showFiadoClientModal('${cl.id}')"><i class="fa-solid fa-edit"></i> Editar</button>
+<button class="btn btn-sm btn-danger" onclick="deleteFiadoClient('${cl.id}')"><i class="fa-solid fa-trash"></i></button>
+</div>
+</div>
+</div>`;
+}).join('');
+}
+function showFiadoClientModal(cid) {
+const c = currentCompany;
+const cl = cid ? (c.fiadoClients || []).find(x => x.id === cid) : null;
+showModal(`<i class="fa-solid fa-hand-holding-dollar"></i> ${cl ? 'Editar' : 'Abrir'} Conta de Fiado`,
+`<div class="form-group"><label>Nome Completo *</label><input type="text" id="fc-name" class="form-control" value="${cl?.name || ''}"></div>
+<div class="form-row">
+<div class="form-group"><label>CPF *</label><input type="text" id="fc-cpf" class="form-control" placeholder="000.000.000-00" value="${cl?.cpf || ''}"></div>
+<div class="form-group"><label>Telefone</label><input type="text" id="fc-phone" class="form-control" value="${cl?.phone || ''}" oninput="maskPhone(this)"></div>
+</div>
+<div class="form-group"><label>E-mail (Gmail)</label><input type="email" id="fc-email" class="form-control" value="${cl?.email || ''}"></div>
+<div class="form-group"><label>Endereço</label><input type="text" id="fc-address" class="form-control" value="${cl?.address || ''}"></div>
+<div class="form-row">
+<div class="form-group"><label>Limite de Compra (R$) *</label><input type="number" id="fc-limit" class="form-control" step="0.01" min="0" value="${cl?.limit || ''}"></div>
+<div class="form-group"><label>Vencimento para Pagamento</label><input type="date" id="fc-duedate" class="form-control" value="${cl?.dueDate || ''}"></div>
+</div>
+<div class="form-group"><label>Taxa Extra por OS Marcada (%)</label><input type="number" id="fc-feepct" class="form-control" step="0.01" min="0" value="${cl?.feePct || 0}"></div>
+<p style="color:var(--gray);font-size:12px;margin-top:-6px">A taxa extra é aplicada sobre o valor de cada OS marcada como fiado para este cliente (ex: 5% = cobra 5% a mais no valor da OS). O valor total da OS (incluindo taxa de entrega) continua contando normalmente; a taxa extra é um acréscimo separado.</p>`,
+`<button class="btn btn-ghost" onclick="closeModal()">Cancelar</button><button class="btn btn-primary" onclick="saveFiadoClient('${cid || ''}')"><i class="fa-solid fa-save"></i> Salvar</button>`, false);
+}
+async function saveFiadoClient(cid) {
+const name = document.getElementById('fc-name').value.trim();
+const cpf = document.getElementById('fc-cpf').value.trim();
+const phone = document.getElementById('fc-phone').value.trim();
+const email = document.getElementById('fc-email').value.trim();
+const address = document.getElementById('fc-address').value.trim();
+const limit = parseFloat(document.getElementById('fc-limit').value) || 0;
+const dueDate = document.getElementById('fc-duedate').value || '';
+const feePct = parseFloat(document.getElementById('fc-feepct').value) || 0;
+if (!name || !cpf) { showToast('Nome completo e CPF são obrigatórios', 'warning'); return; }
+const c = currentCompany;
+c.fiadoClients = c.fiadoClients || [];
+if (cid) {
+const idx = c.fiadoClients.findIndex(x => x.id === cid);
+if (idx !== -1) Object.assign(c.fiadoClients[idx], { name, cpf, phone, email, address, limit, dueDate, feePct });
+} else {
+c.fiadoClients.push({ id: genId(), name, cpf, phone, email, address, limit, dueDate, feePct, assignedOrders: [], paymentsHistory: [], createdAt: new Date().toISOString() });
+}
+showLoading('Salvando...');
+try {
+await db.collection('companies').doc(currentCompanyId).update({ fiadoClients: c.fiadoClients });
+hideLoading(); closeModal(); renderFiadoClients(); showToast('Conta de fiado salva!', 'success');
+} catch (e) { hideLoading(); showToast('Erro: ' + e.message, 'danger'); }
+}
+async function deleteFiadoClient(cid) {
+if (!confirm('Excluir esta conta de fiado? O histórico de OS pendentes será perdido.')) return;
+const c = currentCompany;
+c.fiadoClients = (c.fiadoClients || []).filter(x => x.id !== cid);
+showLoading('Excluindo...');
+try {
+await db.collection('companies').doc(currentCompanyId).update({ fiadoClients: c.fiadoClients });
+hideLoading(); renderFiadoClients(); showToast('Conta de fiado excluída!', 'success');
+} catch (e) { hideLoading(); showToast('Erro: ' + e.message, 'danger'); }
+}
+// OS pendentes (marcadas como fiado, ainda não recebidas) e OS já recebidas em qualquer cliente —
+// ambas ficam indisponíveis para nova seleção de fiado enquanto não forem removidas/desmarcadas.
+function getFiadoPendingSaleIds(c) {
+return new Set((c.fiadoClients||[]).flatMap(cl => (cl.assignedOrders||[]).map(o=>o.saleId)));
+}
+function getFiadoPaidSaleIds(c) {
+return new Set((c.fiadoClients||[]).flatMap(cl => (cl.paymentsHistory||[]).map(o=>o.saleId)));
+}
+let fiadoSelectorSales = [];
+async function showFiadoOrderSelector(cid) {
+const c = currentCompany;
+const cl = (c.fiadoClients || []).find(x => x.id === cid);
+if (!cl) return;
+const today = new Date().toISOString().slice(0,10);
+const firstDay = new Date(new Date().getFullYear(), new Date().getMonth(), 1).toISOString().slice(0,10);
+showModal(`<i class="fa-solid fa-list-check"></i> Selecionar OS para Fiado — ${cl.name}`,
+`<div class="form-row">
+<div class="form-group"><label>Data Início</label><input type="date" id="fc-sel-start" class="form-control" value="${firstDay}"></div>
+<div class="form-group"><label>Data Fim</label><input type="date" id="fc-sel-end" class="form-control" value="${today}"></div>
+</div>
+<div class="form-group"><label>Buscar por N° da OS / ID</label><input type="text" id="fc-sel-search" class="form-control" placeholder="Ex: 1024 ou parte do ID" oninput="filterFiadoSelectorList()"></div>
+<button class="btn btn-sm btn-primary" onclick="loadFiadoSelectorSales('${cid}')" style="margin-bottom:10px"><i class="fa-solid fa-magnifying-glass"></i> Buscar OS no Período</button>
+<div style="background:#fef3c7;border:1px solid #fcd34d;border-radius:8px;padding:8px 10px;margin-bottom:10px;font-size:12px;color:#92400e"><i class="fa-solid fa-circle-info"></i> Limite disponível: <strong>${fmt(Math.max(0,(cl.limit||0) - (cl.assignedOrders||[]).reduce((s,o)=>s+(o.valorCobrado||0),0)))}</strong>${cl.feePct>0 ? ` · Taxa extra de ${cl.feePct}% será aplicada a cada OS selecionada` : ''}</div>
+<div id="fc-selector-list" style="max-height:300px;overflow:auto;border:1px solid var(--border);border-radius:8px;padding:8px"><div style="text-align:center;color:var(--gray);padding:20px">Clique em "Buscar OS no Período" para carregar</div></div>`,
+`<button class="btn btn-ghost" onclick="closeModal()">Cancelar</button><button class="btn btn-primary" onclick="confirmFiadoOrderSelection('${cid}')"><i class="fa-solid fa-check"></i> Marcar como Fiado</button>`, false);
+}
+async function loadFiadoSelectorSales(cid) {
+const start = document.getElementById('fc-sel-start').value;
+const end = document.getElementById('fc-sel-end').value;
+const listEl = document.getElementById('fc-selector-list');
+listEl.innerHTML = '<div style="text-align:center;color:var(--gray);padding:20px">Carregando...</div>';
+try {
+const snap = await db.collection('sales').where('companyId','==',currentCompanyId).get();
+let all = snap.docs.map(d => ({ id: d.id, ...d.data() }));
+if (start) all = all.filter(s => new Date(s.date) >= new Date(start+'T00:00:00'));
+if (end) all = all.filter(s => new Date(s.date) <= new Date(end+'T23:59:59'));
+all.sort((a,b) => new Date(b.date) - new Date(a.date));
+fiadoSelectorSales = all;
+renderFiadoSelectorList(cid);
+} catch (e) { listEl.innerHTML = `<div style="color:var(--danger);padding:12px">Erro: ${e.message}</div>`; }
+}
+function renderFiadoSelectorList(cid) {
+const c = currentCompany;
+const cl = (c.fiadoClients || []).find(x => x.id === cid);
+const pendingIds = getFiadoPendingSaleIds(c);
+const paidIds = getFiadoPaidSaleIds(c);
+const listEl = document.getElementById('fc-selector-list');
+if (!listEl) return;
+if (!fiadoSelectorSales.length) { listEl.innerHTML = '<div style="text-align:center;color:var(--gray);padding:20px">Nenhuma OS encontrada no período</div>'; return; }
+listEl.innerHTML = fiadoSelectorSales.map(s => {
+const alreadyThisClient = (cl.assignedOrders||[]).some(o=>o.saleId===s.id);
+const isPaidAnywhere = paidIds.has(s.id);
+const alreadyElsewhere = !alreadyThisClient && (pendingIds.has(s.id) || isPaidAnywhere);
+let noteText = '';
+if (isPaidAnywhere) noteText = ' · Já utilizada em fiado (recebida)';
+else if (alreadyElsewhere) noteText = ' · Já marcada como fiado para outro cliente';
+else if (alreadyThisClient) noteText = ' · Já nesta lista';
+return `<label data-search="${(s.orderNumber||'')+' '+s.id}" style="display:flex;align-items:center;gap:10px;padding:8px 4px;border-bottom:1px solid #f1f5f9;${alreadyElsewhere?'opacity:0.4':''}">
+<input type="checkbox" class="fc-sel-check" data-id="${s.id}" ${(alreadyThisClient||alreadyElsewhere)?'disabled':''} ${alreadyThisClient?'checked':''} style="width:18px;height:18px">
+<div style="flex:1">
+<div style="font-weight:700">OS ${s.orderNumber || s.id} — ${s.customerName||''}</div>
+<div style="font-size:11px;color:var(--gray)">${new Date(s.date).toLocaleString('pt-BR')} · Total da OS: ${fmt(s.total||0)}${noteText}</div>
+</div>
+</label>`;
+}).join('');
+}
+function filterFiadoSelectorList() {
+const q = (document.getElementById('fc-sel-search').value||'').toLowerCase();
+document.querySelectorAll('#fc-selector-list label').forEach(l => { l.style.display = l.dataset.search.toLowerCase().includes(q) ? 'flex' : 'none'; });
+}
+async function confirmFiadoOrderSelection(cid) {
+const c = currentCompany;
+const cl = (c.fiadoClients || []).find(x => x.id === cid);
+if (!cl) return;
+cl.assignedOrders = cl.assignedOrders || [];
+const saldoAtual = cl.assignedOrders.reduce((s,o)=>s+(o.valorCobrado||0),0);
+let limiteRestante = Math.max(0, (cl.limit||0) - saldoAtual);
+const checks = document.querySelectorAll('#fc-selector-list .fc-sel-check:checked:not(:disabled)');
+let added = 0, blockedByLimit = 0;
+checks.forEach(chk => {
+const saleId = chk.dataset.id;
+if ((cl.assignedOrders||[]).some(o=>o.saleId===saleId)) return;
+const sale = fiadoSelectorSales.find(s=>s.id===saleId);
+if (!sale) return;
+const valorOS = sale.total || 0;
+const feePct = cl.feePct || 0;
+const valorCobrado = valorOS * (1 + feePct/100);
+if (valorCobrado > limiteRestante + 0.005) { blockedByLimit++; return; }
+cl.assignedOrders.push({ id: genId(), type: 'order', saleId, orderNumber: sale.orderNumber || sale.id, date: sale.date, valorOS, feePct, valorCobrado });
+limiteRestante -= valorCobrado;
+added++;
+});
+if (!added) { showToast(blockedByLimit ? 'Limite de compra insuficiente para a(s) OS selecionada(s)' : 'Nenhuma OS nova selecionada', 'warning'); return; }
+showLoading('Salvando...');
+try {
+await db.collection('companies').doc(currentCompanyId).update({ fiadoClients: c.fiadoClients });
+hideLoading(); closeModal(); renderFiadoClients();
+showToast(`${added} OS marcada(s) como fiado!${blockedByLimit ? ' ('+blockedByLimit+' não adicionada(s) por falta de limite)' : ''}`, 'success');
+} catch (e) { hideLoading(); showToast('Erro: ' + e.message, 'danger'); }
+}
+// ---------- Gerenciar OS pendentes e dar baixa (recebimento) ----------
+function showFiadoManageModal(cid) {
+const c = currentCompany;
+const cl = (c.fiadoClients || []).find(x => x.id === cid);
+if (!cl) return;
+showModal(`<i class="fa-solid fa-clipboard-list"></i> OS em Fiado — ${cl.name}`, fiadoManageBodyHtml(cid),
+`<button class="btn btn-ghost" onclick="closeModal()">Fechar</button>`, false);
+}
+function fiadoManageBodyHtml(cid) {
+const c = currentCompany;
+const cl = (c.fiadoClients || []).find(x => x.id === cid);
+if (!cl) return '';
+const orders = cl.assignedOrders || [];
+const history = (cl.paymentsHistory || []).slice().sort((a,b)=> new Date(b.receivedDate)-new Date(a.receivedDate));
+const pendingHtml = orders.length ? orders.map(o => `<div style="display:flex;justify-content:space-between;align-items:center;padding:8px 4px;border-bottom:1px solid #f1f5f9">
+<div><strong>OS ${o.orderNumber}</strong><div style="font-size:11px;color:var(--gray)">${new Date(o.date).toLocaleDateString('pt-BR')} · Valor OS: ${fmt(o.valorOS)}${o.feePct>0 ? ` + ${o.feePct}% = ${fmt(o.valorCobrado)}` : ''}</div></div>
+<div style="display:flex;align-items:center;gap:6px"><strong>${fmt(o.valorCobrado)}</strong>
+<button class="btn btn-sm btn-success" onclick="markFiadoOrderReceived('${cid}','${o.id}')"><i class="fa-solid fa-check"></i> Dar Baixa</button>
+<button class="btn btn-sm btn-danger" onclick="unassignFiadoOrder('${cid}','${o.id}')"><i class="fa-solid fa-link-slash"></i></button></div>
+</div>`).join('') : '<div style="text-align:center;color:var(--gray);padding:16px">Nenhuma OS pendente</div>';
+const historyHtml = history.length ? history.map(o => `<div style="display:flex;justify-content:space-between;align-items:center;padding:8px 4px;border-bottom:1px solid #f1f5f9">
+<div><strong>OS ${o.orderNumber}</strong><div style="font-size:11px;color:var(--gray)">Recebido em ${new Date(o.receivedDate).toLocaleString('pt-BR')} · Valor: ${fmt(o.valorCobrado)}</div></div>
+</div>`).join('') : '<div style="text-align:center;color:var(--gray);padding:16px">Nenhum recebimento ainda</div>';
+return `
+<div style="margin-bottom:14px">
+<div style="font-weight:700;margin-bottom:6px"><i class="fa-solid fa-hourglass-half"></i> OS Pendentes (fiado ainda não recebido)</div>
+<div style="max-height:220px;overflow:auto;border:1px solid var(--border);border-radius:8px;padding:4px">${pendingHtml}</div>
+</div>
+<div>
+<div style="font-weight:700;margin-bottom:6px"><i class="fa-solid fa-clock-rotate-left"></i> Histórico de Recebimentos</div>
+<div style="max-height:220px;overflow:auto;border:1px solid var(--border);border-radius:8px;padding:4px">${historyHtml}</div>
+</div>`;
+}
+// Dar baixa: marca a OS como recebida. O valor libera o limite do cliente e a OS passa a contar nos Relatórios.
+async function markFiadoOrderReceived(cid, itemId) {
+if (!confirm('Confirmar recebimento desta OS? O valor será liberado do limite do cliente e passará a contar nos Relatórios.')) return;
+const c = currentCompany;
+const cl = (c.fiadoClients || []).find(x => x.id === cid);
+if (!cl) return;
+const item = (cl.assignedOrders || []).find(o => o.id === itemId);
+if (!item) return;
+showLoading('Registrando recebimento...');
+try {
+cl.assignedOrders = (cl.assignedOrders || []).filter(o => o.id !== itemId);
+cl.paymentsHistory = cl.paymentsHistory || [];
+cl.paymentsHistory.push({ ...item, receivedDate: new Date().toISOString() });
+await db.collection('companies').doc(currentCompanyId).update({ fiadoClients: c.fiadoClients });
+hideLoading(); renderFiadoClients(); showFiadoManageModal(cid); showToast('OS recebida! Já conta nos Relatórios.', 'success');
+if (document.getElementById('section-reports')?.classList.contains('active')) loadReports();
+} catch (e) { hideLoading(); showToast('Erro: ' + e.message, 'danger'); }
+}
+// Remove a OS da lista de fiado sem marcar como recebida — ela volta a ficar disponível para seleção (correção de erro)
+async function unassignFiadoOrder(cid, itemId) {
+if (!confirm('Remover esta OS do fiado? Ela voltará a ficar disponível para seleção (para este ou outro cliente).')) return;
+const c = currentCompany;
+const cl = (c.fiadoClients || []).find(x => x.id === cid);
+if (!cl) return;
+cl.assignedOrders = (cl.assignedOrders || []).filter(o => o.id !== itemId);
+showLoading('Removendo...');
+try {
+await db.collection('companies').doc(currentCompanyId).update({ fiadoClients: c.fiadoClients });
+hideLoading(); renderFiadoClients(); showFiadoManageModal(cid); showToast('OS removida do fiado!', 'success');
+} catch (e) { hideLoading(); showToast('Erro: ' + e.message, 'danger'); }
+}
 // ============================================================
 // PUBLIC MENU — CUSTOMER AUTH
 // ============================================================
@@ -6306,10 +6598,11 @@ function getProductUnitEconomics(p) {
 }
 
 // ---------- CUSTO E LUCRO POR PRODUTO VENDIDO (baseado nas OS pagas / vendas do mês) ----------
-function renderCustoLucroPorProduto(sales, motoboyExpenseTotal, motoboyAppExtraTotal, folhaPagamentoTotal) {
+function renderCustoLucroPorProduto(sales, motoboyExpenseTotal, motoboyAppExtraTotal, folhaPagamentoTotal, fiadoFeeReceivedTotal) {
     motoboyExpenseTotal = motoboyExpenseTotal || 0;
     motoboyAppExtraTotal = motoboyAppExtraTotal || 0;
     folhaPagamentoTotal = folhaPagamentoTotal || 0;
+    fiadoFeeReceivedTotal = fiadoFeeReceivedTotal || 0;
     const el = document.getElementById('custo-lucro-produto-list');
     if (!el) return;
     const c = currentCompany;
@@ -6390,8 +6683,9 @@ function renderCustoLucroPorProduto(sales, motoboyExpenseTotal, motoboyAppExtraT
     const totalCustoPctGeral = totalVendaGeral > 0 ? (totalCustoGeral / totalVendaGeral * 100) : 0;
     const totalLucroPctGeral = totalVendaGeral > 0 ? (totalLucroGeral / totalVendaGeral * 100) : 0;
     // Faturamento Total = Vendas + Taxas de Entrega, descontando o adicional de R$0,20/corrida do motoboy aplicativo
-    // (esse adicional não é receita real da empresa, é só um custo extra do motoboy aplicativo)
-    const totalFaturamento = totalVendaGeral + totalTaxasEntrega - motoboyAppExtraTotal;
+    // e somando a taxa extra de fiado já recebida (acréscimo cobrado do cliente ao dar baixa na OS)
+    // (o adicional do motoboy não é receita real da empresa, é só um custo extra do motoboy aplicativo)
+    const totalFaturamento = totalVendaGeral + totalTaxasEntrega - motoboyAppExtraTotal + fiadoFeeReceivedTotal;
     // Lucro Real Final = Faturamento - Custo Total - Custo Motoboys - Folha de Pagamento
     // (Taxas de Entrega é apenas informativo aqui, pois já está incluída dentro do Faturamento Total)
     const totalLucroRealFinal = totalFaturamento - totalCustoGeral - motoboyExpenseTotal - folhaPagamentoTotal;
@@ -6402,7 +6696,7 @@ function renderCustoLucroPorProduto(sales, motoboyExpenseTotal, motoboyAppExtraT
                 Total Geral (${items.length} produto${items.length !== 1 ? 's' : ''})
             </div>
             <div style="display:flex;gap:20px;align-items:center;flex-wrap:wrap">
-                <div style="text-align:right"><div style="font-size:11px;color:var(--gray)">Faturamento Total</div><div class="lanche-lucro-total-valor" style="font-size:20px">${fmt(totalFaturamento)}</div><div style="font-size:11px;font-weight:600;color:var(--gray)">Vendas + Taxas${motoboyAppExtraTotal > 0 ? ` (- ${fmt(motoboyAppExtraTotal)} extras motoboy)` : ''}</div></div>
+                <div style="text-align:right"><div style="font-size:11px;color:var(--gray)">Faturamento Total</div><div class="lanche-lucro-total-valor" style="font-size:20px">${fmt(totalFaturamento)}</div><div style="font-size:11px;font-weight:600;color:var(--gray)">Vendas + Taxas${motoboyAppExtraTotal > 0 ? ` (- ${fmt(motoboyAppExtraTotal)} extras motoboy)` : ''}${fiadoFeeReceivedTotal > 0 ? ` (+ ${fmt(fiadoFeeReceivedTotal)} taxa fiado recebida)` : ''}</div></div>
                 <div style="text-align:right"><div style="font-size:11px;color:var(--gray)">Custo Total</div><div class="lanche-lucro-total-valor" style="color:var(--danger);font-size:20px">${fmt(totalCustoGeral)}</div><div style="font-size:11px;font-weight:600;color:var(--gray)">Custo de insumos</div></div>
                 <div style="text-align:right"><div style="font-size:11px;color:var(--gray)">Custo Motoboys</div><div class="lanche-lucro-total-valor" style="color:var(--warning);font-size:20px">${fmt(motoboyExpenseTotal)}</div><div style="font-size:11px;font-weight:600;color:var(--gray)">Pagamentos confirmados</div></div>
                 <div style="text-align:right"><div style="font-size:11px;color:var(--gray)">Folha de Pagamento</div><div class="lanche-lucro-total-valor" style="color:var(--danger);font-size:20px">${fmt(folhaPagamentoTotal)}</div><div style="font-size:11px;font-weight:600;color:var(--gray)">Salários pagos no período</div></div>
