@@ -2405,7 +2405,7 @@ renderPDVGrid();
 } catch(e) { hideLoading(); showToast('Erro ao registrar venda: '+e.message,'danger'); }
 }
 function buildOSHtml(data, copyLabel) {
-    const c = currentCompany || {}; const payNames = {dinheiro:'DINHEIRO', cartao:'CARTÃO', pix:'PIX'};
+    const c = currentCompany || {}; const payNames = {dinheiro:'DINHEIRO', cartao:'CARTÃO', pix:'PIX', 'vem-buscar':'VEM BUSCAR (RETIRADA)'};
     const customerName = data.customerName || ''; const logoUrl = adminLogoUrl || '';
     const dateObj = new Date(data.date); const dateStr = dateObj.toLocaleDateString('pt-BR'); const timeStr = dateObj.toLocaleTimeString('pt-BR',{hour:'2-digit',minute:'2-digit',second:'2-digit'});
     const itemsRows = (data.items||[]).map(item => {
@@ -2431,6 +2431,7 @@ function buildOSHtml(data, copyLabel) {
         ${data.phone ? `<div class="info-row"><span class="bold">Telefone:</span> ${data.phone}</div>` : ''}
         ${data.address ? `<div class="info-row" style="white-space:normal"><span class="bold">Endereço:</span> ${data.address}${data.houseNumber ? ', nº '+data.houseNumber : ''}${data.complement ? ' - '+data.complement : ''}</div>` : ''}
         ${(!data.address && (data.paymentMethod === 'vem-buscar' || data.source === 'pub_menu')) ? `<div class="info-row">${!data.address ? '<span class="bold">Retirada no local (Vem Buscar)</span>' : ''}</div>` : ''}
+        ${(data.paymentMethod === 'vem-buscar' && data.pickupPaymentMethod) ? `<div class="info-row"><span class="bold">Pagamento na retirada:</span> ${payNames[data.pickupPaymentMethod]||data.pickupPaymentMethod}</div>` : ''}
     ` : '';
     const copyLabelHtml = copyLabel ? `<div class="center bold" style="font-size:14px;border:2px solid #000;padding:3px;margin-bottom:5px">${copyLabel}</div>` : '';
     const html = `<!DOCTYPE html><html lang="pt-BR"><head><meta charset="UTF-8"><title>OS ${data.orderNumber}</title><style>* { margin:0; padding:0; box-sizing:border-box; } body { font-family: 'Courier New', Courier, monospace; font-size: 15px; color: #000; background: #fff; width: 58mm; margin: 0; padding: 1mm 0.5mm 1mm; line-height: 1.2; } .center { text-align: center; } .right { text-align: right; } .bold { font-weight: 900; } .big { font-size: 19px; } .small { font-size: 13px; } .dashed { border-top: 2px dashed #000; margin: 3px 0; } .solid { border-top: 3px solid #000; margin: 3px 0; } table { width: 100%; border-collapse: collapse; } td { vertical-align: top; font-size: 14px; font-weight: 900; } .row-total td { font-size: 19px; font-weight: 900; } .row-delivery td { color: #000; font-weight: 900; } .troco-box { border: 3px dashed #000; padding: 8px 10px; margin-top: 6px; text-align: center; background: #fff; } .info-row { font-size: 14px; margin: 2px 0; font-weight: 900; } .online-badge { background: #fff; color: #000; border: 3px solid #000; padding: 6px 10px; font-size: 16px; font-weight: 900; display: inline-block; margin-bottom: 6px; letter-spacing: 1px; } .company-info { font-size: 13px; font-weight: 900; margin: 2px 0; } .date-time { font-size: 15px; font-weight: 900; margin: 3px 0; } .pay-section { font-size: 18px; font-weight: 900; margin: 4px 0; color: #000; } .pay-label { font-size: 18px; font-weight: 900; } .troco-val { font-size: 20px; font-weight: 900; } @media print { body { width: 58mm; } @page { size: 58mm auto; margin: 0; } .no-print, .print-btn, button { display: none !important; } } .print-btn { display: block; width: 100%; margin-top: 10px; padding: 10px; background: #000; color: #fff; border: none; font-size: 16px; font-weight: 900; cursor: pointer; } </style></head><body>${copyLabelHtml}${logoUrl ? `<div class="center" style="margin-bottom:5px"><img src="${logoUrl}" style="max-width:56mm;max-height:15mm;object-fit:contain" onerror="this.style.display='none'"></div>` : ''}<div class="center bold big" style="font-size:19px">${c.companyName||'ESTABELECIMENTO'}</div>${c.cnpj ? `<div class="company-info"><span style="font-size:12px">CNPJ:</span> ${c.cnpj}</div>` : ''}${c.address ? `<div class="company-info">${c.address}</div>` : ''}${c.phone ? `<div class="company-info">Tel: ${c.phone}</div>` : ''}<div class="solid"></div><div class="center bold date-time" style="font-size:17px">${data.orderNumber}</div><div class="center date-time" style="font-size:15px">${dateStr} ${timeStr}</div><div class="dashed"></div>${customerName ? `<div class="info-row"><span class="bold">Cliente:</span> ${customerName}</div>` : ''}${deliveryInfoBlock}<div class="dashed"></div><div class="bold" style="margin-bottom:3px;font-size:17px">ITENS DO PEDIDO</div><table><thead><tr><td class="bold" style="font-size:15px">Produto</td><td class="bold right" style="font-size:14px">Unit.</td><td class="bold right" style="font-size:15px">Total</td></tr></thead><tbody>${itemsRows}</tbody></table><div class="dashed"></div><table><tr><td class="bold" style="font-size:16px">Subtotal:</td><td class="right" style="font-size:16px">${fmtPrint(subtotal)}</td></tr>${discount > 0 ? `<tr class="row-delivery"><td style="font-size:15px"><i>Desconto${data.couponCode?' ('+data.couponCode+')':''}:</i></td><td class="right" style="font-size:15px"><i>- ${fmtPrint(discount)}</i></td></tr>` : ''}${delivery > 0 ? `<tr class="row-delivery"><td style="font-size:15px"><i>Taxa de Entrega:</i></td><td class="right" style="font-size:15px"><i>${fmtPrint(delivery)}</i></td></tr>` : ''}<tr class="row-total"><td class="bold">TOTAL:</td><td class="right">${fmtPrint(data.total)}</td></tr></table><div class="dashed"></div><div class="pay-section"><span class="pay-label">Pagamento:</span> ${payNames[data.paymentMethod]||data.paymentMethod}</div>${data.valorPago && data.valorPago > data.total ? `<div class="pay-section"><span class="pay-label">Recebido:</span> ${fmtPrint(data.valorPago)}</div>` : ''}${data.troco > 0 ? `<div class="troco-box"><span class="troco-val">TROCO: ${fmtPrint(data.troco)}</span></div>` : ''}<div class="solid"></div><div class="center bold" style="margin-top:3px;font-size:16px">Obrigado pela preferência!</div><div class="center small" style="margin-top:1px;font-size:15px;font-weight:900">Gestão Fácil</div><button class="print-btn no-print" onclick="window.print()">🖨️ IMPRIMIR</button></body></html>`;
@@ -4488,6 +4489,14 @@ ${pubAppliedCoupon ? `<button class="btn btn-ghost" onclick="removePubCoupon()">
         <option value="vem-buscar">Vem Buscar</option>
     </select>
 </div>
+<div class="form-group" id="pub-pickup-pay-group" style="display:none"><label>Forma de Pagamento na Retirada *</label>
+    <select id="pub-order-pickup-pay" class="form-control">
+        <option value="">Selecione</option>
+        <option value="dinheiro">Dinheiro</option>
+        <option value="cartao">Cartão</option>
+        <option value="pix">Pix</option>
+    </select>
+</div>
 <div id="pub-troco-box" style="display:none;background:#f0fdf4;border:2px solid #86efac;border-radius:10px;padding:12px;margin-top:12px">
     <div style="font-size:13px;font-weight:700;color:#166534;margin-bottom:8px"><i class="fa-solid fa-money-bill-wave"></i> Calcular Troco</div>
     <div style="font-size:12px;color:var(--gray);margin-bottom:8px">Informe o valor que vai pagar:</div>
@@ -4507,6 +4516,7 @@ function handlePubPaymentChange() {
     const deliveryRow = document.getElementById('pub-delivery-row');
     const totalEl = document.getElementById('pub-total-val');
     const trocoBox = document.getElementById('pub-troco-box');
+    const pickupPayGroup = document.getElementById('pub-pickup-pay-group');
 
     const t = getPubCartTotals(pay);
     const baseDelivery = pubDeliveryFee || 0;
@@ -4514,6 +4524,11 @@ function handlePubPaymentChange() {
     // 1. Ocultar/Mostrar campos de endereço
     if (addrFields) {
         addrFields.style.display = pay === 'vem-buscar' ? 'none' : 'block';
+    }
+
+    // 1b. Ocultar/Mostrar forma de pagamento da retirada (só aparece em Vem Buscar)
+    if (pickupPayGroup) {
+        pickupPayGroup.style.display = pay === 'vem-buscar' ? 'block' : 'none';
     }
 
     // 2. Ocultar/Mostrar e calcular Taxa de Entrega
@@ -4597,10 +4612,13 @@ showPubCartModal();
 }
 async function placePubOrder() {
     if (!pubCart.length) { showToast('Carrinho vazio','warning'); return; }
-    if (!currentCustomer) { pubPendingCheckout = true; showPubChatAuthPrompt(); return; }
+    // Cadastro/login não é mais exigido para finalizar o pedido — apenas para usar o chat.
+    // Sem login, usamos um ID de convidado apenas para vincular o pedido.
+    const guestId = currentCustomer ? currentCustomer.id : ('guest_' + genId());
     const name = document.getElementById('pub-order-name').value.trim();
     const phone = document.getElementById('pub-order-phone').value.trim();
     const pay = document.getElementById('pub-order-pay').value;
+    const pickupPay = document.getElementById('pub-order-pickup-pay')?.value || '';
     
     if (!name || !phone) {
         showToast('Preencha nome e telefone','warning');
@@ -4611,7 +4629,7 @@ async function placePubOrder() {
     let house = '';
     let comp = '';
     
-    // Validação de endereço (não obrigatório para Vem Buscar)
+    // Validação de endereço (agora sempre obrigatório, exceto para Vem Buscar)
     if (pay !== 'vem-buscar') {
         address = document.getElementById('pub-order-address')?.value.trim() || '';
         house = document.getElementById('pub-order-house')?.value.trim() || '';
@@ -4619,6 +4637,12 @@ async function placePubOrder() {
         
         if (!address) {
             showToast('Preencha o endereço de entrega','warning');
+            return;
+        }
+    } else {
+        // Vem Buscar: exige selecionar a forma de pagamento na retirada
+        if (!pickupPay) {
+            showToast('Selecione a forma de pagamento para a retirada','warning');
             return;
         }
     }
@@ -4649,9 +4673,9 @@ async function placePubOrder() {
         const osNum = genOSNumber();
         const orderRef = await db.collection('orders').add({
             companyId: pubCompanyId,
-            customerId: currentCustomer.id,
+            customerId: guestId,
             customerName: name,
-            customerEmail: currentCustomer.email || '',
+            customerEmail: currentCustomer ? (currentCustomer.email || '') : '',
             address: address,
             houseNumber: house,
             complement: comp,
@@ -4660,6 +4684,7 @@ async function placePubOrder() {
             total: total,
             subtotal: subtotal,
             deliveryTotal: deliveryFee, // ✅ Salva 0 se for buscar
+            pickupPaymentMethod: pay === 'vem-buscar' ? pickupPay : '',
             couponCode: pubAppliedCoupon ? pubAppliedCoupon.code : '',
             couponPercent: pubAppliedCoupon ? pubAppliedCoupon.percent : 0,
             discountTotal: discountTotal,
@@ -4671,7 +4696,8 @@ async function placePubOrder() {
             notes: comp,
             orderNumber: osNum,
             source: 'pub_menu',
-            orderStatus: 'novo'
+            orderStatus: 'novo',
+            isGuest: !currentCustomer
         });
         // Registra o uso do cupom (histórico + suspensão automática se for de uso único)
         if (pubAppliedCoupon) {
@@ -4690,7 +4716,7 @@ async function placePubOrder() {
                     couponId: cp ? cp.id : (pubAppliedCoupon.id||''),
                     code: pubAppliedCoupon.code,
                     percent: pubAppliedCoupon.percent,
-                    customerId: currentCustomer.id,
+                    customerId: guestId,
                     customerName: name,
                     orderId: orderRef.id,
                     orderNumber: osNum,
@@ -4699,11 +4725,13 @@ async function placePubOrder() {
                 await db.collection('companies').doc(pubCompanyId).update({coupons: pubCompany.coupons, couponUsageHistory: pubCompany.couponUsageHistory});
             } catch(e) { console.error('Erro ao registrar uso do cupom:', e); }
         }
-        // Salva endereço/telefone no perfil do cliente para agilizar próximas compras
+        // Salva endereço/telefone no perfil do cliente para agilizar próximas compras (somente se estiver logado)
         try {
-            currentCustomer.address = address; currentCustomer.houseNumber = house; currentCustomer.complement = comp; currentCustomer.phone = phone; currentCustomer.name = name;
-            await db.collection('pub_customers').doc(currentCustomer.id).update({ address, houseNumber: house, complement: comp, phone, name });
-            savePubCustomer(currentCustomer);
+            if (currentCustomer) {
+                currentCustomer.address = address; currentCustomer.houseNumber = house; currentCustomer.complement = comp; currentCustomer.phone = phone; currentCustomer.name = name;
+                await db.collection('pub_customers').doc(currentCustomer.id).update({ address, houseNumber: house, complement: comp, phone, name });
+                savePubCustomer(currentCustomer);
+            }
         } catch(e) { console.error('Erro ao salvar dados do cliente:', e); }
         hideLoading();
         closeModal();
@@ -4711,7 +4739,7 @@ async function placePubOrder() {
         pubAppliedCoupon = null;
         updatePubCartCount();
         showToast('Pedido enviado com sucesso!','success');
-        showPubTab('orders');
+        if (currentCustomer) { showPubTab('orders'); } else { showPubTab('menu'); }
     } catch(e) {
         hideLoading();
         showToast('Erro ao enviar pedido: ' + e.message,'danger');
@@ -4816,6 +4844,7 @@ async function updateOrderStatus(oid, newStatus) {
                         discountTotal: order.discountTotal || 0,
                         couponCode: order.couponCode || '',
                         paymentMethod: order.paymentMethod || 'dinheiro',
+                        pickupPaymentMethod: order.pickupPaymentMethod || '',
                         valorPago: order.valorPago || order.total || 0,
                         troco: order.troco || 0,
                         date: order.date || now.toISOString(),
@@ -4859,6 +4888,7 @@ function printOrderFromHistory(order) {
         address: order.address || '',
         houseNumber: order.houseNumber || '',
         complement: order.complement || '',
+        pickupPaymentMethod: order.pickupPaymentMethod || '',
         source: order.source || 'pdv'
     };
 
@@ -4890,6 +4920,7 @@ function printOrderFromHistory(order) {
         address: order.address || '',
         houseNumber: order.houseNumber || '',
         complement: order.complement || '',
+        pickupPaymentMethod: order.pickupPaymentMethod || '',
         source: order.source || 'pdv'
     };
     
@@ -5213,9 +5244,57 @@ function addHistItem() {
     const c = currentCompany;
     const p = (c.menuItems || []).find(m => m.id === pid);
     if (!p) return;
-    const existing = st.items.find(i => i.id === pid);
+    const globalAdds = c.globalAdditionals || [];
+    if (globalAdds.length) {
+        showHistAdditionalsModal(p);
+    } else {
+        confirmAddHistItem(p, []);
+    }
+}
+function showHistAdditionalsModal(product) {
+    const c = currentCompany;
+    const globalAdds = c.globalAdditionals || [];
+    const addsHtml = globalAdds.map(a => `
+    <div class="flex items-center justify-between" style="padding:8px 0;border-bottom:1px solid #f1f5f9">
+        <label style="display:flex;align-items:center;gap:8px;cursor:pointer;flex:1">
+            <input type="checkbox" class="hist-add-check" data-id="${a.id}" data-name="${a.name}" data-price="${a.price}" data-is-free="${a.isFree||false}" style="width:16px;height:16px">
+            <span style="font-size:13px;font-weight:600">${a.name}${a.isFree?' <span style="color:var(--gray);font-size:11px">(sem custo)</span>':''}</span>
+        </label>
+        <span style="color:${a.isFree?'var(--gray)':'var(--primary)'};font-weight:700;font-size:13px">${a.isFree?'Grátis':fmt(a.price)}</span>
+    </div>
+    `).join('');
+    showModal(
+        `<i class="fa-solid fa-plus-circle"></i> ${product.name}`,
+        `<div style="font-size:20px;font-weight:900;color:var(--primary);margin-bottom:16px">${fmt(product.price)}</div>
+        <div style="margin-bottom:8px">
+            <div style="font-size:12px;font-weight:700;color:var(--gray);text-transform:uppercase;letter-spacing:.3px;margin-bottom:10px">Adicional (opcional)</div>
+            ${addsHtml}
+            <div style="font-size:11px;color:var(--gray);margin-top:8px;font-style:italic">Deixe em branco se não quiser adicional</div>
+        </div>`,
+        `<button class="btn btn-ghost" onclick="renderEditHistoryModal()">Voltar</button>
+        <button class="btn btn-success" onclick="confirmHistAdditionals('${product.id}')"><i class="fa-solid fa-plus"></i> Adicionar</button>`,
+        false
+    );
+}
+function confirmHistAdditionals(pid) {
+    const c = currentCompany;
+    const p = (c.menuItems || []).find(m => m.id === pid);
+    if (!p) return;
+    const selected = [...document.querySelectorAll('.hist-add-check:checked')].map(cb => ({
+        id: cb.dataset.id, name: cb.dataset.name, price: parseFloat(cb.dataset.price) || 0, isFree: cb.dataset.isFree === 'true'
+    }));
+    confirmAddHistItem(p, selected);
+}
+function confirmAddHistItem(p, selected) {
+    const st = editHistOrderState;
+    if (!st) return;
+    const addPrice = selected.filter(a => !a.isFree).reduce((s, a) => s + a.price, 0);
+    const totalPrice = p.price + addPrice;
+    const name = selected.length ? `${p.name} (+${selected.map(a=>a.name).join(', ')})` : p.name;
+    const sigKey = p.id + '|' + selected.map(a=>a.id).sort().join(',');
+    const existing = st.items.find(i => i._sigKey === sigKey);
     if (existing) { existing.qty += 1; }
-    else { st.items.push({ id: p.id, name: p.name, price: p.price, qty: 1 }); }
+    else { st.items.push({ id: p.id, name: name, price: totalPrice, qty: 1, additionals: selected, _sigKey: sigKey }); }
     renderEditHistoryModal();
 }
 
@@ -5326,6 +5405,7 @@ function printOrderFromHistoryById(orderId) {
         address: order.address || '',
         houseNumber: order.houseNumber || '',
         complement: order.complement || '',
+        pickupPaymentMethod: order.pickupPaymentMethod || '',
         source: order.source || 'pdv'
     };
 
@@ -5831,6 +5911,8 @@ function renderCustoLucroPorProduto(sales) {
     });
 
     let totalCustoGeral = 0, totalVendaGeral = 0, totalLucroGeral = 0;
+    // Soma todas as taxas de entrega recebidas nas OS pagas do período (não depende de receita/insumo cadastrado)
+    const totalTaxasEntrega = (sales || []).reduce((s, o) => s + (parseFloat(o.deliveryTotal) || 0), 0);
     let html = `
         <div class="custolucro-header">
             <div>PRODUTO</div>
@@ -5868,16 +5950,20 @@ function renderCustoLucroPorProduto(sales) {
 
     const totalCustoPctGeral = totalVendaGeral > 0 ? (totalCustoGeral / totalVendaGeral * 100) : 0;
     const totalLucroPctGeral = totalVendaGeral > 0 ? (totalLucroGeral / totalVendaGeral * 100) : 0;
+    // Lucro + taxas de entrega totais = lucro real do período (bate com o financeiro)
+    const totalLucroComTaxas = totalLucroGeral + totalTaxasEntrega;
     html += `
         <div class="lanche-lucro-total">
             <div class="lanche-lucro-total-label">
                 <i class="fa-solid fa-coins"></i>
                 Total Geral (${items.length} produto${items.length !== 1 ? 's' : ''})
             </div>
-            <div style="display:flex;gap:20px;align-items:center">
+            <div style="display:flex;gap:20px;align-items:center;flex-wrap:wrap">
                 <div style="text-align:right"><div style="font-size:11px;color:var(--gray)">Custo Total</div><div class="lanche-lucro-total-valor" style="color:var(--danger);font-size:20px">${fmt(totalCustoGeral)}</div><div style="font-size:11px;font-weight:600;color:var(--gray)">${totalVendaGeral > 0 ? totalCustoPctGeral.toFixed(1) + '%' : '—'}</div></div>
                 <div style="text-align:right"><div style="font-size:11px;color:var(--gray)">Valor Total</div><div class="lanche-lucro-total-valor" style="color:var(--primary);font-size:20px">${fmt(totalVendaGeral)}</div><div style="font-size:11px;font-weight:600;color:var(--gray)">${totalVendaGeral > 0 ? '100%' : '—'}</div></div>
+                <div style="text-align:right"><div style="font-size:11px;color:var(--gray)">Taxas de Entrega</div><div class="lanche-lucro-total-valor" style="color:var(--info);font-size:20px">${fmt(totalTaxasEntrega)}</div><div style="font-size:11px;font-weight:600;color:var(--gray)">Recebido em entregas</div></div>
                 <div style="text-align:right"><div style="font-size:11px;color:var(--gray)">Lucro Total</div><div class="lanche-lucro-total-valor ${totalLucroGeral < 0 ? 'lanche-lucro-prejuizo' : ''}" style="font-size:20px">${fmt(totalLucroGeral)}</div><div style="font-size:11px;font-weight:600;color:var(--gray)">${totalVendaGeral > 0 ? totalLucroPctGeral.toFixed(1) + '%' : '—'}</div></div>
+                <div style="text-align:right"><div style="font-size:11px;color:var(--gray)">Lucro + Taxas de Entrega</div><div class="lanche-lucro-total-valor ${totalLucroComTaxas < 0 ? 'lanche-lucro-prejuizo' : ''}" style="font-size:20px;color:var(--success)">${fmt(totalLucroComTaxas)}</div><div style="font-size:11px;font-weight:600;color:var(--gray)">Lucro real do período</div></div>
             </div>
         </div>
     `;
