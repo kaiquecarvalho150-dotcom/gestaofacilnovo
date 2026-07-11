@@ -1018,6 +1018,18 @@ table th,table td{padding:7px 8px;font-size:11px}
 <button class="btn btn-primary" onclick="showEmployeeModal()"><i class="fa-solid fa-plus"></i> Cadastrar Funcionário</button>
 </div>
 <div class="employees-grid" id="employees-grid"></div>
+
+<div class="card mt-4">
+<div class="flex items-center justify-between mb-4 flex-wrap gap-3">
+<div class="card-title"><i class="fa-solid fa-motorcycle"></i> Motoboys / Entregadores</div>
+<div class="flex gap-2 flex-wrap">
+<button class="btn btn-primary" onclick="showMotoboyModal('normal')"><i class="fa-solid fa-plus"></i> Cadastrar Motoboy</button>
+<button class="btn btn-info" onclick="showMotoboyModal('app')"><i class="fa-solid fa-mobile-screen"></i> Cadastrar Motoboy Aplicativo</button>
+</div>
+</div>
+<p style="color:var(--gray);font-size:13px;margin:-8px 0 12px">Motoboy normal recebe o valor exato da taxa de entrega de cada OS. Motoboy Aplicativo recebe a taxa da OS + R$ 0,20 por corrida (esse adicional sai do Faturamento Total dos relatórios).</p>
+<div class="employees-grid" id="motoboys-grid"></div>
+</div>
 </div>
 
 </div>
@@ -1346,7 +1358,7 @@ const company = {
 companyName: co, ownerName: own, cnpj, phone: ph, address: addr, email: em, password: pw,
 plan: pendingPlan.plan, planPrice: pendingPlan.price, accessDays: pendingPlan.days,
 startDate: new Date().toISOString(), createdAt: new Date().toISOString(),
-blocked: false, menuItems: [], employees: [], expenses: [], globalAdditionals: []
+blocked: false, menuItems: [], employees: [], expenses: [], globalAdditionals: [], motoboys: []
 };
 await db.collection('companies').doc(id).set(company);
 hideLoading();
@@ -1749,7 +1761,7 @@ const snap = await db.collection('companies').where('email','==',em).get();
 if (!snap.empty) { hideLoading(); showToast('E-mail já cadastrado','danger'); return; }
 const id = genId();
 const prices = {trial:0, starter:29.90, professional:59.90};
-const company = { companyName:co, ownerName:own, cnpj, phone:ph, address:addr, email:em, password:pw, plan, planPrice:prices[plan]||0, accessDays:days, startDate:new Date().toISOString(), createdAt:new Date().toISOString(), blocked:false, menuItems:[], employees:[], expenses:[], globalAdditionals:[] };
+const company = { companyName:co, ownerName:own, cnpj, phone:ph, address:addr, email:em, password:pw, plan, planPrice:prices[plan]||0, accessDays:days, startDate:new Date().toISOString(), createdAt:new Date().toISOString(), blocked:false, menuItems:[], employees:[], expenses:[], globalAdditionals:[], motoboys:[] };
 await db.collection('companies').doc(id).set(company);
 // Somar valor cobrado na receita manual
 if (chargedValue > 0) {
@@ -3399,8 +3411,29 @@ const sales = sSnap.docs.map(d => ({ id: d.id, ...d.data() }));
 const c = currentCompany;
 const expenses = (c.expenses || []).filter(e => e.yearMonth === ym);
 const employees = c.employees || [];
-const totalSalary = employees.reduce((s, e) => s + ((e.payments||[]).filter(p => p.yearMonth === ym).reduce((ps,p)=>ps+(p.amount||0),0)), 0);
-renderReportData(sales, expenses, totalSalary);
+// Folha de pagamento = despesas de salário já lançadas (cada pagamento de funcionário gera uma despesa em Relatórios)
+const totalSalary = expenses.filter(e => e.category === 'Salário').reduce((s,e)=>s+(e.amount||0),0);
+// Custo com motoboys já pagos neste período (entra como despesa lançada em Relatórios)
+const totalMotoboyExpense = expenses.filter(e => e.category === 'Motoboy').reduce((s,e)=>s+(e.amount||0),0);
+// Adicional de R$0,20 por corrida de motoboy aplicativo, atribuída a uma OS deste período (sai do Faturamento Total)
+const motoboys = c.motoboys || [];
+const saleIdsThisPeriod = new Set(sales.map(s=>s.id));
+let totalMotoboyAppExtra = 0;
+let totalMotoboyManualExtra = 0;
+motoboys.forEach(m => {
+// corridas ainda pendentes (não pagas)
+(m.assignedOrders||[]).forEach(o => {
+if (o.type === 'manual') { if (ymFromDate(new Date(o.date)) === ym) totalMotoboyManualExtra += (o.value||0); }
+else if (m.type === 'app' && saleIdsThisPeriod.has(o.saleId)) totalMotoboyAppExtra += MOTOBOY_APP_EXTRA;
+});
+// corridas já pagas (mantêm o mesmo efeito no faturamento do período em que ocorreram)
+(m.paymentsHistory||[]).forEach(p => (p.items||[]).forEach(o => {
+if (o.type === 'manual') { if (ymFromDate(new Date(o.date)) === ym) totalMotoboyManualExtra += (o.value||0); }
+else if (m.type === 'app' && saleIdsThisPeriod.has(o.saleId)) totalMotoboyAppExtra += MOTOBOY_APP_EXTRA;
+}));
+});
+const totalMotoboyExtra = totalMotoboyAppExtra + totalMotoboyManualExtra;
+renderReportData(sales, expenses, totalSalary, totalMotoboyExpense, totalMotoboyExtra);
 } catch (e) {
 showToast('Erro ao carregar relatórios: ' + e.message, 'danger');
 }
@@ -3446,12 +3479,16 @@ async function clearReportData() {
     }
 }
 let lastReportSales = [];
-function refreshCustoLucroReport() { renderCustoLucroPorProduto(lastReportSales); }
-function renderReportData(sales, expenses, totalSalary) {
+let lastMotoboyExpenseTotal = 0;
+let lastMotoboyAppExtraTotal = 0;
+let lastFolhaPagamentoTotal = 0;
+function refreshCustoLucroReport() { renderCustoLucroPorProduto(lastReportSales, lastMotoboyExpenseTotal, lastMotoboyAppExtraTotal, lastFolhaPagamentoTotal); }
+function renderReportData(sales, expenses, totalSalary, totalMotoboyExpense, totalMotoboyAppExtra) {
 lastReportSales = sales || [];
 const totalRevenue = sales.reduce((s, x) => s + (x.total || 0), 0);
 const totalExpenses = expenses.reduce((s, x) => s + (x.amount || 0), 0);
-const totalCosts = totalExpenses + totalSalary;
+// totalExpenses já inclui os lançamentos de Salário e Motoboy (cada pagamento gera uma despesa), então não soma totalSalary de novo
+const totalCosts = totalExpenses;
 const profit = totalRevenue - totalCosts;
 const totalSales = sales.length;
 document.getElementById('rpt-kpis').innerHTML = `
@@ -3475,7 +3512,10 @@ buildProfitChart(totalRevenue, totalCosts);
 buildAnnualChartAsync(year);
 buildEarningsTable(sales, year, monthIdx);
 renderExpensesList(expenses, currentCompany);
-renderCustoLucroPorProduto(sales);
+lastMotoboyExpenseTotal = totalMotoboyExpense || 0;
+lastMotoboyAppExtraTotal = totalMotoboyAppExtra || 0;
+lastFolhaPagamentoTotal = totalSalary || 0;
+renderCustoLucroPorProduto(sales, lastMotoboyExpenseTotal, lastMotoboyAppExtraTotal, lastFolhaPagamentoTotal);
 }
 function buildDailyChart(sales, year, monthIdx) {
 if (chartInstances.daily) chartInstances.daily.destroy();
@@ -3810,6 +3850,7 @@ hideLoading(); loadReports(); showToast('Despesa excluída!', 'success');
 } catch (e) { hideLoading(); showToast('Erro: ' + e.message, 'danger'); }
 }
 function renderEmployees() {
+renderMotoboys();
 const c = currentCompany;
 const emps = c.employees || [];
 const el = document.getElementById('employees-grid');
@@ -3837,7 +3878,7 @@ return `
 <div style="background:#f8fafc;border:1px solid var(--border);border-radius:8px;padding:8px 10px;margin-top:8px;font-size:12px">
 <div style="display:flex;justify-content:space-between"><span>Pago este mês:</span><strong style="color:var(--success)">${fmt(paidThisMonth)}</strong></div>
 <div style="display:flex;justify-content:space-between;margin-top:2px"><span>Saldo a pagar:</span><strong style="color:${balance>0?'var(--warning)':'var(--success)'}">${fmt(balance)}</strong></div>
-${lastPayments.length ? `<div style="margin-top:6px;border-top:1px dashed var(--border);padding-top:6px">${lastPayments.map(p=>`<div style="display:flex;justify-content:space-between;color:var(--gray)"><span>${new Date(p.date).toLocaleDateString('pt-BR')}</span><span>${fmt(p.amount)}</span></div>`).join('')}</div>` : ''}
+${lastPayments.length ? `<div style="margin-top:6px;border-top:1px dashed var(--border);padding-top:6px">${lastPayments.map(p=>`<div style="display:flex;justify-content:space-between;align-items:center;color:var(--gray);gap:6px;padding:2px 0"><span>${new Date(p.date).toLocaleDateString('pt-BR')}</span><span style="flex:1;text-align:right">${fmt(p.amount)}</span><button class="btn btn-sm btn-ghost" style="padding:2px 6px" onclick="showEmployeePaymentModal('${e.id}','${p.id}')"><i class="fa-solid fa-edit"></i></button><button class="btn btn-sm btn-ghost" style="padding:2px 6px;color:var(--danger)" onclick="deleteEmployeePayment('${e.id}','${p.id}')"><i class="fa-solid fa-trash"></i></button></div>`).join('')}</div>` : ''}
 </div>
 <div class="flex gap-2 mt-3">
 <button class="btn btn-sm btn-success flex-1" onclick="showEmployeePaymentModal('${e.id}')"><i class="fa-solid fa-money-bill-wave"></i> Registrar Pagamento</button>
@@ -3851,18 +3892,19 @@ ${lastPayments.length ? `<div style="margin-top:6px;border-top:1px dashed var(--
 `;
 }).join('');
 }
-function showEmployeePaymentModal(eid) {
+function showEmployeePaymentModal(eid, payId) {
 const c = currentCompany;
 const e = (c.employees||[]).find(x=>x.id===eid);
 if (!e) return;
+const pay = payId ? (e.payments||[]).find(p=>p.id===payId) : null;
 const today = new Date().toISOString().slice(0,10);
-showModal(`<i class="fa-solid fa-money-bill-wave"></i> Registrar Pagamento — ${e.name}`,
-`<div class="form-group"><label>Valor Pago (R$) *</label><input type="number" id="pay-amount" class="form-control" step="0.01" min="0"></div>
-<div class="form-group"><label>Data</label><input type="date" id="pay-date" class="form-control" value="${today}"></div>
-<div class="form-group"><label>Observação</label><input type="text" id="pay-note" class="form-control" placeholder="Ex: adiantamento, vale..."></div>`,
-`<button class="btn btn-ghost" onclick="closeModal()">Cancelar</button><button class="btn btn-primary" onclick="saveEmployeePayment('${eid}')"><i class="fa-solid fa-save"></i> Salvar Pagamento</button>`, false);
+showModal(`<i class="fa-solid fa-money-bill-wave"></i> ${pay ? 'Editar' : 'Registrar'} Pagamento — ${e.name}`,
+`<div class="form-group"><label>Valor Pago (R$) *</label><input type="number" id="pay-amount" class="form-control" step="0.01" min="0" value="${pay?.amount || ''}"></div>
+<div class="form-group"><label>Data</label><input type="date" id="pay-date" class="form-control" value="${pay ? new Date(pay.date).toISOString().slice(0,10) : today}"></div>
+<div class="form-group"><label>Observação</label><input type="text" id="pay-note" class="form-control" placeholder="Ex: adiantamento, vale..." value="${pay?.note || ''}"></div>`,
+`<button class="btn btn-ghost" onclick="closeModal()">Cancelar</button><button class="btn btn-primary" onclick="saveEmployeePayment('${eid}','${payId || ''}')"><i class="fa-solid fa-save"></i> Salvar Pagamento</button>`, false);
 }
-async function saveEmployeePayment(eid) {
+async function saveEmployeePayment(eid, payId) {
 const amount = parseFloat(document.getElementById('pay-amount').value) || 0;
 const date = document.getElementById('pay-date').value || new Date().toISOString().slice(0,10);
 const note = document.getElementById('pay-note').value.trim();
@@ -3871,11 +3913,43 @@ const c = currentCompany;
 const e = (c.employees||[]).find(x=>x.id===eid);
 if (!e) return;
 e.payments = e.payments || [];
-e.payments.push({ id: genId(), amount, date: new Date(date).toISOString(), yearMonth: ymFromDate(new Date(date)), note });
+c.expenses = c.expenses || [];
+const isoDate = new Date(date).toISOString();
+const ym = ymFromDate(new Date(date));
+const desc = `Pagamento Funcionário - ${e.name}${note ? ' ('+note+')' : ''}`;
+if (payId) {
+const idx = e.payments.findIndex(p=>p.id===payId);
+if (idx !== -1) {
+const pay = e.payments[idx];
+Object.assign(pay, { amount, date: isoDate, yearMonth: ym, note });
+const expIdx = c.expenses.findIndex(x=>x.id===pay.expenseId);
+if (expIdx !== -1) Object.assign(c.expenses[expIdx], { description: desc, amount, date, yearMonth: ym });
+}
+} else {
+const expenseId = genId();
+c.expenses.push({ id: expenseId, description: desc, amount, category: 'Salário', date, yearMonth: ym, employeeId: eid });
+e.payments.push({ id: genId(), amount, date: isoDate, yearMonth: ym, note, expenseId });
+}
 showLoading('Salvando pagamento...');
 try {
-await db.collection('companies').doc(currentCompanyId).update({ employees: c.employees });
-hideLoading(); closeModal(); renderEmployees(); showToast('Pagamento registrado!', 'success');
+await db.collection('companies').doc(currentCompanyId).update({ employees: c.employees, expenses: c.expenses });
+hideLoading(); closeModal(); renderEmployees(); showToast('Pagamento registrado! Despesa lançada em Relatórios.', 'success');
+if (document.getElementById('section-reports')?.classList.contains('active')) loadReports();
+} catch (e2) { hideLoading(); showToast('Erro: ' + e2.message, 'danger'); }
+}
+async function deleteEmployeePayment(eid, payId) {
+if (!confirm('Excluir este pagamento? A despesa correspondente em Relatórios também será removida.')) return;
+const c = currentCompany;
+const e = (c.employees||[]).find(x=>x.id===eid);
+if (!e) return;
+const pay = (e.payments||[]).find(p=>p.id===payId);
+e.payments = (e.payments || []).filter(p => p.id !== payId);
+if (pay && pay.expenseId) c.expenses = (c.expenses || []).filter(x => x.id !== pay.expenseId);
+showLoading('Excluindo...');
+try {
+await db.collection('companies').doc(currentCompanyId).update({ employees: c.employees, expenses: c.expenses });
+hideLoading(); renderEmployees(); showToast('Pagamento excluído!', 'success');
+if (document.getElementById('section-reports')?.classList.contains('active')) loadReports();
 } catch (e2) { hideLoading(); showToast('Erro: ' + e2.message, 'danger'); }
 }
 function showEmployeeModal(eid) {
@@ -3935,6 +4009,360 @@ await db.collection('companies').doc(currentCompanyId).update({ employees: c.emp
 hideLoading(); renderEmployees(); showToast(emp.paid ? 'Pago!' : 'Desmarcado!', 'success');
 } catch (e) { hideLoading(); showToast('Erro: ' + e.message, 'danger'); }
 }
+}
+
+// ============================================================
+// MOTOBOYS / ENTREGADORES (normal e aplicativo)
+// ============================================================
+const MOTOBOY_APP_EXTRA = 0.20; // valor extra por corrida só para motoboy aplicativo
+function renderMotoboys() {
+const c = currentCompany;
+const list = c.motoboys || [];
+const el = document.getElementById('motoboys-grid');
+if (!el) return;
+if (!list.length) {
+el.innerHTML = '<div style="grid-column:1/-1;text-align:center;padding:60px;color:var(--gray)"><i class="fa-solid fa-motorcycle" style="font-size:48px;display:block;margin-bottom:12px;color:var(--border)"></i><h3>Nenhum motoboy cadastrado</h3></div>';
+return;
+}
+el.innerHTML = list.map(m => {
+const orders = m.assignedOrders || [];
+const pending = orders.reduce((s,o) => s + (o.value || 0), 0);
+const isApp = m.type === 'app';
+const paymentsCount = (m.paymentsHistory||[]).length;
+return `
+<div class="emp-card">
+<div class="emp-avatar" style="background:${isApp ? 'var(--info)' : 'var(--primary)'}">${(m.name||'?').charAt(0).toUpperCase()}</div>
+<div style="flex:1">
+<div class="emp-name">${m.name}${isApp ? ' <span class="badge badge-info" style="font-size:10px"><i class="fa-solid fa-mobile-screen"></i> App</span>' : ''}</div>
+<div class="emp-role">${isApp ? 'Motoboy Aplicativo' : (m.role || 'Motoboy')}</div>
+${!isApp ? `<div class="emp-details">
+<div><i class="fa-solid fa-phone"></i> ${m.phone || '—'}</div>
+<div><i class="fa-solid fa-envelope"></i> ${m.email || '—'}</div>
+<div><i class="fa-solid fa-location-dot"></i> ${m.address || '—'}</div>
+</div>` : ''}
+<div style="background:#f8fafc;border:1px solid var(--border);border-radius:8px;padding:8px 10px;margin-top:8px;font-size:12px">
+<div style="display:flex;justify-content:space-between"><span>Corridas pendentes:</span><strong>${orders.length}</strong></div>
+<div style="display:flex;justify-content:space-between;margin-top:2px"><span>Valor a receber:</span><strong style="color:${pending>0?'var(--warning)':'var(--success)'}">${fmt(pending)}</strong></div>
+${paymentsCount ? `<div style="margin-top:4px;font-size:11px;color:var(--gray)">${paymentsCount} pagamento(s) no histórico</div>` : ''}
+</div>
+<div class="flex gap-2 mt-3">
+<button class="btn btn-sm btn-primary flex-1" onclick="showMotoboyOrderSelector('${m.id}')"><i class="fa-solid fa-list-check"></i> Selecionar OS</button>
+<button class="btn btn-sm btn-ghost flex-1" onclick="showManualTripModal('${m.id}')"><i class="fa-solid fa-route"></i> Corrida Avulsa</button>
+</div>
+<div class="flex gap-2 mt-2">
+<button class="btn btn-sm btn-info flex-1" onclick="showMotoboyManageModal('${m.id}')"><i class="fa-solid fa-clipboard-list"></i> Ver Corridas / Histórico</button>
+</div>
+<div class="flex gap-2 mt-2">
+<button class="btn btn-sm btn-success flex-1" ${pending<=0?'disabled':''} onclick="markMotoboyPaid('${m.id}')"><i class="fa-solid fa-money-bill-wave"></i> Marcar como Pago</button>
+</div>
+<div class="flex gap-2 mt-2">
+<button class="btn btn-sm btn-primary flex-1" onclick="showMotoboyModal('${m.type}','${m.id}')"><i class="fa-solid fa-edit"></i> Editar</button>
+<button class="btn btn-sm btn-danger" onclick="deleteMotoboy('${m.id}')"><i class="fa-solid fa-trash"></i></button>
+</div>
+</div>
+</div>`;
+}).join('');
+}
+function showMotoboyModal(type, mid) {
+const c = currentCompany;
+const m = mid ? (c.motoboys || []).find(x => x.id === mid) : null;
+const isApp = type === 'app';
+const title = `${m ? 'Editar' : 'Cadastrar'} ${isApp ? 'Motoboy Aplicativo' : 'Motoboy'}`;
+const body = isApp
+? `<div class="form-group"><label>Nome do Aplicativo *</label><input type="text" id="mb-name" class="form-control" placeholder="Ex: 99Moto, Rappi, iFood Entregas" value="${m?.name || ''}"></div>`
+: `<div class="form-group"><label>Nome Completo *</label><input type="text" id="mb-name" class="form-control" value="${m?.name || ''}"></div>
+<div class="form-row">
+<div class="form-group"><label>Telefone</label><input type="text" id="mb-phone" class="form-control" value="${m?.phone || ''}" oninput="maskPhone(this)"></div>
+<div class="form-group"><label>E-mail (Gmail)</label><input type="email" id="mb-email" class="form-control" value="${m?.email || ''}"></div>
+</div>
+<div class="form-group"><label>Endereço</label><input type="text" id="mb-address" class="form-control" value="${m?.address || ''}"></div>`;
+showModal(`<i class="fa-solid fa-motorcycle"></i> ${title}`, body,
+`<button class="btn btn-ghost" onclick="closeModal()">Cancelar</button><button class="btn btn-primary" onclick="saveMotoboy('${type}','${mid || ''}')"><i class="fa-solid fa-save"></i> Salvar</button>`, false);
+}
+async function saveMotoboy(type, mid) {
+const name = document.getElementById('mb-name').value.trim();
+if (!name) { showToast(type==='app' ? 'Informe o nome do aplicativo' : 'Nome é obrigatório', 'warning'); return; }
+const c = currentCompany;
+c.motoboys = c.motoboys || [];
+if (mid) {
+const idx = c.motoboys.findIndex(x => x.id === mid);
+if (idx !== -1) {
+c.motoboys[idx].name = name;
+if (type !== 'app') {
+c.motoboys[idx].phone = document.getElementById('mb-phone').value.trim();
+c.motoboys[idx].email = document.getElementById('mb-email').value.trim();
+c.motoboys[idx].address = document.getElementById('mb-address').value.trim();
+}
+}
+} else {
+const newM = { id: genId(), type, name, assignedOrders: [], paymentsHistory: [], createdAt: new Date().toISOString() };
+if (type !== 'app') {
+newM.phone = document.getElementById('mb-phone').value.trim();
+newM.email = document.getElementById('mb-email').value.trim();
+newM.address = document.getElementById('mb-address').value.trim();
+}
+c.motoboys.push(newM);
+}
+showLoading('Salvando...');
+try {
+await db.collection('companies').doc(currentCompanyId).update({ motoboys: c.motoboys });
+hideLoading(); closeModal(); renderMotoboys(); showToast('Motoboy salvo!', 'success');
+} catch (e) { hideLoading(); showToast('Erro: ' + e.message, 'danger'); }
+}
+async function deleteMotoboy(mid) {
+if (!confirm('Excluir este motoboy? O histórico de corridas pendentes será perdido.')) return;
+const c = currentCompany;
+c.motoboys = (c.motoboys || []).filter(x => x.id !== mid);
+showLoading('Excluindo...');
+try {
+await db.collection('companies').doc(currentCompanyId).update({ motoboys: c.motoboys });
+hideLoading(); renderMotoboys(); showToast('Motoboy excluído!', 'success');
+} catch (e) { hideLoading(); showToast('Erro: ' + e.message, 'danger'); }
+}
+let motoboySelectorSales = [];
+async function showMotoboyOrderSelector(mid) {
+const c = currentCompany;
+const m = (c.motoboys || []).find(x => x.id === mid);
+if (!m) return;
+const today = new Date().toISOString().slice(0,10);
+const firstDay = new Date(new Date().getFullYear(), new Date().getMonth(), 1).toISOString().slice(0,10);
+showModal(`<i class="fa-solid fa-list-check"></i> Selecionar OS — ${m.name}`,
+`<div class="form-row">
+<div class="form-group"><label>Data Início</label><input type="date" id="mb-sel-start" class="form-control" value="${firstDay}"></div>
+<div class="form-group"><label>Data Fim</label><input type="date" id="mb-sel-end" class="form-control" value="${today}"></div>
+</div>
+<div class="form-group"><label>Buscar por N° da OS / ID</label><input type="text" id="mb-sel-search" class="form-control" placeholder="Ex: 1024 ou parte do ID" oninput="filterMotoboySelectorList()"></div>
+<button class="btn btn-sm btn-primary" onclick="loadMotoboySelectorSales('${mid}')" style="margin-bottom:10px"><i class="fa-solid fa-magnifying-glass"></i> Buscar OS no Período</button>
+<div id="mb-selector-list" style="max-height:320px;overflow:auto;border:1px solid var(--border);border-radius:8px;padding:8px"><div style="text-align:center;color:var(--gray);padding:20px">Clique em "Buscar OS no Período" para carregar</div></div>`,
+`<button class="btn btn-ghost" onclick="closeModal()">Cancelar</button><button class="btn btn-primary" onclick="confirmMotoboyOrderSelection('${mid}')"><i class="fa-solid fa-check"></i> Adicionar Selecionadas</button>`, false);
+}
+async function loadMotoboySelectorSales(mid) {
+const c = currentCompany;
+const start = document.getElementById('mb-sel-start').value;
+const end = document.getElementById('mb-sel-end').value;
+const listEl = document.getElementById('mb-selector-list');
+listEl.innerHTML = '<div style="text-align:center;color:var(--gray);padding:20px">Carregando...</div>';
+try {
+const snap = await db.collection('sales').where('companyId','==',currentCompanyId).get();
+let all = snap.docs.map(d => ({ id: d.id, ...d.data() }));
+if (start) all = all.filter(s => new Date(s.date) >= new Date(start+'T00:00:00'));
+if (end) all = all.filter(s => new Date(s.date) <= new Date(end+'T23:59:59'));
+all = all.filter(s => (s.deliveryTotal || 0) > 0);
+all.sort((a,b) => new Date(b.date) - new Date(a.date));
+motoboySelectorSales = all;
+renderMotoboySelectorList(mid);
+} catch (e) { listEl.innerHTML = `<div style="color:var(--danger);padding:12px">Erro: ${e.message}</div>`; }
+}
+// Retorna os saleIds que já estão alocados (pendentes) OU já foram pagos a qualquer motoboy —
+// esses ficam indisponíveis para novas seleções até serem desalocados/pagamento cancelado.
+function getMotoboyPendingSaleIds(c) {
+return new Set((c.motoboys||[]).flatMap(mb => (mb.assignedOrders||[]).filter(o=>o.type!=='manual').map(o=>o.saleId)));
+}
+function getMotoboyPaidSaleIds(c) {
+return new Set((c.motoboys||[]).flatMap(mb => (mb.paymentsHistory||[]).flatMap(p=>(p.items||[]).filter(o=>o.type!=='manual').map(o=>o.saleId))));
+}
+function renderMotoboySelectorList(mid) {
+const c = currentCompany;
+const m = (c.motoboys || []).find(x => x.id === mid);
+const pendingIds = getMotoboyPendingSaleIds(c);
+const paidIds = getMotoboyPaidSaleIds(c);
+const listEl = document.getElementById('mb-selector-list');
+if (!listEl) return;
+if (!motoboySelectorSales.length) { listEl.innerHTML = '<div style="text-align:center;color:var(--gray);padding:20px">Nenhuma OS com taxa de entrega encontrada no período</div>'; return; }
+listEl.innerHTML = motoboySelectorSales.map(s => {
+const alreadyThisMotoboy = (m.assignedOrders||[]).some(o=>o.type!=='manual' && o.saleId===s.id);
+const isPaidAnywhere = paidIds.has(s.id);
+const alreadyAssignedElsewhere = !alreadyThisMotoboy && (pendingIds.has(s.id) || isPaidAnywhere);
+let noteText = '';
+if (isPaidAnywhere) noteText = ' · Já paga (indisponível)';
+else if (alreadyAssignedElsewhere) noteText = ' · Já atribuída a outro motoboy';
+else if (alreadyThisMotoboy) noteText = ' · Já nesta lista';
+return `<label data-search="${(s.orderNumber||'')+' '+s.id}" style="display:flex;align-items:center;gap:10px;padding:8px 4px;border-bottom:1px solid #f1f5f9;${alreadyAssignedElsewhere?'opacity:0.4':''}">
+<input type="checkbox" class="mb-sel-check" data-id="${s.id}" ${(alreadyThisMotoboy||alreadyAssignedElsewhere)?'disabled':''} ${alreadyThisMotoboy?'checked':''} style="width:18px;height:18px">
+<div style="flex:1">
+<div style="font-weight:700">OS ${s.orderNumber || s.id} — ${s.customerName||''}</div>
+<div style="font-size:11px;color:var(--gray)">${new Date(s.date).toLocaleString('pt-BR')} · Taxa: ${fmt(s.deliveryTotal||0)}${noteText}</div>
+</div>
+</label>`;
+}).join('');
+}
+function filterMotoboySelectorList() {
+const q = (document.getElementById('mb-sel-search').value||'').toLowerCase();
+document.querySelectorAll('#mb-selector-list label').forEach(l => { l.style.display = l.dataset.search.toLowerCase().includes(q) ? 'flex' : 'none'; });
+}
+async function confirmMotoboyOrderSelection(mid) {
+const c = currentCompany;
+const m = (c.motoboys || []).find(x => x.id === mid);
+if (!m) return;
+m.assignedOrders = m.assignedOrders || [];
+const checks = document.querySelectorAll('#mb-selector-list .mb-sel-check:checked:not(:disabled)');
+let added = 0;
+checks.forEach(chk => {
+const saleId = chk.dataset.id;
+if ((m.assignedOrders||[]).some(o=>o.type!=='manual' && o.saleId===saleId)) return;
+const sale = motoboySelectorSales.find(s=>s.id===saleId);
+if (!sale) return;
+const deliveryTotal = sale.deliveryTotal || 0;
+const value = m.type === 'app' ? (deliveryTotal + MOTOBOY_APP_EXTRA) : deliveryTotal;
+m.assignedOrders.push({ id: genId(), type: 'order', saleId, orderNumber: sale.orderNumber || sale.id, date: sale.date, deliveryTotal, value });
+added++;
+});
+if (!added) { showToast('Nenhuma OS nova selecionada', 'warning'); return; }
+showLoading('Salvando...');
+try {
+await db.collection('companies').doc(currentCompanyId).update({ motoboys: c.motoboys });
+hideLoading(); closeModal(); renderMotoboys(); showToast(`${added} OS adicionada(s) ao motoboy!`, 'success');
+} catch (e) { hideLoading(); showToast('Erro: ' + e.message, 'danger'); }
+}
+// Remove uma corrida (OS ou avulsa) ainda pendente do motoboy — a OS volta a ficar disponível para seleção
+async function desalocarMotoboyCorrida(mid, itemId) {
+if (!confirm('Desalocar esta corrida do motoboy? Se for uma OS, ela voltará a ficar disponível para seleção.')) return;
+const c = currentCompany;
+const m = (c.motoboys || []).find(x => x.id === mid);
+if (!m) return;
+m.assignedOrders = (m.assignedOrders || []).filter(o => o.id !== itemId);
+showLoading('Desalocando...');
+try {
+await db.collection('companies').doc(currentCompanyId).update({ motoboys: c.motoboys });
+hideLoading(); renderMotoboys(); showMotoboyManageModal(mid); showToast('Corrida desalocada!', 'success');
+} catch (e) { hideLoading(); showToast('Erro: ' + e.message, 'danger'); }
+}
+// ---------- Corridas avulsas (não ligadas a vendas) ----------
+function showManualTripModal(mid, tripId) {
+const c = currentCompany;
+const m = (c.motoboys || []).find(x => x.id === mid);
+if (!m) return;
+const trip = tripId ? (m.assignedOrders||[]).find(o => o.id === tripId && o.type === 'manual') : null;
+const today = new Date().toISOString().slice(0,10);
+showModal(`<i class="fa-solid fa-route"></i> ${trip ? 'Editar' : 'Lançar'} Corrida Avulsa — ${m.name}`,
+`<div class="form-group"><label>Local de Coleta *</label><input type="text" id="mtrip-pickup" class="form-control" placeholder="Ex: Mercado Central" value="${trip?.pickupLocation || ''}"></div>
+<div class="form-group"><label>Local de Entrega *</label><input type="text" id="mtrip-dropoff" class="form-control" placeholder="Ex: Rua X, 123" value="${trip?.dropoffLocation || ''}"></div>
+<div class="form-row">
+<div class="form-group"><label>Valor da Corrida (R$) *</label><input type="number" id="mtrip-value" class="form-control" step="0.01" min="0" value="${trip?.value || ''}"></div>
+<div class="form-group"><label>Data</label><input type="date" id="mtrip-date" class="form-control" value="${trip ? new Date(trip.date).toISOString().slice(0,10) : today}"></div>
+</div>
+<div class="form-group"><label>Observação</label><input type="text" id="mtrip-desc" class="form-control" placeholder="Ex: Buscar encomenda" value="${trip?.description || ''}"></div>
+<p style="color:var(--gray);font-size:12px;margin-top:-6px">Essa corrida não está ligada a nenhuma venda. O valor será somado ao saldo a receber do motoboy e descontado do Faturamento Total nos relatórios.</p>`,
+`<button class="btn btn-ghost" onclick="closeModal()">Cancelar</button><button class="btn btn-primary" onclick="saveManualTrip('${mid}','${tripId || ''}')"><i class="fa-solid fa-save"></i> Salvar</button>`, false);
+}
+async function saveManualTrip(mid, tripId) {
+const pickupLocation = document.getElementById('mtrip-pickup').value.trim();
+const dropoffLocation = document.getElementById('mtrip-dropoff').value.trim();
+const value = parseFloat(document.getElementById('mtrip-value').value) || 0;
+const date = document.getElementById('mtrip-date').value || new Date().toISOString().slice(0,10);
+const description = document.getElementById('mtrip-desc').value.trim();
+if (!pickupLocation || !dropoffLocation || value <= 0) { showToast('Preencha coleta, entrega e um valor válido', 'warning'); return; }
+const c = currentCompany;
+const m = (c.motoboys || []).find(x => x.id === mid);
+if (!m) return;
+m.assignedOrders = m.assignedOrders || [];
+if (tripId) {
+const idx = m.assignedOrders.findIndex(o => o.id === tripId && o.type === 'manual');
+if (idx !== -1) Object.assign(m.assignedOrders[idx], { pickupLocation, dropoffLocation, value, date: new Date(date).toISOString(), description });
+} else {
+m.assignedOrders.push({ id: genId(), type: 'manual', pickupLocation, dropoffLocation, value, date: new Date(date).toISOString(), description });
+}
+showLoading('Salvando...');
+try {
+await db.collection('companies').doc(currentCompanyId).update({ motoboys: c.motoboys });
+hideLoading(); closeModal(); renderMotoboys(); showToast('Corrida avulsa salva!', 'success');
+} catch (e) { hideLoading(); showToast('Erro: ' + e.message, 'danger'); }
+}
+async function deleteManualTrip(mid, tripId) {
+if (!confirm('Excluir esta corrida avulsa?')) return;
+const c = currentCompany;
+const m = (c.motoboys || []).find(x => x.id === mid);
+if (!m) return;
+m.assignedOrders = (m.assignedOrders || []).filter(o => !(o.id === tripId && o.type === 'manual'));
+showLoading('Excluindo...');
+try {
+await db.collection('companies').doc(currentCompanyId).update({ motoboys: c.motoboys });
+hideLoading(); renderMotoboys(); showMotoboyManageModal(mid); showToast('Corrida avulsa excluída!', 'success');
+} catch (e) { hideLoading(); showToast('Erro: ' + e.message, 'danger'); }
+}
+// ---------- Gerenciar corridas pendentes e histórico de pagamentos ----------
+function showMotoboyManageModal(mid) {
+const c = currentCompany;
+const m = (c.motoboys || []).find(x => x.id === mid);
+if (!m) return;
+showModal(`<i class="fa-solid fa-clipboard-list"></i> Corridas — ${m.name}`, motoboyManageBodyHtml(mid),
+`<button class="btn btn-ghost" onclick="closeModal()">Fechar</button>`, false);
+}
+function motoboyManageBodyHtml(mid) {
+const c = currentCompany;
+const m = (c.motoboys || []).find(x => x.id === mid);
+if (!m) return '';
+const orders = m.assignedOrders || [];
+const history = (m.paymentsHistory || []).slice().sort((a,b)=> new Date(b.date)-new Date(a.date));
+const pendingHtml = orders.length ? orders.map(o => {
+if (o.type === 'manual') {
+return `<div style="display:flex;justify-content:space-between;align-items:center;padding:8px 4px;border-bottom:1px solid #f1f5f9">
+<div><strong><i class="fa-solid fa-route" style="color:var(--warning)"></i> Corrida Avulsa</strong><div style="font-size:11px;color:var(--gray)">${o.pickupLocation} → ${o.dropoffLocation}${o.description ? ' · '+o.description : ''} · ${new Date(o.date).toLocaleDateString('pt-BR')}</div></div>
+<div style="display:flex;align-items:center;gap:8px"><strong>${fmt(o.value)}</strong>
+<button class="btn btn-sm btn-ghost" onclick="showManualTripModal('${mid}','${o.id}')"><i class="fa-solid fa-edit"></i></button>
+<button class="btn btn-sm btn-danger" onclick="deleteManualTrip('${mid}','${o.id}')"><i class="fa-solid fa-trash"></i></button></div>
+</div>`;
+}
+return `<div style="display:flex;justify-content:space-between;align-items:center;padding:8px 4px;border-bottom:1px solid #f1f5f9">
+<div><strong>OS ${o.orderNumber}</strong><div style="font-size:11px;color:var(--gray)">${new Date(o.date).toLocaleDateString('pt-BR')} · Taxa: ${fmt(o.deliveryTotal||0)}</div></div>
+<div style="display:flex;align-items:center;gap:8px"><strong>${fmt(o.value)}</strong>
+<button class="btn btn-sm btn-danger" onclick="desalocarMotoboyCorrida('${mid}','${o.id}')"><i class="fa-solid fa-link-slash"></i> Desalocar</button></div>
+</div>`;
+}).join('') : '<div style="text-align:center;color:var(--gray);padding:16px">Nenhuma corrida pendente</div>';
+const historyHtml = history.length ? history.map(p => `<div style="display:flex;justify-content:space-between;align-items:center;padding:8px 4px;border-bottom:1px solid #f1f5f9">
+<div><strong>${fmt(p.amount)}</strong><div style="font-size:11px;color:var(--gray)">${new Date(p.date).toLocaleString('pt-BR')} · ${p.ordersCount} corrida(s)</div></div>
+<button class="btn btn-sm btn-warning" onclick="cancelMotoboyPayment('${mid}','${p.id}')"><i class="fa-solid fa-rotate-left"></i> Cancelar Pagamento</button>
+</div>`).join('') : '<div style="text-align:center;color:var(--gray);padding:16px">Nenhum pagamento registrado</div>';
+return `
+<div style="margin-bottom:14px">
+<div style="font-weight:700;margin-bottom:6px"><i class="fa-solid fa-hourglass-half"></i> Corridas Pendentes</div>
+<div style="max-height:220px;overflow:auto;border:1px solid var(--border);border-radius:8px;padding:4px">${pendingHtml}</div>
+</div>
+<div>
+<div style="font-weight:700;margin-bottom:6px"><i class="fa-solid fa-clock-rotate-left"></i> Histórico de Pagamentos</div>
+<div style="max-height:220px;overflow:auto;border:1px solid var(--border);border-radius:8px;padding:4px">${historyHtml}</div>
+</div>`;
+}
+async function markMotoboyPaid(mid) {
+const c = currentCompany;
+const m = (c.motoboys || []).find(x => x.id === mid);
+if (!m) return;
+const orders = m.assignedOrders || [];
+const total = orders.reduce((s,o)=>s+(o.value||0),0);
+if (total <= 0) { showToast('Nenhum valor pendente para este motoboy', 'warning'); return; }
+if (!confirm(`Marcar como pago ${fmt(total)} (${orders.length} corrida(s)) para ${m.name}? Isso gerará uma despesa em Relatórios.`)) return;
+showLoading('Registrando pagamento...');
+try {
+const now = new Date();
+const expenseId = genId();
+c.expenses = c.expenses || [];
+c.expenses.push({ id: expenseId, description: `Pagamento Motoboy${m.type==='app'?' (Aplicativo)':''} - ${m.name} (${orders.length} corrida${orders.length!==1?'s':''})`, amount: total, category: 'Motoboy', date: now.toISOString().slice(0,10), yearMonth: ymFromDate(now), motoboyId: m.id, motoboyType: m.type });
+m.paymentsHistory = m.paymentsHistory || [];
+m.paymentsHistory.push({ id: genId(), amount: total, date: now.toISOString(), ordersCount: orders.length, expenseId, items: JSON.parse(JSON.stringify(orders)) });
+m.assignedOrders = [];
+await db.collection('companies').doc(currentCompanyId).update({ motoboys: c.motoboys, expenses: c.expenses });
+hideLoading(); renderMotoboys(); showToast('Pagamento registrado! Despesa lançada em Relatórios.', 'success');
+if (document.getElementById('section-reports')?.classList.contains('active')) loadReports();
+} catch (e) { hideLoading(); showToast('Erro: ' + e.message, 'danger'); }
+}
+// Revoga um pagamento já confirmado: remove a despesa gerada e devolve as corridas para a lista de pendentes
+async function cancelMotoboyPayment(mid, paymentId) {
+if (!confirm('Cancelar este pagamento? A despesa será removida de Relatórios e as corridas voltarão para a lista de pendentes deste motoboy.')) return;
+const c = currentCompany;
+const m = (c.motoboys || []).find(x => x.id === mid);
+if (!m) return;
+const payment = (m.paymentsHistory || []).find(p => p.id === paymentId);
+if (!payment) return;
+showLoading('Cancelando pagamento...');
+try {
+c.expenses = (c.expenses || []).filter(e => e.id !== payment.expenseId);
+m.assignedOrders = m.assignedOrders || [];
+(payment.items || []).forEach(item => { if (!m.assignedOrders.some(o => o.id === item.id)) m.assignedOrders.push(item); });
+m.paymentsHistory = (m.paymentsHistory || []).filter(p => p.id !== paymentId);
+await db.collection('companies').doc(currentCompanyId).update({ motoboys: c.motoboys, expenses: c.expenses });
+hideLoading(); renderMotoboys(); showMotoboyManageModal(mid); showToast('Pagamento cancelado! Corridas voltaram para pendentes.', 'success');
+if (document.getElementById('section-reports')?.classList.contains('active')) loadReports();
+} catch (e) { hideLoading(); showToast('Erro: ' + e.message, 'danger'); }
 }
 
 // ============================================================
@@ -5878,7 +6306,10 @@ function getProductUnitEconomics(p) {
 }
 
 // ---------- CUSTO E LUCRO POR PRODUTO VENDIDO (baseado nas OS pagas / vendas do mês) ----------
-function renderCustoLucroPorProduto(sales) {
+function renderCustoLucroPorProduto(sales, motoboyExpenseTotal, motoboyAppExtraTotal, folhaPagamentoTotal) {
+    motoboyExpenseTotal = motoboyExpenseTotal || 0;
+    motoboyAppExtraTotal = motoboyAppExtraTotal || 0;
+    folhaPagamentoTotal = folhaPagamentoTotal || 0;
     const el = document.getElementById('custo-lucro-produto-list');
     if (!el) return;
     const c = currentCompany;
@@ -5958,8 +6389,12 @@ function renderCustoLucroPorProduto(sales) {
 
     const totalCustoPctGeral = totalVendaGeral > 0 ? (totalCustoGeral / totalVendaGeral * 100) : 0;
     const totalLucroPctGeral = totalVendaGeral > 0 ? (totalLucroGeral / totalVendaGeral * 100) : 0;
-    // Lucro + taxas de entrega totais = lucro real do período (bate com o financeiro)
-    const totalLucroComTaxas = totalLucroGeral + totalTaxasEntrega;
+    // Faturamento Total = Vendas + Taxas de Entrega, descontando o adicional de R$0,20/corrida do motoboy aplicativo
+    // (esse adicional não é receita real da empresa, é só um custo extra do motoboy aplicativo)
+    const totalFaturamento = totalVendaGeral + totalTaxasEntrega - motoboyAppExtraTotal;
+    // Lucro Real Final = Faturamento - Custo Total - Custo Motoboys - Folha de Pagamento
+    // (Taxas de Entrega é apenas informativo aqui, pois já está incluída dentro do Faturamento Total)
+    const totalLucroRealFinal = totalFaturamento - totalCustoGeral - motoboyExpenseTotal - folhaPagamentoTotal;
     html += `
         <div class="lanche-lucro-total">
             <div class="lanche-lucro-total-label">
@@ -5967,10 +6402,14 @@ function renderCustoLucroPorProduto(sales) {
                 Total Geral (${items.length} produto${items.length !== 1 ? 's' : ''})
             </div>
             <div style="display:flex;gap:20px;align-items:center;flex-wrap:wrap">
-                <div style="text-align:right"><div style="font-size:11px;color:var(--gray)">Faturamento Total</div><div class="lanche-lucro-total-valor" style="font-size:20px">${fmt(totalVendaGeral + totalTaxasEntrega)}</div><div style="font-size:11px;font-weight:600;color:var(--gray)">Vendas + Taxas</div></div>
+                <div style="text-align:right"><div style="font-size:11px;color:var(--gray)">Faturamento Total</div><div class="lanche-lucro-total-valor" style="font-size:20px">${fmt(totalFaturamento)}</div><div style="font-size:11px;font-weight:600;color:var(--gray)">Vendas + Taxas${motoboyAppExtraTotal > 0 ? ` (- ${fmt(motoboyAppExtraTotal)} extras motoboy)` : ''}</div></div>
                 <div style="text-align:right"><div style="font-size:11px;color:var(--gray)">Custo Total</div><div class="lanche-lucro-total-valor" style="color:var(--danger);font-size:20px">${fmt(totalCustoGeral)}</div><div style="font-size:11px;font-weight:600;color:var(--gray)">Custo de insumos</div></div>
-                <div style="text-align:right"><div style="font-size:11px;color:var(--gray)">Taxas de Entrega</div><div class="lanche-lucro-total-valor" style="color:var(--info);font-size:20px">${fmt(totalTaxasEntrega)}</div><div style="font-size:11px;font-weight:600;color:var(--gray)">Recebido em entregas</div></div>
-                <div style="text-align:right"><div style="font-size:11px;color:var(--gray)">Lucro Real Final</div><div class="lanche-lucro-total-valor ${totalLucroGeral < 0 ? 'lanche-lucro-prejuizo' : ''}" style="font-size:20px;color:var(--success)">${fmt(totalLucroGeral)}</div><div style="font-size:11px;font-weight:600;color:var(--gray)">Faturamento - Custo Total - Taxa de Entrega</div></div>
+                <div style="text-align:right"><div style="font-size:11px;color:var(--gray)">Custo Motoboys</div><div class="lanche-lucro-total-valor" style="color:var(--warning);font-size:20px">${fmt(motoboyExpenseTotal)}</div><div style="font-size:11px;font-weight:600;color:var(--gray)">Pagamentos confirmados</div></div>
+                <div style="text-align:right"><div style="font-size:11px;color:var(--gray)">Folha de Pagamento</div><div class="lanche-lucro-total-valor" style="color:var(--danger);font-size:20px">${fmt(folhaPagamentoTotal)}</div><div style="font-size:11px;font-weight:600;color:var(--gray)">Salários pagos no período</div></div>
+                <div style="text-align:right"><div style="font-size:11px;color:var(--gray)">Lucro Real Final</div><div class="lanche-lucro-total-valor ${totalLucroRealFinal < 0 ? 'lanche-lucro-prejuizo' : ''}" style="font-size:20px;color:var(--success)">${fmt(totalLucroRealFinal)}</div><div style="font-size:11px;font-weight:600;color:var(--gray)">Faturamento - Custo Total - Custo Motoboys - Folha de Pagamento</div></div>
+            </div>
+            <div style="margin-top:12px;padding-top:10px;border-top:1px dashed var(--border);display:flex;justify-content:flex-end">
+                <div style="text-align:right"><div style="font-size:11px;color:var(--gray)"><i class="fa-solid fa-circle-info"></i> Taxas de Entrega (apenas informativo)</div><div class="lanche-lucro-total-valor" style="color:var(--info);font-size:18px">${fmt(totalTaxasEntrega)}</div><div style="font-size:11px;font-weight:600;color:var(--gray)">Total acumulado recebido em taxas — já incluído no Faturamento Total</div></div>
             </div>
         </div>
     `;
