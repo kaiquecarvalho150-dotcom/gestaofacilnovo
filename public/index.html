@@ -3283,6 +3283,7 @@ function renderOrdersFromData(orders) {
                 <div class="flex gap-2 flex-wrap">
                     ${statusButtons}
                     ${paymentButton}
+                    ${o.status === 'cancelled' ? `<button class="btn btn-sm btn-danger" onclick="deleteOrder('${o.id}')"><i class="fa-solid fa-trash"></i> Excluir OS</button>` : ''}
                 </div>
             </div>
         </div>`;
@@ -5899,6 +5900,9 @@ function renderCustoLucroPorProduto(sales) {
     const canonicalMap = {};
     items.forEach(p => { canonicalMap[normalizeProductNameForChart(p.name)] = p.id; });
     const qtyByProductId = {};
+    // Receita real por produto = soma do valor efetivamente cobrado em cada OS (i.price * i.qty),
+    // e não o preço configurado no cadastro do produto — assim bate com a Receita do Mês do Financeiro.
+    const vendaRealByProductId = {};
     (sales || []).forEach(s => {
         (s.items || []).forEach(i => {
             let baseName = (i.name || '').trim();
@@ -5906,7 +5910,10 @@ function renderCustoLucroPorProduto(sales) {
             if (m) baseName = m[1].trim();
             const norm = normalizeProductNameForChart(baseName);
             const pid = canonicalMap[norm];
-            if (pid) qtyByProductId[pid] = (qtyByProductId[pid] || 0) + (i.qty || 1);
+            if (pid) {
+                qtyByProductId[pid] = (qtyByProductId[pid] || 0) + (i.qty || 1);
+                vendaRealByProductId[pid] = (vendaRealByProductId[pid] || 0) + ((parseFloat(i.price) || 0) * (i.qty || 1));
+            }
         });
     });
 
@@ -5930,10 +5937,11 @@ function renderCustoLucroPorProduto(sales) {
         // Para lanches (não-bebida), só mostramos custo/lucro depois de pelo menos 1 insumo selecionado
         // na receita (mesma ideia das bebidas, que já têm custo manual sempre definido).
         const semReceitaAinda = !isBebida && recipe.length === 0;
-        const { custo, venda, lucro } = getProductUnitEconomics(p);
+        const { custo } = getProductUnitEconomics(p);
         const custoTotal = semReceitaAinda ? 0 : custo * qty;
-        const vendaTotal = semReceitaAinda ? 0 : venda * qty;
-        const lucroTotal = semReceitaAinda ? 0 : lucro * qty;
+        // Valor Total = valor real cobrado nas OS pagas (não o preço configurado no cadastro do produto)
+        const vendaTotal = semReceitaAinda ? 0 : (vendaRealByProductId[p.id] || 0);
+        const lucroTotal = semReceitaAinda ? 0 : (vendaTotal - custoTotal);
         if (!semReceitaAinda) { totalCustoGeral += custoTotal; totalVendaGeral += vendaTotal; totalLucroGeral += lucroTotal; }
         // % relativo ao Valor Total do produto (Valor Total = 100%)
         const custoPct = (!semReceitaAinda && vendaTotal > 0) ? (custoTotal / vendaTotal * 100) : null;
@@ -5962,7 +5970,7 @@ function renderCustoLucroPorProduto(sales) {
                 <div style="text-align:right"><div style="font-size:11px;color:var(--gray)">Custo Total</div><div class="lanche-lucro-total-valor" style="color:var(--danger);font-size:20px">${fmt(totalCustoGeral)}</div><div style="font-size:11px;font-weight:600;color:var(--gray)">${totalVendaGeral > 0 ? totalCustoPctGeral.toFixed(1) + '%' : '—'}</div></div>
                 <div style="text-align:right"><div style="font-size:11px;color:var(--gray)">Valor Total</div><div class="lanche-lucro-total-valor" style="color:var(--primary);font-size:20px">${fmt(totalVendaGeral)}</div><div style="font-size:11px;font-weight:600;color:var(--gray)">${totalVendaGeral > 0 ? '100%' : '—'}</div></div>
                 <div style="text-align:right"><div style="font-size:11px;color:var(--gray)">Taxas de Entrega</div><div class="lanche-lucro-total-valor" style="color:var(--info);font-size:20px">${fmt(totalTaxasEntrega)}</div><div style="font-size:11px;font-weight:600;color:var(--gray)">Recebido em entregas</div></div>
-                <div style="text-align:right"><div style="font-size:11px;color:var(--gray)">Lucro Total</div><div class="lanche-lucro-total-valor ${totalLucroGeral < 0 ? 'lanche-lucro-prejuizo' : ''}" style="font-size:20px">${fmt(totalLucroGeral)}</div><div style="font-size:11px;font-weight:600;color:var(--gray)">${totalVendaGeral > 0 ? totalLucroPctGeral.toFixed(1) + '%' : '—'}</div></div>
+                <div style="text-align:right"><div style="font-size:11px;color:var(--gray)">Faturamento Total</div><div class="lanche-lucro-total-valor" style="font-size:20px">${fmt(totalVendaGeral + totalTaxasEntrega)}</div><div style="font-size:11px;font-weight:600;color:var(--gray)">Valor Total + Taxas</div></div>
                 <div style="text-align:right"><div style="font-size:11px;color:var(--gray)">Lucro + Taxas de Entrega</div><div class="lanche-lucro-total-valor ${totalLucroComTaxas < 0 ? 'lanche-lucro-prejuizo' : ''}" style="font-size:20px;color:var(--success)">${fmt(totalLucroComTaxas)}</div><div style="font-size:11px;font-weight:600;color:var(--gray)">Lucro real do período</div></div>
             </div>
         </div>
