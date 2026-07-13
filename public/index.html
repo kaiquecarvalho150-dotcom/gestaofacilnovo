@@ -279,7 +279,7 @@ table tr:hover td{background:#fafbfc}
 .expense-cat{font-size:11px;color:var(--gray)}
 .expense-val{font-size:16px;font-weight:800;color:var(--danger)}
 .employees-grid{display:grid;grid-template-columns:repeat(auto-fill,minmax(280px,1fr));gap:16px}
-.emp-card{background:#fff;border-radius:12px;padding:20px;border:1px solid var(--border);display:flex;gap:14px;align-items:flex-start}
+.emp-card{background:#fff;border-radius:12px;padding:20px;border:1px solid var(--border);display:flex;gap:14px;align-items:flex-start;min-width:0}
 .emp-avatar{width:50px;height:50px;background:linear-gradient(135deg,var(--primary),var(--secondary));border-radius:50%;display:flex;align-items:center;justify-content:center;color:#fff;font-size:20px;font-weight:800;flex-shrink:0}
 .emp-name{font-size:15px;font-weight:700;color:var(--dark);margin-bottom:4px}
 .emp-role{font-size:12px;color:var(--gray);margin-bottom:6px}
@@ -3890,7 +3890,7 @@ const lastPayments = payments.slice().sort((a,b)=> new Date(b.date)-new Date(a.d
 return `
 <div class="emp-card">
 <div class="emp-avatar">${e.name.charAt(0).toUpperCase()}</div>
-<div style="flex:1">
+<div style="flex:1;min-width:0">
 <div class="emp-name">${e.name}</div>
 <div class="emp-role">${e.role || 'Função não definida'}</div>
 <div class="emp-details">
@@ -4054,7 +4054,7 @@ const paymentsCount = (m.paymentsHistory||[]).length;
 return `
 <div class="emp-card">
 <div class="emp-avatar" style="background:${isApp ? 'var(--info)' : 'var(--primary)'}">${(m.name||'?').charAt(0).toUpperCase()}</div>
-<div style="flex:1">
+<div style="flex:1;min-width:0">
 <div class="emp-name">${m.name}${isApp ? ' <span class="badge badge-info" style="font-size:10px"><i class="fa-solid fa-mobile-screen"></i> App</span>' : ''}</div>
 <div class="emp-role">${isApp ? 'Motoboy Aplicativo' : (m.role || 'Motoboy')}</div>
 ${!isApp ? `<div class="emp-details">
@@ -4409,7 +4409,7 @@ const paymentsCount = (cl.paymentsHistory||[]).length;
 return `
 <div class="emp-card">
 <div class="emp-avatar" style="background:var(--warning)">${(cl.name||'?').charAt(0).toUpperCase()}</div>
-<div style="flex:1">
+<div style="flex:1;min-width:0">
 <div class="emp-name">${cl.name}${isOverdue ? ' <span class="badge badge-danger" style="font-size:10px"><i class="fa-solid fa-triangle-exclamation"></i> Vencido</span>' : ''}</div>
 <div class="emp-role">Conta de Fiado${cl.feePct > 0 ? ` · Taxa +${cl.feePct}%` : ''}</div>
 <div class="emp-details">
