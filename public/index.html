@@ -1009,6 +1009,23 @@ table th,table td{padding:7px 8px;font-size:11px}
          </div>
 		 </div>
 
+<!-- VENDAS EM APPS TERCEIROS (IFOOD, AIQFOME, ETC) -->
+     <div class="card mt-4">
+         <div class="card-header">
+         <div class="card-title"><i class="fa-solid fa-mobile-screen-button"></i> Vendas em Apps Terceiros (iFood, Aiqfome, etc)</div>
+             <button class="btn btn-primary btn-sm" onclick="showThirdPartySaleModal()">
+                 <i class="fa-solid fa-plus"></i> Lançar Venda de App Terceiro
+             </button>
+         </div>
+         <p style="color:var(--gray);font-size:13px;margin:-8px 0 12px">Selecione os produtos vendidos em plataformas externas e informe o valor que você efetivamente recebeu (já com as taxas do app descontadas). Esse valor entra no relatório separado abaixo e soma ao Faturamento Total do mês.</p>
+         <div id="thirdparty-sales-list">
+             <div class="text-center" style="padding:40px;color:var(--gray)">
+                 <i class="fa-solid fa-mobile-screen-button" style="font-size:48px;display:block;margin-bottom:12px;opacity:0.3"></i>
+                 <p>Nenhuma venda de app terceiro lançada neste mês</p>
+             </div>
+         </div>
+		 </div>
+
 </div>
 
 
@@ -1223,6 +1240,9 @@ return `OS-${dd}/${mm}/${yyyy}-${rand}`;
 function fmt(v) { return 'R$ ' + Number(v||0).toLocaleString('pt-BR',{minimumFractionDigits:2,maximumFractionDigits:2}); }
 function fmtDate(iso) { if(!iso) return '—'; return new Date(iso).toLocaleDateString('pt-BR'); }
 function ymFromDate(d) { return `${d.getFullYear()}-${String(d.getMonth()+1).padStart(2,'0')}`; }
+// Converte uma string "YYYY-MM-DD" (sem horário) em Date local, evitando o deslocamento de
+// fuso horário que ocorre com `new Date("YYYY-MM-DD")` (interpretado como UTC meia-noite)
+function parseLocalDateOnly(dateStr) { const [y,m,d] = (dateStr||'').split('-').map(Number); return new Date(y||1970, (m||1)-1, d||1); }
 function getDaysRemaining(c) {
 if (!c || !c.startDate) return 0;
 const elapsed = Math.floor((Date.now() - new Date(c.startDate)) / 86400000);
@@ -3489,7 +3509,8 @@ async function clearReportData() {
         // Limpar despesas
         const c = currentCompany;
         c.expenses = (c.expenses || []).filter(e => e.yearMonth !== ym);
-        await db.collection('companies').doc(currentCompanyId).update({ expenses: c.expenses });
+        c.thirdPartySales = (c.thirdPartySales || []).filter(t => t.yearMonth !== ym);
+        await db.collection('companies').doc(currentCompanyId).update({ expenses: c.expenses, thirdPartySales: c.thirdPartySales });
         
         hideLoading(); 
         loadReports(); 
@@ -3504,10 +3525,15 @@ let lastMotoboyExpenseTotal = 0;
 let lastMotoboyAppExtraTotal = 0;
 let lastFolhaPagamentoTotal = 0;
 let lastFiadoFeeReceivedTotal = 0;
-function refreshCustoLucroReport() { renderCustoLucroPorProduto(lastReportSales, lastMotoboyExpenseTotal, lastMotoboyAppExtraTotal, lastFolhaPagamentoTotal, lastFiadoFeeReceivedTotal); }
+let lastThirdPartySalesTotal = 0;
+function refreshCustoLucroReport() { renderCustoLucroPorProduto(lastReportSales, lastMotoboyExpenseTotal, lastMotoboyAppExtraTotal, lastFolhaPagamentoTotal, lastFiadoFeeReceivedTotal, lastThirdPartySalesTotal); }
 function renderReportData(sales, expenses, totalSalary, totalMotoboyExpense, totalMotoboyAppExtra, totalFiadoFeeReceived) {
 lastReportSales = sales || [];
-const totalRevenue = sales.reduce((s, x) => s + (x.total || 0), 0);
+// Vendas de apps terceiros (iFood, Aiqfome, etc) lançadas no mês selecionado - somam à receita
+// e entram no dia em que a venda foi informada, junto com as vendas do próprio sistema
+const thirdPartySalesThisMonth = (currentCompany.thirdPartySales || []).filter(t => t.yearMonth === selectedReportYM);
+const thirdPartyRevenueThisMonth = thirdPartySalesThisMonth.reduce((s, t) => s + (t.valorRecebido || 0), 0);
+const totalRevenue = sales.reduce((s, x) => s + (x.total || 0), 0) + thirdPartyRevenueThisMonth;
 const totalExpenses = expenses.reduce((s, x) => s + (x.amount || 0), 0);
 // totalExpenses já inclui os lançamentos de Salário e Motoboy (cada pagamento gera uma despesa), então não soma totalSalary de novo
 const totalCosts = totalExpenses;
@@ -3528,19 +3554,20 @@ document.getElementById('rpt-charts').innerHTML = `
 <div class="chart-card"><h3><i class="fa-solid fa-chart-pie"></i> Receita vs Despesas</h3><canvas id="chart-profit"></canvas></div>
 <div class="chart-card"><h3><i class="fa-solid fa-calendar"></i> Receita Anual</h3><canvas id="chart-annual"></canvas></div>
 `;
-buildDailyChart(sales, year, monthIdx);
-buildItemsChart(sales);
+buildDailyChart(sales, year, monthIdx, thirdPartySalesThisMonth);
+buildItemsChart(sales, thirdPartySalesThisMonth);
 buildProfitChart(totalRevenue, totalCosts);
 buildAnnualChartAsync(year);
-buildEarningsTable(sales, year, monthIdx);
+buildEarningsTable(sales, year, monthIdx, thirdPartySalesThisMonth);
 renderExpensesList(expenses, currentCompany);
 lastMotoboyExpenseTotal = totalMotoboyExpense || 0;
 lastMotoboyAppExtraTotal = totalMotoboyAppExtra || 0;
 lastFolhaPagamentoTotal = totalSalary || 0;
 lastFiadoFeeReceivedTotal = totalFiadoFeeReceived || 0;
-renderCustoLucroPorProduto(sales, lastMotoboyExpenseTotal, lastMotoboyAppExtraTotal, lastFolhaPagamentoTotal, lastFiadoFeeReceivedTotal);
+lastThirdPartySalesTotal = renderThirdPartySales(selectedReportYM);
+renderCustoLucroPorProduto(sales, lastMotoboyExpenseTotal, lastMotoboyAppExtraTotal, lastFolhaPagamentoTotal, lastFiadoFeeReceivedTotal, lastThirdPartySalesTotal);
 }
-function buildDailyChart(sales, year, monthIdx) {
+function buildDailyChart(sales, year, monthIdx, thirdPartySales) {
 if (chartInstances.daily) chartInstances.daily.destroy();
 const daysInMonth = new Date(year, monthIdx + 1, 0).getDate();
 const dailyData = new Array(daysInMonth).fill(0);
@@ -3548,6 +3575,14 @@ sales.forEach(s => {
 const d = new Date(s.date);
 if (d.getFullYear() === year && d.getMonth() === monthIdx) {
 dailyData[d.getDate() - 1] += s.total;
+}
+});
+// Soma o valor recebido nas vendas de apps terceiros (iFood, Aiqfome, etc) no dia informado,
+// junto com as vendas do próprio sistema (mesma venda do dia, só que em outra plataforma)
+(thirdPartySales || []).forEach(t => {
+const d = parseLocalDateOnly(t.date);
+if (d.getFullYear() === year && d.getMonth() === monthIdx) {
+dailyData[d.getDate() - 1] += (t.valorRecebido || 0);
 }
 });
 const labels = Array.from({length: daysInMonth}, (_, i) => String(i + 1).padStart(2, '0'));
@@ -3583,7 +3618,7 @@ callback: function(value) { return 'R$' + value; }
 function normalizeProductNameForChart(s) {
 return (s||'').toString().toLowerCase().normalize('NFD').replace(/[\u0300-\u036f]/g,'').replace(/[-_]+/g,' ').replace(/\s+/g,' ').trim();
 }
-function buildItemsChart(sales) {
+function buildItemsChart(sales, thirdPartySales) {
 if (chartInstances.items) chartInstances.items.destroy();
 // Mapa de nome normalizado -> nome atualmente cadastrado no Estoque/Cardápio
 const menuItems = (currentCompany && currentCompany.menuItems) || [];
@@ -3597,6 +3632,15 @@ const m = baseName.match(/^(.+?)\s*\(\+(.+?)\)$/);
 if (m) baseName = m[1].trim();
 const norm = normalizeProductNameForChart(baseName);
 const displayName = canonicalMap[norm] || baseName;
+itemsMap[displayName] = (itemsMap[displayName] || 0) + (i.qty || 1);
+});
+});
+// Produtos vendidos em apps terceiros (iFood, Aiqfome, etc) também contam no gráfico,
+// como se tivessem sido vendidos pelo próprio sistema
+(thirdPartySales || []).forEach(t => {
+(t.items || []).forEach(i => {
+const norm = normalizeProductNameForChart(i.name || '');
+const displayName = canonicalMap[norm] || i.name;
 itemsMap[displayName] = (itemsMap[displayName] || 0) + (i.qty || 1);
 });
 });
@@ -3754,7 +3798,7 @@ async function buildAnnualChartAsync(year) {
         });
     }
 }
-function buildEarningsTable(sales, year, monthIdx) {
+function buildEarningsTable(sales, year, monthIdx, thirdPartySales) {
 const tbl = document.getElementById('earnings-table');
 if (!tbl) return;
 const daysInMonth = new Date(year, monthIdx + 1, 0).getDate();
@@ -3783,6 +3827,22 @@ dailyData[dateKey].sales += 1;
 }
 }
 });
+// Vendas de apps terceiros (iFood, Aiqfome, etc) somam no dia informado, junto com as vendas do sistema
+(thirdPartySales || []).forEach(t => {
+const d = parseLocalDateOnly(t.date);
+if (d.getFullYear() === year && d.getMonth() === monthIdx) {
+const day = d.getDate();
+const weekNum = Math.ceil((day + new Date(year, monthIdx, 1).getDay()) / 7);
+const weekKey = `Sem ${weekNum}`;
+const dateKey = `${String(day).padStart(2,'0')}/${String(monthIdx+1).padStart(2,'0')}`;
+weekData[weekKey].revenue += (t.valorRecebido || 0);
+weekData[weekKey].sales += 1;
+if (dailyData[dateKey]) {
+dailyData[dateKey].revenue += (t.valorRecebido || 0);
+dailyData[dateKey].sales += 1;
+}
+}
+});
 let html = '<thead><tr><th>DIA</th><th>SEMANA</th><th>RECEITA</th><th>VENDAS</th></tr></thead><tbody>';
 let currentWeek = '';
 let weekTotalRevenue = 0;
@@ -3805,8 +3865,8 @@ weekTotalSales += data.sales;
 html += `<tr><td><strong>${dateKey}</strong> ${dayName}</td><td style="font-size:11px;color:var(--gray)">${weekKey}</td><td>${data.revenue > 0 ? `<span style="color:var(--success);font-weight:600">${fmt(data.revenue)}</span>` : '<span style="color:var(--gray)">—</span>'}</td><td>${data.sales > 0 ? `<span style="color:var(--primary)">${data.sales}</span>` : '<span style="color:var(--gray)">—</span>'}</td></tr>`;
 }
 html += `<tr style="background:#eff6ff;font-weight:700"><td colspan="2"><i class="fa-solid fa-calendar-week"></i> Total ${currentWeek}</td><td style="color:var(--primary)">${fmt(weekTotalRevenue)}</td><td style="color:var(--primary)">${weekTotalSales} vendas</td></tr>`;
-const monthTotal = sales.reduce((s, x) => s + x.total, 0);
-const monthSales = sales.length;
+const monthTotal = sales.reduce((s, x) => s + x.total, 0) + (thirdPartySales || []).reduce((s, t) => s + (t.valorRecebido || 0), 0);
+const monthSales = sales.length + (thirdPartySales || []).length;
 html += `<tr style="background:#f0fdf4;font-weight:800;font-size:14px"><td colspan="2"><i class="fa-solid fa-check-circle" style="color:var(--success)"></i> Total ${new Date(year, monthIdx).toLocaleDateString('pt-BR',{month:'long',year:'numeric'})}</td><td style="color:var(--success)">${fmt(monthTotal)}</td><td style="color:var(--success)">${monthSales} vendas</td></tr>`;
 html += '</tbody>';
 tbl.innerHTML = html;
@@ -6598,11 +6658,12 @@ function getProductUnitEconomics(p) {
 }
 
 // ---------- CUSTO E LUCRO POR PRODUTO VENDIDO (baseado nas OS pagas / vendas do mês) ----------
-function renderCustoLucroPorProduto(sales, motoboyExpenseTotal, motoboyAppExtraTotal, folhaPagamentoTotal, fiadoFeeReceivedTotal) {
+function renderCustoLucroPorProduto(sales, motoboyExpenseTotal, motoboyAppExtraTotal, folhaPagamentoTotal, fiadoFeeReceivedTotal, thirdPartySalesTotal) {
     motoboyExpenseTotal = motoboyExpenseTotal || 0;
     motoboyAppExtraTotal = motoboyAppExtraTotal || 0;
     folhaPagamentoTotal = folhaPagamentoTotal || 0;
     fiadoFeeReceivedTotal = fiadoFeeReceivedTotal || 0;
+    thirdPartySalesTotal = thirdPartySalesTotal || 0;
     const el = document.getElementById('custo-lucro-produto-list');
     if (!el) return;
     const c = currentCompany;
@@ -6680,35 +6741,126 @@ function renderCustoLucroPorProduto(sales, motoboyExpenseTotal, motoboyAppExtraT
         </div>`;
     }).join('');
 
-    const totalCustoPctGeral = totalVendaGeral > 0 ? (totalCustoGeral / totalVendaGeral * 100) : 0;
-    const totalLucroPctGeral = totalVendaGeral > 0 ? (totalLucroGeral / totalVendaGeral * 100) : 0;
-    // Faturamento Total = Vendas + Taxas de Entrega, descontando o adicional de R$0,20/corrida do motoboy aplicativo
-    // e somando a taxa extra de fiado já recebida (acréscimo cobrado do cliente ao dar baixa na OS)
-    // (o adicional do motoboy não é receita real da empresa, é só um custo extra do motoboy aplicativo)
-    const totalFaturamento = totalVendaGeral + totalTaxasEntrega - motoboyAppExtraTotal + fiadoFeeReceivedTotal;
-    // Lucro Real Final = Faturamento - Custo Total - Custo Motoboys - Folha de Pagamento
-    // (Taxas de Entrega é apenas informativo aqui, pois já está incluída dentro do Faturamento Total)
-    const totalLucroRealFinal = totalFaturamento - totalCustoGeral - motoboyExpenseTotal - folhaPagamentoTotal;
-    html += `
-        <div class="lanche-lucro-total">
-            <div class="lanche-lucro-total-label">
-                <i class="fa-solid fa-coins"></i>
-                Total Geral (${items.length} produto${items.length !== 1 ? 's' : ''})
-            </div>
-            <div style="display:flex;gap:20px;align-items:center;flex-wrap:wrap">
-                <div style="text-align:right"><div style="font-size:11px;color:var(--gray)">Faturamento Total</div><div class="lanche-lucro-total-valor" style="font-size:20px">${fmt(totalFaturamento)}</div><div style="font-size:11px;font-weight:600;color:var(--gray)">Vendas + Taxas${motoboyAppExtraTotal > 0 ? ` (- ${fmt(motoboyAppExtraTotal)} extras motoboy)` : ''}${fiadoFeeReceivedTotal > 0 ? ` (+ ${fmt(fiadoFeeReceivedTotal)} taxa fiado recebida)` : ''}</div></div>
-                <div style="text-align:right"><div style="font-size:11px;color:var(--gray)">Custo Total</div><div class="lanche-lucro-total-valor" style="color:var(--danger);font-size:20px">${fmt(totalCustoGeral)}</div><div style="font-size:11px;font-weight:600;color:var(--gray)">Custo de insumos</div></div>
-                <div style="text-align:right"><div style="font-size:11px;color:var(--gray)">Custo Motoboys</div><div class="lanche-lucro-total-valor" style="color:var(--warning);font-size:20px">${fmt(motoboyExpenseTotal)}</div><div style="font-size:11px;font-weight:600;color:var(--gray)">Pagamentos confirmados</div></div>
-                <div style="text-align:right"><div style="font-size:11px;color:var(--gray)">Folha de Pagamento</div><div class="lanche-lucro-total-valor" style="color:var(--danger);font-size:20px">${fmt(folhaPagamentoTotal)}</div><div style="font-size:11px;font-weight:600;color:var(--gray)">Salários pagos no período</div></div>
-                <div style="text-align:right"><div style="font-size:11px;color:var(--gray)">Lucro Real Final</div><div class="lanche-lucro-total-valor ${totalLucroRealFinal < 0 ? 'lanche-lucro-prejuizo' : ''}" style="font-size:20px;color:var(--success)">${fmt(totalLucroRealFinal)}</div><div style="font-size:11px;font-weight:600;color:var(--gray)">Faturamento - Custo Total - Custo Motoboys - Folha de Pagamento</div></div>
-            </div>
-            <div style="margin-top:12px;padding-top:10px;border-top:1px dashed var(--border);display:flex;justify-content:flex-end">
-                <div style="text-align:right"><div style="font-size:11px;color:var(--gray)"><i class="fa-solid fa-circle-info"></i> Taxas de Entrega (apenas informativo)</div><div class="lanche-lucro-total-valor" style="color:var(--info);font-size:18px">${fmt(totalTaxasEntrega)}</div><div style="font-size:11px;font-weight:600;color:var(--gray)">Total acumulado recebido em taxas — já incluído no Faturamento Total</div></div>
-            </div>
-        </div>
-    `;
+    // Bloco de resumo "Faturamento Total / Total Geral" removido temporariamente a pedido do usuário
+    // (será refeito futuramente). A tabela de custo/lucro por produto acima permanece normalmente.
 
     el.innerHTML = html;
+}
+
+// ============================================================
+// VENDAS EM APPS TERCEIROS (IFOOD, AIQFOME, ETC)
+// ============================================================
+const THIRD_PARTY_PLATFORMS = ['iFood', 'Aiqfome', 'Rappi', '99Food', 'GarfeI', 'Outro'];
+function renderThirdPartySales(ym) {
+    const el = document.getElementById('thirdparty-sales-list');
+    if (!el) return 0;
+    const c = currentCompany;
+    const list = (c.thirdPartySales || []).filter(t => t.yearMonth === ym).sort((a,b) => new Date(b.date) - new Date(a.date));
+    if (!list.length) {
+        el.innerHTML = `
+            <div class="text-center" style="padding:40px;color:var(--gray)">
+                <i class="fa-solid fa-mobile-screen-button" style="font-size:48px;display:block;margin-bottom:12px;opacity:0.3"></i>
+                <p>Nenhuma venda de app terceiro lançada neste mês</p>
+            </div>
+        `;
+        return 0;
+    }
+    let grandTotal = 0;
+    const byPlatform = {};
+    list.forEach(t => { grandTotal += (t.valorRecebido || 0); byPlatform[t.platform] = (byPlatform[t.platform] || 0) + (t.valorRecebido || 0); });
+    const platformBadges = Object.entries(byPlatform).map(([p,v]) => `<div style="background:#f8fafc;border:1px solid var(--border);border-radius:8px;padding:8px 12px;font-size:12px"><strong>${p}:</strong> ${fmt(v)}</div>`).join('');
+    el.innerHTML = `
+        <div class="flex gap-2 flex-wrap mb-3">${platformBadges}</div>
+        ${list.map(t => `
+        <div class="expense-row" style="align-items:flex-start">
+            <div class="expense-icon" style="background:#dbeafe;color:var(--primary)"><i class="fa-solid fa-mobile-screen-button"></i></div>
+            <div class="expense-info">
+                <div class="expense-name">${t.platform}${t.platformOther ? ' — ' + t.platformOther : ''} <span style="font-weight:400;color:var(--gray);font-size:11px">${parseLocalDateOnly(t.date).toLocaleDateString('pt-BR')}</span></div>
+                <div class="expense-cat">${(t.items||[]).map(i => `${i.qty}x ${i.name}`).join(', ') || 'Sem itens selecionados'}</div>
+            </div>
+            <div class="expense-val" style="color:var(--success)">${fmt(t.valorRecebido)}</div>
+            <button class="btn btn-sm btn-ghost" onclick="showThirdPartySaleModal('${t.id}')"><i class="fa-solid fa-edit"></i></button>
+            <button class="btn btn-sm btn-ghost" style="color:var(--danger)" onclick="deleteThirdPartySale('${t.id}')"><i class="fa-solid fa-trash"></i></button>
+        </div>`).join('')}
+        <div style="margin-top:12px;padding-top:12px;border-top:1px solid var(--border);display:flex;justify-content:space-between;align-items:center">
+            <span style="font-weight:700;color:var(--gray)">Total Recebido em Apps Terceiros:</span>
+            <span style="font-size:18px;font-weight:900;color:var(--success)">${fmt(grandTotal)}</span>
+        </div>
+    `;
+    return grandTotal;
+}
+function showThirdPartySaleModal(tid) {
+    const c = currentCompany;
+    const t = tid ? (c.thirdPartySales || []).find(x => x.id === tid) : null;
+    const menuItems = (c.menuItems || []).slice().sort((a,b) => a.name.localeCompare(b.name));
+    const checkedMap = {};
+    (t?.items || []).forEach(i => { checkedMap[i.productId] = i.qty; });
+    const itemsHtml = menuItems.length ? menuItems.map(p => `
+        <label style="display:flex;align-items:center;gap:10px;padding:7px 0;border-bottom:1px solid #f1f5f9">
+            <input type="checkbox" class="tps-item-check" data-id="${p.id}" data-name="${p.name.replace(/"/g,'&quot;')}" ${checkedMap[p.id] ? 'checked' : ''} onchange="toggleTpsQty('${p.id}')" style="width:18px;height:18px;cursor:pointer">
+            <span style="flex:1">${p.name}</span>
+            <input type="number" min="1" step="1" id="tps-qty-${p.id}" class="form-control" style="width:70px;${checkedMap[p.id] ? '' : 'display:none'}" value="${checkedMap[p.id] || 1}">
+        </label>`).join('') : '<p style="color:var(--gray);font-size:13px">Nenhum produto cadastrado no cardápio.</p>';
+    showModal(`<i class="fa-solid fa-mobile-screen-button"></i> ${t ? 'Editar' : 'Lançar'} Venda de App Terceiro`,
+    `<div class="form-row">
+<div class="form-group"><label>Plataforma *</label><select id="tps-platform" class="form-control" onchange="document.getElementById('tps-platform-other-wrap').style.display = this.value==='Outro' ? 'block' : 'none'">${THIRD_PARTY_PLATFORMS.map(p => `<option value="${p}" ${t?.platform===p?'selected':''}>${p}</option>`).join('')}</select></div>
+<div class="form-group"><label>Data</label><input type="date" id="tps-date" class="form-control" value="${t?.date || new Date().toISOString().slice(0,10)}"></div>
+</div>
+<div class="form-group" id="tps-platform-other-wrap" style="display:${t?.platform==='Outro' ? 'block' : 'none'}"><label>Nome da Plataforma</label><input type="text" id="tps-platform-other" class="form-control" value="${t?.platformOther || ''}"></div>
+<div class="form-group"><label>Produtos Vendidos</label><div style="max-height:220px;overflow-y:auto;border:1px solid var(--border);border-radius:8px;padding:8px 12px">${itemsHtml}</div></div>
+<div class="form-group"><label>Valor Recebido (R$) *</label><input type="number" id="tps-valor" class="form-control" step="0.01" min="0" value="${t?.valorRecebido || ''}"></div>
+<p style="color:var(--gray);font-size:12px;margin-top:-6px">Informe o valor que você realmente recebeu do app (já descontadas as taxas da plataforma). Esse valor soma ao Faturamento Total do mês nos Relatórios.</p>`,
+    `<button class="btn btn-ghost" onclick="closeModal()">Cancelar</button><button class="btn btn-primary" onclick="saveThirdPartySale('${tid || ''}')"><i class="fa-solid fa-save"></i> Salvar</button>`, false);
+}
+function toggleTpsQty(pid) {
+    const check = document.querySelector(`.tps-item-check[data-id="${pid}"]`);
+    const qtyInput = document.getElementById('tps-qty-' + pid);
+    if (qtyInput) qtyInput.style.display = check.checked ? 'block' : 'none';
+}
+async function saveThirdPartySale(tid) {
+    const platform = document.getElementById('tps-platform').value;
+    const platformOther = document.getElementById('tps-platform-other')?.value.trim() || '';
+    const date = document.getElementById('tps-date').value;
+    const valorRecebido = parseFloat(document.getElementById('tps-valor').value) || 0;
+    if (!date) { showToast('Informe a data da venda', 'warning'); return; }
+    if (valorRecebido <= 0) { showToast('Informe o valor recebido', 'warning'); return; }
+    const items = [];
+    document.querySelectorAll('.tps-item-check').forEach(chk => {
+        if (chk.checked) {
+            const pid = chk.getAttribute('data-id');
+            const name = chk.getAttribute('data-name');
+            const qty = parseInt(document.getElementById('tps-qty-' + pid)?.value) || 1;
+            items.push({ productId: pid, name, qty });
+        }
+    });
+    const c = currentCompany;
+    c.thirdPartySales = c.thirdPartySales || [];
+    const yearMonth = date.slice(0,7);
+    if (tid) {
+        const idx = c.thirdPartySales.findIndex(x => x.id === tid);
+        if (idx !== -1) Object.assign(c.thirdPartySales[idx], { platform, platformOther, date, yearMonth, items, valorRecebido });
+    } else {
+        c.thirdPartySales.push({ id: genId(), platform, platformOther, date, yearMonth, items, valorRecebido, createdAt: new Date().toISOString() });
+    }
+    showLoading('Salvando...');
+    try {
+        await db.collection('companies').doc(currentCompanyId).update({ thirdPartySales: c.thirdPartySales });
+        hideLoading(); closeModal();
+        if (document.getElementById('section-reports')?.classList.contains('active')) loadReports();
+        showToast('Venda de app terceiro salva!', 'success');
+    } catch (e) { hideLoading(); showToast('Erro: ' + e.message, 'danger'); }
+}
+async function deleteThirdPartySale(tid) {
+    if (!confirm('Excluir esta venda de app terceiro?')) return;
+    const c = currentCompany;
+    c.thirdPartySales = (c.thirdPartySales || []).filter(x => x.id !== tid);
+    showLoading('Excluindo...');
+    try {
+        await db.collection('companies').doc(currentCompanyId).update({ thirdPartySales: c.thirdPartySales });
+        hideLoading();
+        if (document.getElementById('section-reports')?.classList.contains('active')) loadReports();
+        showToast('Venda de app terceiro excluída!', 'success');
+    } catch (e) { hideLoading(); showToast('Erro: ' + e.message, 'danger'); }
 }
 
 async function updateLancheVenda(productId, value) {
