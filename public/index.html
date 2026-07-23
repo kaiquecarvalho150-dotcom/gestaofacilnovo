@@ -750,6 +750,7 @@ table th,table td{padding:7px 8px;font-size:11px}
 <div class="nav-item" onclick="requireAuth('reports')"><span class="nav-ic"><i class="fa-solid fa-chart-bar"></i></span> Relatórios</div>
 <div class="nav-item" onclick="requireAuthEmployees()"><span class="nav-ic"><i class="fa-solid fa-users"></i></span> Funcionários</div>
 <div class="nav-item" onclick="requireAuth('fiados')"><span class="nav-ic"><i class="fa-solid fa-hand-holding-dollar"></i></span> Fiados</div>
+<div class="nav-item" onclick="requireAuth('loyalty')"><span class="nav-ic"><i class="fa-solid fa-star"></i></span> Fidelidade</div>
 </nav>
 <div class="sidebar-footer">
 <div class="nav-item" onclick="doLogout()"><span class="nav-ic"><i class="fa-solid fa-sign-out-alt"></i></span> Sair do Sistema</div>
@@ -1052,6 +1053,18 @@ table th,table td{padding:7px 8px;font-size:11px}
 </div>
 
 <!-- FIADOS -->
+<div id="section-loyalty" class="section">
+<div class="flex items-center justify-between mb-4 flex-wrap gap-3">
+  <div style="font-size:15px;font-weight:700"><i class="fa-solid fa-star" style="color:#f59e0b"></i> Programa de Fidelidade</div>
+  <button class="btn btn-primary" onclick="showLoyaltyClientModal()"><i class="fa-solid fa-plus"></i> Cadastrar Cliente</button>
+</div>
+<p style="color:var(--gray);font-size:13px;margin:-8px 0 12px">Cadastre clientes no programa de pontos. Selecione as OS de cada compra para acumular pontos. Quando atingir a meta, você registra o prêmio, zera os pontos e o histórico fica salvo para consulta futura.</p>
+<div style="margin-bottom:20px">
+  <canvas id="loyalty-chart" height="90"></canvas>
+</div>
+<div class="employees-grid" id="loyalty-grid"></div>
+</div>
+
 <div id="section-fiados" class="section">
 <div class="flex items-center justify-between mb-4 flex-wrap gap-3">
 <div style="font-size:15px;font-weight:700"><i class="fa-solid fa-hand-holding-dollar"></i> Contas de Fiado</div>
@@ -1305,11 +1318,11 @@ function showSection(name) {
 document.querySelectorAll('.section').forEach(s => s.classList.remove('active'));
 document.getElementById('section-'+name)?.classList.add('active');
 document.querySelectorAll('.nav-item').forEach(n => n.classList.remove('active'));
-const labels = {home:'Dashboard',pos:'PDV — Caixa',stock:'Estoque',menu:'Cadastrar Cardápio',coupons:'Cupons de Desconto',orders:'Pedidos',chat:'Mensagens',reports:'Relatórios',employees:'Funcionários',fiados:'Fiados'};
+const labels = {home:'Dashboard',pos:'PDV — Caixa',stock:'Estoque',menu:'Cadastrar Cardápio',coupons:'Cupons de Desconto',orders:'Pedidos',chat:'Mensagens',reports:'Relatórios',employees:'Funcionários',fiados:'Fiados',loyalty:'Fidelidade'};
 document.getElementById('topbar-title').textContent = labels[name] || name;
 document.querySelectorAll('.nav-item').forEach(n => { if(n.textContent.trim().startsWith(labels[name]||name)) n.classList.add('active'); });
 closeSidebar();
-const renders = {home:renderHome,pos:renderPDV,stock:renderStock,menu:renderMenu,coupons:renderCoupons,employees:renderEmployees,chat:renderAdminChatList,fiados:renderFiadoClients};
+const renders = {home:renderHome,pos:renderPDV,stock:renderStock,menu:renderMenu,coupons:renderCoupons,employees:renderEmployees,chat:renderAdminChatList,fiados:renderFiadoClients,loyalty:renderLoyalty};
 if (name !== 'home' && homeClockInterval) { clearInterval(homeClockInterval); homeClockInterval = null; }
 if (renders[name]) renders[name]();
 if (name === 'orders') {
@@ -2770,14 +2783,30 @@ document.getElementById('menu-link-text').textContent = url;
 // ============================================================
 // CUPONS DE DESCONTO
 // ============================================================
+// Calcula a data de fim real levando em conta durationHours ou durationDays a partir de startDate ou createdAt
+function couponEffectiveEndDate(cp) {
+    if (cp.endDate) return new Date(cp.endDate);
+    if (cp.durationHours && cp.durationHours > 0) {
+        const base = cp.startDate ? new Date(cp.startDate) : new Date(cp.createdAt || Date.now());
+        return new Date(base.getTime() + cp.durationHours * 3600000);
+    }
+    if (cp.durationDays && cp.durationDays > 0) {
+        const base = cp.startDate ? new Date(cp.startDate) : new Date(cp.createdAt || Date.now());
+        return new Date(base.getTime() + cp.durationDays * 86400000);
+    }
+    return null;
+}
 function couponStatusInfo(cp) {
-    // Retorna {label, color, valid} descrevendo a situação atual do cupom
     const now = new Date();
     if (cp.active === false) return { label: 'Inativo', color: 'var(--gray)', bg: '#f1f5f9', valid: false };
-    if (cp.singleUse && cp.used) return { label: 'Utilizado (uso único)', color: 'var(--gray)', bg: '#f1f5f9', valid: false };
+    const maxUses = cp.maxUses || 0;
+    const usedCount = cp.usedCount || 0;
+    if (maxUses > 0 && usedCount >= maxUses) return { label: `Esgotado (${usedCount}/${maxUses} usos)`, color: 'var(--gray)', bg: '#f1f5f9', valid: false };
     if (cp.startDate && now < new Date(cp.startDate)) return { label: 'Aguardando início', color: '#b45309', bg: '#fef3c7', valid: false };
-    if (cp.endDate && now > new Date(cp.endDate)) return { label: 'Expirado', color: 'var(--danger)', bg: '#fee2e2', valid: false };
-    return { label: 'Ativo', color: 'var(--success)', bg: '#dcfce7', valid: true };
+    const endDt = couponEffectiveEndDate(cp);
+    if (endDt && now > endDt) return { label: 'Expirado', color: 'var(--danger)', bg: '#fee2e2', valid: false };
+    const usesLabel = maxUses > 0 ? ` · ${usedCount}/${maxUses} usos` : (usedCount > 0 ? ` · ${usedCount} uso(s)` : '');
+    return { label: `Ativo${usesLabel}`, color: 'var(--success)', bg: '#dcfce7', valid: true };
 }
 function fmtCouponDate(iso) {
     if (!iso) return '';
@@ -2812,19 +2841,26 @@ function renderCoupons() {
     }
     el.innerHTML = coupons.map(cp => {
         const st = couponStatusInfo(cp);
+        const maxUses = cp.maxUses || 0;
+        const usedCount = cp.usedCount || 0;
+        // Tipo de desconto
+        const discLabel = cp.discountType === 'value' ? `R$ ${Number(cp.discountValue||0).toFixed(2).replace('.',',')} de desconto` : `${cp.percent||0}% de desconto`;
+        // Validade
         const periodParts = [];
         if (cp.startDate) periodParts.push('De ' + fmtCouponDate(cp.startDate));
-        if (cp.endDate) periodParts.push('Até ' + fmtCouponDate(cp.endDate));
+        const endDt = couponEffectiveEndDate(cp);
+        if (endDt) periodParts.push('Até ' + endDt.toLocaleString('pt-BR',{day:'2-digit',month:'2-digit',year:'numeric',hour:'2-digit',minute:'2-digit'}));
+        else if (cp.durationHours) periodParts.push(`Duração: ${cp.durationHours}h após início`);
+        else if (cp.durationDays) periodParts.push(`Duração: ${cp.durationDays} dia(s)`);
         const periodHtml = periodParts.length ? `<div class="stock-item-cat" style="margin-top:2px"><i class="fa-solid fa-calendar"></i> ${periodParts.join(' &nbsp;•&nbsp; ')}</div>` : '';
-        const usedHtml = cp.singleUse && cp.used ? `<div class="stock-item-cat" style="margin-top:2px"><i class="fa-solid fa-user-check"></i> Utilizado por ${cp.usedBy||'cliente'} em ${fmtCouponDate(cp.usedAt)}</div>` : '';
+        const usesHtml = maxUses > 0 ? `<div class="stock-item-cat" style="margin-top:2px"><i class="fa-solid fa-repeat"></i> Usos: ${usedCount}/${maxUses}</div>` : (usedCount>0?`<div class="stock-item-cat" style="margin-top:2px"><i class="fa-solid fa-repeat"></i> ${usedCount} uso(s) — ilimitado</div>`:'');
         return `
     <div class="stock-item-row">
         <div class="stock-item-icon" style="background:${st.bg};color:${st.color}"><i class="fa-solid fa-tag"></i></div>
         <div class="stock-item-info">
-            <div class="stock-item-name">${cp.code} ${cp.singleUse?'<span style="font-size:11px;background:#ede9fe;color:#6d28d9;padding:2px 6px;border-radius:4px;margin-left:4px"><i class="fa-solid fa-user"></i> Uso único</span>':''}</div>
-            <div class="stock-item-cat">${cp.percent}% de desconto — <span style="color:${st.color};font-weight:600">${st.label}</span></div>
-            ${periodHtml}
-            ${usedHtml}
+            <div class="stock-item-name">${cp.code} ${maxUses===1?'<span style="font-size:11px;background:#ede9fe;color:#6d28d9;padding:2px 6px;border-radius:4px;margin-left:4px"><i class="fa-solid fa-user"></i> Uso único</span>':maxUses>1?`<span style="font-size:11px;background:#dbeafe;color:var(--primary);padding:2px 6px;border-radius:4px;margin-left:4px">${maxUses} usos</span>`:''}</div>
+            <div class="stock-item-cat">${discLabel} — <span style="color:${st.color};font-weight:600">${st.label}</span></div>
+            ${periodHtml}${usesHtml}
         </div>
         <div class="flex gap-2">
             <button class="btn btn-sm ${cp.active!==false?'btn-warning':'btn-success'}" onclick="toggleCouponActive('${cp.id}')"><i class="fa-solid fa-power-off"></i> ${cp.active!==false?'Desativar':'Ativar'}</button>
@@ -2843,53 +2879,111 @@ function renderCouponHistory() {
         el.innerHTML = '<div style="text-align:center;padding:60px;color:var(--gray)"><i class="fa-solid fa-clock-rotate-left" style="font-size:48px;display:block;margin-bottom:12px;color:var(--border)"></i><h3>Nenhum cupom utilizado ainda</h3><p style="font-size:13px;margin-top:8px">Assim que um cliente usar um cupom no pedido, ele aparecerá aqui</p></div>';
         return;
     }
-    el.innerHTML = hist.map(h => `
+    el.innerHTML = hist.map(h => {
+        const discLabel = h.discountType==='value' ? `R$ ${Number(h.discountValue||0).toFixed(2).replace('.',',')}` : `${h.percent||0}%`;
+        return `
     <div class="stock-item-row">
         <div class="stock-item-icon" style="background:#dcfce7;color:var(--success)"><i class="fa-solid fa-check"></i></div>
         <div class="stock-item-info">
-            <div class="stock-item-name">${h.code} — ${h.percent}% de desconto</div>
+            <div class="stock-item-name">${h.code} — ${discLabel} de desconto</div>
             <div class="stock-item-cat">Cliente: ${h.customerName||'-'} ${h.orderNumber?(' • Pedido: '+h.orderNumber):''}</div>
             <div class="stock-item-cat">Utilizado em: ${fmtCouponDate(h.usedAt)}</div>
         </div>
-    </div>`).join('');
+    </div>`;
+    }).join('');
+}
+function cpDurationType(cp) {
+    if (cp && cp.endDate) return 'date';
+    if (cp && cp.durationHours > 0) return 'hours';
+    if (cp && cp.durationDays > 0) return 'days';
+    return 'none';
 }
 function showCouponModal(cid) {
     const c = currentCompany;
     const cp = cid ? (c.coupons||[]).find(x=>x.id===cid) : null;
+    const dtype = cp ? (cp.discountType||'percent') : 'percent';
+    const durType = cpDurationType(cp);
+    const maxUses = cp ? (cp.maxUses||0) : 0;
+    const usedCount = cp ? (cp.usedCount||0) : 0;
     showModal(`<i class="fa-solid fa-tag"></i> ${cp?'Editar':'Novo'} Cupom`,
-    `<div class="form-group"><label>Código do Cupom *</label><input type="text" id="cp-code" class="form-control" style="text-transform:uppercase" placeholder="Ex: PROMO10" value="${cp?cp.code:''}"></div>
-    <div class="form-group"><label>Percentual de Desconto (%) *</label><input type="number" id="cp-percent" class="form-control" min="1" max="100" step="1" placeholder="Ex: 10" value="${cp?cp.percent:''}"></div>
-    <div class="form-group"><label>Início da Validade (opcional)</label><input type="datetime-local" id="cp-start" class="form-control" value="${cp&&cp.startDate?cp.startDate:''}"></div>
-    <div class="form-group"><label>Fim da Validade (opcional)</label><input type="datetime-local" id="cp-end" class="form-control" value="${cp&&cp.endDate?cp.endDate:''}"></div>
-    <p style="color:var(--gray);font-size:12px;margin:-8px 0 12px">Deixe em branco para o cupom não ter data de início e/ou fim. Se preenchido, o cupom só fica disponível dentro do período informado.</p>
-    <div class="form-group"><label style="display:flex;align-items:center;gap:8px;cursor:pointer;text-transform:none"><input type="checkbox" id="cp-active" style="width:18px;height:18px" ${!cp||cp.active!==false?'checked':''}> Cupom ativo (disponível para uso no cardápio online)</label></div>
-    <div class="form-group"><label style="display:flex;align-items:center;gap:8px;cursor:pointer;text-transform:none"><input type="checkbox" id="cp-singleuse" style="width:18px;height:18px" ${cp&&cp.singleUse?'checked':''}> Cupom de uso único (somente 1 pessoa pode utilizar; após o uso ele é suspenso automaticamente, sem afetar os demais cupons)</label></div>
-    ${cp&&cp.singleUse&&cp.used?`<p style="color:var(--danger);font-size:12px;margin-top:-8px"><i class="fa-solid fa-circle-info"></i> Este cupom já foi utilizado por ${cp.usedBy||'um cliente'} em ${fmtCouponDate(cp.usedAt)} e está suspenso.</p>`:''}
-    <input type="hidden" id="cp-id" value="${cp?cp.id:''}">`,
+    `<input type="hidden" id="cp-id" value="${cp?cp.id:''}">
+<div class="form-group"><label>Código do Cupom *</label><input type="text" id="cp-code" class="form-control" style="text-transform:uppercase" placeholder="Ex: PROMO10" value="${cp?cp.code:''}"></div>
+<div class="form-group"><label>Tipo de Desconto *</label>
+  <select id="cp-dtype" class="form-control" onchange="toggleCpDiscountFields()">
+    <option value="percent" ${dtype==='percent'?'selected':''}>Percentual (%)</option>
+    <option value="value" ${dtype==='value'?'selected':''}>Valor Fixo (R$)</option>
+  </select>
+</div>
+<div id="cp-field-percent" class="form-group" style="${dtype==='value'?'display:none':''}"><label>Percentual de Desconto (%) *</label><input type="number" id="cp-percent" class="form-control" min="1" max="100" step="0.01" placeholder="Ex: 10" value="${cp&&cp.percent?cp.percent:''}"></div>
+<div id="cp-field-value" class="form-group" style="${dtype!=='value'?'display:none':''}"><label>Valor de Desconto (R$) *</label><input type="number" id="cp-discvalue" class="form-control" min="0.01" step="0.01" placeholder="Ex: 15.00" value="${cp&&cp.discountValue?cp.discountValue:''}"></div>
+<hr style="margin:10px 0;border-color:var(--border)">
+<div class="form-group"><label>Quantidade máxima de usos</label><input type="number" id="cp-maxuses" class="form-control" min="0" step="1" placeholder="0 = ilimitado" value="${maxUses||''}"><p style="color:var(--gray);font-size:11px;margin-top:4px">0 ou vazio = ilimitado &nbsp;·&nbsp; 1 = uso único &nbsp;·&nbsp; N = N usos.${usedCount>0?` <strong style='color:var(--primary)'>${usedCount} uso(s) já realizados.</strong>`:''}</p></div>
+<hr style="margin:10px 0;border-color:var(--border)">
+<div class="form-group"><label>Início da Validade (opcional)</label><input type="datetime-local" id="cp-start" class="form-control" value="${cp&&cp.startDate?cp.startDate:''}"><p style="color:var(--gray);font-size:11px;margin-top:3px">Deixe vazio para valer a partir de agora.</p></div>
+<div class="form-group"><label>Tipo de Validade</label>
+  <select id="cp-durtype" class="form-control" onchange="toggleCpDurFields()">
+    <option value="none" ${durType==='none'?'selected':''}>Sem data de fim (válido indefinidamente)</option>
+    <option value="date" ${durType==='date'?'selected':''}>Data/hora de fim</option>
+    <option value="hours" ${durType==='hours'?'selected':''}>Duração em horas (a partir do início)</option>
+    <option value="days" ${durType==='days'?'selected':''}>Duração em dias (a partir do início)</option>
+  </select>
+</div>
+<div id="cp-field-enddate" class="form-group" style="${durType==='date'?'':'display:none'}"><label>Data/Hora de Fim</label><input type="datetime-local" id="cp-end" class="form-control" value="${cp&&cp.endDate?cp.endDate:''}"></div>
+<div id="cp-field-hours" class="form-group" style="${durType==='hours'?'':'display:none'}"><label>Quantas horas fica disponível?</label><input type="number" id="cp-durhours" class="form-control" min="1" step="1" placeholder="Ex: 24" value="${cp&&cp.durationHours?cp.durationHours:''}"></div>
+<div id="cp-field-days" class="form-group" style="${durType==='days'?'':'display:none'}"><label>Quantos dias fica disponível?</label><input type="number" id="cp-durdays" class="form-control" min="1" step="1" placeholder="Ex: 7" value="${cp&&cp.durationDays?cp.durationDays:''}"></div>
+<div class="form-group"><label style="display:flex;align-items:center;gap:8px;cursor:pointer;text-transform:none"><input type="checkbox" id="cp-active" style="width:18px;height:18px" ${!cp||cp.active!==false?'checked':''}> Cupom ativo (disponível para uso no cardápio online)</label></div>`,
     `<button class="btn btn-ghost" onclick="closeModal()">Cancelar</button>
     <button class="btn btn-primary" onclick="saveCoupon()"><i class="fa-solid fa-save"></i> Salvar Cupom</button>`, false);
+    setTimeout(()=>{ toggleCpDiscountFields(); toggleCpDurFields(); }, 50);
+}
+function toggleCpDiscountFields() {
+    const v = document.getElementById('cp-dtype')?.value;
+    if (!v) return;
+    document.getElementById('cp-field-percent').style.display = v==='value'?'none':'';
+    document.getElementById('cp-field-value').style.display = v==='value'?'':'none';
+}
+function toggleCpDurFields() {
+    const v = document.getElementById('cp-durtype')?.value;
+    if (!v) return;
+    document.getElementById('cp-field-enddate').style.display = v==='date'?'':'none';
+    document.getElementById('cp-field-hours').style.display = v==='hours'?'':'none';
+    document.getElementById('cp-field-days').style.display = v==='days'?'':'none';
 }
 async function saveCoupon() {
     const id = document.getElementById('cp-id').value;
     const code = document.getElementById('cp-code').value.trim().toUpperCase();
-    const percent = parseFloat(document.getElementById('cp-percent').value);
     const active = document.getElementById('cp-active').checked;
     const startDate = document.getElementById('cp-start').value || '';
-    const endDate = document.getElementById('cp-end').value || '';
-    const singleUse = document.getElementById('cp-singleuse').checked;
+    const dtype = document.getElementById('cp-dtype').value;
+    const maxUsesRaw = parseInt(document.getElementById('cp-maxuses').value) || 0;
+    let percent = 0, discountValue = 0;
+    if (dtype === 'value') {
+        discountValue = parseFloat(document.getElementById('cp-discvalue').value);
+        if (!discountValue || discountValue <= 0) { showToast('Informe um valor de desconto válido','warning'); return; }
+    } else {
+        percent = parseFloat(document.getElementById('cp-percent').value);
+        if (!percent || percent <= 0 || percent > 100) { showToast('Informe um percentual válido (1 a 100)','warning'); return; }
+    }
+    const durType = document.getElementById('cp-durtype').value;
+    let endDate = '', durationHours = 0, durationDays = 0;
+    if (durType === 'date') { endDate = document.getElementById('cp-end').value || ''; }
+    else if (durType === 'hours') { durationHours = parseInt(document.getElementById('cp-durhours').value) || 0; if (!durationHours) { showToast('Informe a duração em horas','warning'); return; } }
+    else if (durType === 'days') { durationDays = parseInt(document.getElementById('cp-durdays').value) || 0; if (!durationDays) { showToast('Informe a duração em dias','warning'); return; } }
     if (!code) { showToast('Informe o código do cupom','warning'); return; }
-    if (!percent || percent <= 0 || percent > 100) { showToast('Informe um percentual de desconto válido (1 a 100)','warning'); return; }
     if (startDate && endDate && new Date(endDate) < new Date(startDate)) { showToast('A data de fim não pode ser anterior à data de início','warning'); return; }
     const c = currentCompany;
     c.coupons = c.coupons || [];
     const dup = c.coupons.find(x => x.code === code && x.id !== id);
     if (dup) { showToast('Já existe um cupom com esse código','warning'); return; }
-    if (id) { const cp = c.coupons.find(x=>x.id===id); if (cp) { cp.code = code; cp.percent = percent; cp.active = active; cp.startDate = startDate; cp.endDate = endDate; cp.singleUse = singleUse; if (!singleUse) { cp.used = false; cp.usedBy=''; cp.usedAt=''; cp.usedOrderId=''; } } }
-    else { c.coupons.push({ id: genId(), code, percent, active, startDate, endDate, singleUse, used:false, usedBy:'', usedAt:'', usedOrderId:'', createdAt: new Date().toISOString() }); }
+    const existing = id ? c.coupons.find(x=>x.id===id) : null;
+    const update = { code, discountType: dtype, percent, discountValue, active, startDate, endDate, durationHours, durationDays, maxUses: maxUsesRaw, usedCount: existing ? (existing.usedCount||0) : 0, singleUse: maxUsesRaw===1, createdAt: existing ? existing.createdAt : new Date().toISOString() };
+    if (id && existing) { Object.assign(existing, update); }
+    else { c.coupons.push({ id: genId(), ...update }); }
     showLoading('Salvando...');
     try { await db.collection('companies').doc(currentCompanyId).update({coupons:c.coupons}); hideLoading(); closeModal(); renderCoupons(); showToast(id?'Cupom atualizado!':'Cupom criado!','success'); }
     catch(e) { hideLoading(); showToast('Erro: '+e.message,'danger'); }
 }
+
 async function toggleCouponActive(cid) {
     const c = currentCompany;
     const cp = (c.coupons||[]).find(x=>x.id===cid); if (!cp) return;
@@ -4720,6 +4814,360 @@ hideLoading(); renderFiadoClients(); showFiadoManageModal(cid); showToast('OS re
 } catch (e) { hideLoading(); showToast('Erro: ' + e.message, 'danger'); }
 }
 // ============================================================
+// FIDELIDADE (LOYALTY PROGRAM)
+// ============================================================
+let loyaltySelectorSales = [];
+let loyaltyChartInstance = null;
+
+function renderLoyalty() {
+  const c = currentCompany;
+  const list = c.loyaltyClients || [];
+  const el = document.getElementById('loyalty-grid');
+  if (!el) return;
+  if (!list.length) {
+    el.innerHTML = '<div style="grid-column:1/-1;text-align:center;padding:60px;color:var(--gray)"><i class="fa-solid fa-star" style="font-size:48px;display:block;margin-bottom:12px;color:var(--border)"></i><h3>Nenhum cliente cadastrado no programa de fidelidade</h3></div>';
+    renderLoyaltyChart([]);
+    return;
+  }
+  el.innerHTML = list.map(cl => {
+    const pts = cl.currentPoints || 0;
+    const goal = cl.pointsGoal || 10;
+    const pct = Math.min(100, Math.round((pts / goal) * 100));
+    const cyclesCompleted = (cl.rewardHistory || []).length;
+    return `
+<div class="emp-card">
+  <div class="emp-avatar" style="background:linear-gradient(135deg,#f59e0b,#d97706)">${(cl.name||'?').charAt(0).toUpperCase()}</div>
+  <div style="flex:1;min-width:0">
+    <div class="emp-name">${cl.name}</div>
+    <div class="emp-role">Fidelidade · Meta: ${goal} pontos</div>
+    <div class="emp-details">
+      <div><i class="fa-solid fa-phone"></i> ${cl.phone || '—'}</div>
+      <div><i class="fa-solid fa-envelope"></i> ${cl.email || '—'}</div>
+    </div>
+    <div style="background:#f8fafc;border:1px solid var(--border);border-radius:8px;padding:8px 10px;margin-top:8px;font-size:12px">
+      <div style="display:flex;justify-content:space-between;margin-bottom:4px"><span>Pontos Atuais:</span><strong style="color:var(--warning);font-size:15px">${pts} / ${goal}</strong></div>
+      <div style="background:#e2e8f0;border-radius:20px;height:8px;overflow:hidden;margin-bottom:4px">
+        <div style="width:${pct}%;height:100%;background:linear-gradient(90deg,#f59e0b,#d97706);border-radius:20px;transition:width .4s"></div>
+      </div>
+      <div style="display:flex;justify-content:space-between"><span style="color:var(--gray)">${pct}% concluído</span><span style="color:var(--gray)">${cyclesCompleted} prêmio(s) ganho(s)</span></div>
+      ${cl.prize ? `<div style="margin-top:4px;color:var(--secondary);font-weight:600"><i class="fa-solid fa-gift"></i> Prêmio: ${cl.prize}</div>` : ''}
+    </div>
+    <div class="flex gap-2 mt-3">
+      <button class="btn btn-sm btn-warning flex-1" onclick="showLoyaltyOrderSelector('${cl.id}')"><i class="fa-solid fa-list-check"></i> Selecionar OS</button>
+    </div>
+    <div class="flex gap-2 mt-2">
+      <button class="btn btn-sm btn-info flex-1" onclick="showLoyaltyHistoryModal('${cl.id}')"><i class="fa-solid fa-clock-rotate-left"></i> Histórico</button>
+      <button class="btn btn-sm btn-outline flex-1" onclick="showLoyaltyManageOS('${cl.id}')"><i class="fa-solid fa-list-check"></i> Gerenciar OS</button>
+    </div>
+    <div class="flex gap-2 mt-2">
+      ${pts >= goal ? `<button class="btn btn-sm btn-success flex-1" onclick="redeemLoyaltyReward('${cl.id}')"><i class="fa-solid fa-trophy"></i> Resgatar Prêmio!</button>` : ''}
+    </div>
+    <div class="flex gap-2 mt-2">
+      <button class="btn btn-sm btn-primary flex-1" onclick="showLoyaltyClientModal('${cl.id}')"><i class="fa-solid fa-edit"></i> Editar</button>
+      <button class="btn btn-sm btn-danger" onclick="deleteLoyaltyClient('${cl.id}')"><i class="fa-solid fa-trash"></i></button>
+    </div>
+  </div>
+</div>`;
+  }).join('');
+  renderLoyaltyChart(list);
+}
+
+function renderLoyaltyChart(list) {
+  const ctx = document.getElementById('loyalty-chart');
+  if (!ctx) return;
+  if (loyaltyChartInstance) { loyaltyChartInstance.destroy(); loyaltyChartInstance = null; }
+  if (!list.length) { ctx.style.display = 'none'; return; }
+  ctx.style.display = '';
+  const labels = list.map(cl => cl.name);
+  const data = list.map(cl => cl.currentPoints || 0);
+  const goals = list.map(cl => cl.pointsGoal || 10);
+  const colors = list.map((_, i) => [
+    '#f59e0b','#2563eb','#7c3aed','#16a34a','#dc2626','#0891b2','#d97706','#15803d','#9333ea','#1d4ed8'
+  ][i % 10]);
+  loyaltyChartInstance = new Chart(ctx, {
+    type: 'bar',
+    data: {
+      labels,
+      datasets: [
+        { label: 'Pontos Acumulados', data, backgroundColor: colors, borderRadius: 6, borderSkipped: false },
+        { label: 'Meta', data: goals, backgroundColor: 'rgba(0,0,0,0)', borderColor: '#dc2626', borderWidth: 2, type: 'line', pointRadius: 5, pointBackgroundColor: '#dc2626', tension: 0 }
+      ]
+    },
+    options: {
+      responsive: true,
+      plugins: {
+        legend: { position: 'top' },
+        title: { display: true, text: 'Pontos de Fidelidade por Cliente', font: { size: 14, weight: '700' } }
+      },
+      scales: {
+        y: { beginAtZero: true, ticks: { stepSize: 1 } }
+      }
+    }
+  });
+}
+
+function showLoyaltyClientModal(cid) {
+  const c = currentCompany;
+  const cl = cid ? (c.loyaltyClients || []).find(x => x.id === cid) : null;
+  showModal(`<i class="fa-solid fa-star" style="color:#f59e0b"></i> ${cl ? 'Editar' : 'Cadastrar'} Cliente no Programa de Fidelidade`,
+    `<div class="form-group"><label>Nome Completo *</label><input type="text" id="lc-name" class="form-control" value="${cl?.name || ''}"></div>
+<div class="form-row">
+  <div class="form-group"><label>Telefone</label><input type="text" id="lc-phone" class="form-control" value="${cl?.phone || ''}" oninput="maskPhone(this)"></div>
+  <div class="form-group"><label>E-mail</label><input type="email" id="lc-email" class="form-control" value="${cl?.email || ''}"></div>
+</div>
+<div class="form-row">
+  <div class="form-group"><label>Meta de Pontos para Prêmio *</label><input type="number" id="lc-goal" class="form-control" min="1" value="${cl?.pointsGoal || 10}"></div>
+  <div class="form-group"><label>Prêmio (descrição)</label><input type="text" id="lc-prize" class="form-control" placeholder="Ex: R$ 50 de desconto" value="${cl?.prize || ''}"></div>
+</div>
+<p style="color:var(--gray);font-size:12px">Cada OS selecionada para este cliente vale 1 ponto. Quando atingir a meta, você resgata o prêmio e os pontos voltam a zero, ficando no histórico.</p>`,
+    `<button class="btn btn-ghost" onclick="closeModal()">Cancelar</button><button class="btn btn-primary" onclick="saveLoyaltyClient('${cid || ''}')"><i class="fa-solid fa-save"></i> Salvar</button>`, false);
+}
+
+async function saveLoyaltyClient(cid) {
+  const name = document.getElementById('lc-name').value.trim();
+  const phone = document.getElementById('lc-phone').value.trim();
+  const email = document.getElementById('lc-email').value.trim();
+  const goal = parseInt(document.getElementById('lc-goal').value) || 10;
+  const prize = document.getElementById('lc-prize').value.trim();
+  if (!name) { showToast('Nome é obrigatório', 'warning'); return; }
+  const c = currentCompany;
+  c.loyaltyClients = c.loyaltyClients || [];
+  if (cid) {
+    const idx = c.loyaltyClients.findIndex(x => x.id === cid);
+    if (idx !== -1) Object.assign(c.loyaltyClients[idx], { name, phone, email, pointsGoal: goal, prize });
+  } else {
+    c.loyaltyClients.push({ id: genId(), name, phone, email, pointsGoal: goal, prize, currentPoints: 0, pointsHistory: [], rewardHistory: [], createdAt: new Date().toISOString() });
+  }
+  showLoading('Salvando...');
+  try {
+    await db.collection('companies').doc(currentCompanyId).update({ loyaltyClients: c.loyaltyClients });
+    hideLoading(); closeModal(); renderLoyalty(); showToast('Cliente salvo!', 'success');
+  } catch (e) { hideLoading(); showToast('Erro: ' + e.message, 'danger'); }
+}
+
+async function deleteLoyaltyClient(cid) {
+  if (!confirm('Excluir este cliente do programa de fidelidade?')) return;
+  const c = currentCompany;
+  c.loyaltyClients = (c.loyaltyClients || []).filter(x => x.id !== cid);
+  showLoading('Excluindo...');
+  try {
+    await db.collection('companies').doc(currentCompanyId).update({ loyaltyClients: c.loyaltyClients });
+    hideLoading(); renderLoyalty(); showToast('Cliente excluído!', 'success');
+  } catch (e) { hideLoading(); showToast('Erro: ' + e.message, 'danger'); }
+}
+
+let loyaltySelectorCid = null;
+async function showLoyaltyOrderSelector(cid) {
+  const c = currentCompany;
+  const cl = (c.loyaltyClients || []).find(x => x.id === cid);
+  if (!cl) return;
+  loyaltySelectorCid = cid;
+  const today = new Date().toISOString().slice(0,10);
+  const firstDay = new Date(new Date().getFullYear(), new Date().getMonth(), 1).toISOString().slice(0,10);
+  const usedIds = new Set((cl.pointsHistory || []).map(p => p.saleId));
+  showModal(`<i class="fa-solid fa-list-check"></i> Selecionar OS — ${cl.name} (${cl.currentPoints || 0}/${cl.pointsGoal || 10} pontos)`,
+    `<div class="form-row">
+  <div class="form-group"><label>Data Início</label><input type="date" id="loy-sel-start" class="form-control" value="${firstDay}"></div>
+  <div class="form-group"><label>Data Fim</label><input type="date" id="loy-sel-end" class="form-control" value="${today}"></div>
+</div>
+<div class="form-group"><label>Buscar por N° da OS</label><input type="text" id="loy-sel-search" class="form-control" placeholder="Ex: 1024" oninput="filterLoySelectorList()"></div>
+<button class="btn btn-sm btn-primary" onclick="loadLoySelectorSales('${cid}')" style="margin-bottom:10px"><i class="fa-solid fa-magnifying-glass"></i> Buscar OS no Período</button>
+<div style="background:#fef3c7;border:1px solid #fcd34d;border-radius:8px;padding:8px 10px;margin-bottom:10px;font-size:12px;color:#92400e"><i class="fa-solid fa-circle-info"></i> Cada OS selecionada vale <strong>1 ponto</strong>. Já usadas aparecem marcadas e desativadas.</div>
+<div id="loy-selector-list" style="max-height:300px;overflow:auto;border:1px solid var(--border);border-radius:8px;padding:8px"><div style="text-align:center;color:var(--gray);padding:20px">Clique em "Buscar OS no Período" para carregar</div></div>`,
+    `<button class="btn btn-ghost" onclick="closeModal()">Cancelar</button><button class="btn btn-primary" onclick="confirmLoyaltySelection('${cid}')"><i class="fa-solid fa-star"></i> Adicionar Pontos</button>`, false);
+}
+
+async function loadLoySelectorSales(cid) {
+  const start = document.getElementById('loy-sel-start').value;
+  const end = document.getElementById('loy-sel-end').value;
+  const listEl = document.getElementById('loy-selector-list');
+  listEl.innerHTML = '<div style="text-align:center;color:var(--gray);padding:20px">Carregando...</div>';
+  try {
+    const snap = await db.collection('sales').where('companyId','==',currentCompanyId).get();
+    let all = snap.docs.map(d => ({ id: d.id, ...d.data() }));
+    if (start) all = all.filter(s => new Date(s.date) >= new Date(start+'T00:00:00'));
+    if (end) all = all.filter(s => new Date(s.date) <= new Date(end+'T23:59:59'));
+    all.sort((a,b) => new Date(b.date) - new Date(a.date));
+    loyaltySelectorSales = all;
+    renderLoySelectorList(cid);
+  } catch (e) { listEl.innerHTML = `<div style="color:var(--danger);padding:12px">Erro: ${e.message}</div>`; }
+}
+
+function renderLoySelectorList(cid) {
+  const c = currentCompany;
+  const cl = (c.loyaltyClients || []).find(x => x.id === cid);
+  const usedIds = new Set((cl?.pointsHistory || []).map(p => p.saleId));
+  const listEl = document.getElementById('loy-selector-list');
+  if (!listEl) return;
+  if (!loyaltySelectorSales.length) { listEl.innerHTML = '<div style="text-align:center;color:var(--gray);padding:20px">Nenhuma OS encontrada no período</div>'; return; }
+  listEl.innerHTML = loyaltySelectorSales.map(s => {
+    const already = usedIds.has(s.id);
+    return `<label data-search="${(s.orderNumber||'')+' '+s.id}" style="display:flex;align-items:center;gap:10px;padding:8px 4px;border-bottom:1px solid #f1f5f9;${already?'opacity:0.4':''}">
+      <input type="checkbox" class="loy-sel-check" data-id="${s.id}" ${already?'disabled checked':''} style="width:18px;height:18px">
+      <div style="flex:1">
+        <div style="font-weight:700">OS ${s.orderNumber || s.id} — ${s.customerName||''}</div>
+        <div style="font-size:11px;color:var(--gray)">${new Date(s.date).toLocaleString('pt-BR')} · Total: ${fmt(s.total||0)}${already?' · <span style="color:var(--warning)">Ponto já contabilizado</span>':''}</div>
+      </div>
+    </label>`;
+  }).join('');
+}
+
+function filterLoySelectorList() {
+  const q = (document.getElementById('loy-sel-search').value||'').toLowerCase();
+  document.querySelectorAll('#loy-selector-list label').forEach(l => { l.style.display = l.dataset.search.toLowerCase().includes(q) ? 'flex' : 'none'; });
+}
+
+async function confirmLoyaltySelection(cid) {
+  const c = currentCompany;
+  const cl = (c.loyaltyClients || []).find(x => x.id === cid);
+  if (!cl) return;
+  const usedIds = new Set((cl.pointsHistory || []).map(p => p.saleId));
+  const checks = document.querySelectorAll('#loy-selector-list .loy-sel-check:checked:not(:disabled)');
+  let added = 0;
+  checks.forEach(chk => {
+    const saleId = chk.dataset.id;
+    if (usedIds.has(saleId)) return;
+    const sale = loyaltySelectorSales.find(s => s.id === saleId);
+    if (!sale) return;
+    cl.pointsHistory = cl.pointsHistory || [];
+    cl.pointsHistory.push({ id: genId(), saleId, orderNumber: sale.orderNumber || sale.id, date: sale.date, total: sale.total || 0, addedAt: new Date().toISOString() });
+    cl.currentPoints = (cl.currentPoints || 0) + 1;
+    added++;
+  });
+  if (!added) { showToast('Nenhuma OS nova selecionada', 'warning'); return; }
+  showLoading('Salvando pontos...');
+  try {
+    await db.collection('companies').doc(currentCompanyId).update({ loyaltyClients: c.loyaltyClients });
+    hideLoading(); closeModal(); renderLoyalty();
+    const pts = cl.currentPoints || 0;
+    const goal = cl.pointsGoal || 10;
+    showToast(`${added} ponto(s) adicionado(s)! ${cl.name} tem agora ${pts} ponto(s)${pts >= goal ? ' — ⚠️ META ATINGIDA!' : ''}`, pts >= goal ? 'warning' : 'success');
+  } catch (e) { hideLoading(); showToast('Erro: ' + e.message, 'danger'); }
+}
+
+async function redeemLoyaltyReward(cid) {
+  const c = currentCompany;
+  const cl = (c.loyaltyClients || []).find(x => x.id === cid);
+  if (!cl) return;
+  const pts = cl.currentPoints || 0;
+  const goal = cl.pointsGoal || 10;
+  if (pts < goal) { showToast('Cliente ainda não atingiu a meta de pontos', 'warning'); return; }
+  showModal(`<i class="fa-solid fa-trophy" style="color:#f59e0b"></i> Resgatar Prêmio — ${cl.name}`,
+    `<div style="text-align:center;margin-bottom:16px">
+  <div style="font-size:48px;margin-bottom:8px">🏆</div>
+  <div style="font-size:18px;font-weight:700;color:var(--dark)">Parabéns, ${cl.name}!</div>
+  <div style="color:var(--gray);margin-top:4px">Atingiu ${pts} pontos (meta: ${goal})</div>
+  ${cl.prize ? `<div style="margin-top:8px;font-size:15px;color:var(--secondary);font-weight:700"><i class="fa-solid fa-gift"></i> ${cl.prize}</div>` : ''}
+</div>
+<div class="form-group"><label>Prêmio Entregue (confirme ou altere)</label><input type="text" id="redeem-prize" class="form-control" value="${cl.prize || ''}" placeholder="Ex: R$ 50 de desconto, produto grátis..."></div>
+<div class="form-group"><label>Observação (opcional)</label><input type="text" id="redeem-obs" class="form-control" placeholder="Ex: Entregue em mãos"></div>
+<div class="alert alert-warning"><i class="fa-solid fa-circle-info"></i> Os <strong>${pts} pontos</strong> serão zerados e ficarão no histórico. O cliente pode acumular novamente a partir de zero.</div>`,
+    `<button class="btn btn-ghost" onclick="closeModal()">Cancelar</button><button class="btn btn-success" onclick="confirmRedeemLoyalty('${cid}')"><i class="fa-solid fa-check"></i> Confirmar Resgate</button>`, false);
+}
+
+async function confirmRedeemLoyalty(cid) {
+  const c = currentCompany;
+  const cl = (c.loyaltyClients || []).find(x => x.id === cid);
+  if (!cl) return;
+  const prizeDelivered = document.getElementById('redeem-prize').value.trim() || cl.prize || '';
+  const obs = document.getElementById('redeem-obs').value.trim();
+  const snapshot = {
+    cycleNumber: (cl.rewardHistory || []).length + 1,
+    pointsEarned: cl.currentPoints || 0,
+    prize: prizeDelivered,
+    obs,
+    pointsHistory: [...(cl.pointsHistory || [])],
+    redeemedAt: new Date().toISOString()
+  };
+  cl.rewardHistory = cl.rewardHistory || [];
+  cl.rewardHistory.push(snapshot);
+  cl.currentPoints = 0;
+  cl.pointsHistory = [];
+  cl.prize = prizeDelivered;
+  showLoading('Registrando resgate...');
+  try {
+    await db.collection('companies').doc(currentCompanyId).update({ loyaltyClients: c.loyaltyClients });
+    hideLoading(); closeModal(); renderLoyalty();
+    showToast(`Prêmio resgatado! Pontos de ${cl.name} zerados. Pode acumular novamente!`, 'success');
+  } catch (e) { hideLoading(); showToast('Erro: ' + e.message, 'danger'); }
+}
+
+function showLoyaltyManageOS(cid) {
+  const c = currentCompany;
+  const cl = (c.loyaltyClients || []).find(x => x.id === cid);
+  if (!cl) return;
+  const renderManageBody = () => {
+    const pts = cl.pointsHistory || [];
+    if (!pts.length) return '<div style="text-align:center;color:var(--gray);padding:20px">Nenhuma OS neste ciclo</div>';
+    return pts.slice().sort((a,b)=>new Date(b.addedAt)-new Date(a.addedAt)).map(p=>`
+      <div style="display:flex;justify-content:space-between;align-items:center;padding:8px 4px;border-bottom:1px solid #f1f5f9">
+        <div><strong>OS ${p.orderNumber}</strong><div style="font-size:11px;color:var(--gray)">${new Date(p.addedAt).toLocaleString('pt-BR')} &middot; ${fmt(p.total)}</div></div>
+        <div style="display:flex;align-items:center;gap:6px">
+          <span class="badge badge-warning">+1 pto</span>
+          <button class="btn btn-sm btn-danger" onclick="removeLoyaltyOS('${cid}','${p.id}')"><i class="fa-solid fa-trash"></i> Remover</button>
+        </div>
+      </div>`).join('');
+  };
+  showModal(`<i class="fa-solid fa-list-check"></i> OS do Ciclo Atual &mdash; ${cl.name} (${cl.currentPoints||0}/${cl.pointsGoal||10} pts)`,
+    `<div style="font-size:12px;color:var(--gray);margin-bottom:10px">Remover uma OS desconta 1 ponto do cliente e libera ela para nova seleção.</div>
+<div id="loy-manage-list" style="max-height:350px;overflow:auto;border:1px solid var(--border);border-radius:8px;padding:4px">${renderManageBody()}</div>`,
+    `<button class="btn btn-ghost" onclick="closeModal()">Fechar</button>`, false);
+}
+async function removeLoyaltyOS(cid, pointId) {
+  if (!confirm('Remover esta OS? O cliente perderá 1 ponto.')) return;
+  const c = currentCompany;
+  const cl = (c.loyaltyClients||[]).find(x=>x.id===cid);
+  if (!cl) return;
+  const before = (cl.pointsHistory||[]).length;
+  cl.pointsHistory = (cl.pointsHistory||[]).filter(p=>p.id!==pointId);
+  if (cl.pointsHistory.length < before) cl.currentPoints = Math.max(0,(cl.currentPoints||1)-1);
+  showLoading('Removendo OS...');
+  try {
+    await db.collection('companies').doc(currentCompanyId).update({loyaltyClients:c.loyaltyClients});
+    hideLoading(); closeModal(); renderLoyalty(); showToast('OS removida. 1 ponto descontado.','success');
+  } catch(e) { hideLoading(); showToast('Erro: '+e.message,'danger'); }
+}
+function showLoyaltyHistoryModal(cid) {
+  const c = currentCompany;
+  const cl = (c.loyaltyClients || []).find(x => x.id === cid);
+  if (!cl) return;
+  const curHistory = (cl.pointsHistory || []).slice().sort((a,b) => new Date(b.addedAt) - new Date(a.addedAt));
+  const rewards = (cl.rewardHistory || []).slice().sort((a,b) => new Date(b.redeemedAt) - new Date(a.redeemedAt));
+
+  const curHtml = curHistory.length
+    ? curHistory.map(p => `<div style="display:flex;justify-content:space-between;align-items:center;padding:7px 4px;border-bottom:1px solid #f1f5f9">
+      <div><strong>OS ${p.orderNumber}</strong><div style="font-size:11px;color:var(--gray)">${new Date(p.addedAt).toLocaleString('pt-BR')} · Valor: ${fmt(p.total)}</div></div>
+      <span class="badge badge-warning">+1 ponto</span>
+    </div>`).join('')
+    : '<div style="text-align:center;color:var(--gray);padding:12px">Nenhuma OS neste ciclo</div>';
+
+  const rewHtml = rewards.length
+    ? rewards.map(r => `<div style="border:1px solid #fcd34d;border-radius:8px;padding:10px;margin-bottom:8px;background:#fffbeb">
+      <div style="font-weight:700;color:#d97706"><i class="fa-solid fa-trophy"></i> Ciclo ${r.cycleNumber} — ${r.pointsEarned} pontos</div>
+      <div style="font-size:12px;margin-top:2px"><strong>Prêmio:</strong> ${r.prize || '—'}</div>
+      ${r.obs ? `<div style="font-size:12px;color:var(--gray)">${r.obs}</div>` : ''}
+      <div style="font-size:11px;color:var(--gray);margin-top:4px">Resgatado em ${new Date(r.redeemedAt).toLocaleString('pt-BR')}</div>
+      <div style="margin-top:6px">
+        <details><summary style="font-size:11px;color:var(--primary);cursor:pointer">${r.pointsHistory?.length || 0} OS neste ciclo</summary>
+        <div style="margin-top:6px;font-size:11px">${(r.pointsHistory||[]).map(p=>`<div style="padding:3px 0;border-bottom:1px solid #f1f5f9">OS ${p.orderNumber} — ${new Date(p.addedAt).toLocaleDateString('pt-BR')} — ${fmt(p.total)}</div>`).join('') || 'Sem registros'}</div>
+        </details>
+      </div>
+    </div>`).join('')
+    : '<div style="text-align:center;color:var(--gray);padding:12px">Nenhum prêmio resgatado ainda</div>';
+
+  showModal(`<i class="fa-solid fa-clock-rotate-left"></i> Histórico de Fidelidade — ${cl.name}`,
+    `<div style="margin-bottom:14px">
+  <div style="font-weight:700;margin-bottom:6px"><i class="fa-solid fa-star" style="color:#f59e0b"></i> Ciclo Atual (${cl.currentPoints||0} ponto(s))</div>
+  <div style="max-height:200px;overflow:auto;border:1px solid var(--border);border-radius:8px;padding:4px">${curHtml}</div>
+</div>
+<div>
+  <div style="font-weight:700;margin-bottom:6px"><i class="fa-solid fa-trophy" style="color:#d97706"></i> Prêmios Resgatados</div>
+  <div style="max-height:280px;overflow:auto">${rewHtml}</div>
+</div>`,
+    `<button class="btn btn-ghost" onclick="closeModal()">Fechar</button>`, false);
+}
+
+// ============================================================
 // PUBLIC MENU — CUSTOMER AUTH
 // ============================================================
 function savePubCustomer(customer) {
@@ -5166,7 +5614,7 @@ function getPubCartTotals(pay) {
     const subtotal = pubCart.reduce((s, i) => s + (i.price * i.qty), 0);
     const baseDeliveryFee = pubDeliveryFee || 0;
     const delivery = pay === 'vem-buscar' ? 0 : baseDeliveryFee;
-    const discount = pubAppliedCoupon ? (subtotal * pubAppliedCoupon.percent / 100) : 0;
+    const discount = pubAppliedCoupon ? (pubAppliedCoupon.discountType==='value' ? Math.min(pubAppliedCoupon.discountValue||0, subtotal) : subtotal * (pubAppliedCoupon.percent||0) / 100) : 0;
     const total = Math.max(0, subtotal + delivery - discount);
     return { subtotal, delivery, discount, total };
 }
@@ -5183,12 +5631,13 @@ function applyPubCoupon() {
         errorMsg = 'Cupom inválido';
     } else if (cp.active === false) {
         errorMsg = 'Cupom inativo';
-    } else if (cp.singleUse && cp.used) {
-        errorMsg = 'Este cupom já foi utilizado e não está mais disponível';
+    } else if ((cp.maxUses > 0 && (cp.usedCount||0) >= cp.maxUses) || (cp.singleUse && cp.used)) {
+        errorMsg = 'Este cupom atingiu o limite de usos e não está mais disponível';
     } else if (cp.startDate && new Date() < new Date(cp.startDate)) {
         errorMsg = 'Este cupom ainda não está disponível';
-    } else if (cp.endDate && new Date() > new Date(cp.endDate)) {
-        errorMsg = 'Este cupom expirou';
+    } else {
+        const endDt = couponEffectiveEndDate(cp);
+        if (endDt && new Date() > endDt) errorMsg = 'Este cupom expirou';
     }
     if (errorMsg) {
         pubAppliedCoupon = null;
@@ -5196,8 +5645,9 @@ function applyPubCoupon() {
         updatePubTotalsDisplay();
         return;
     }
-    pubAppliedCoupon = { id: cp.id, code: cp.code, percent: cp.percent, singleUse: !!cp.singleUse };
-    showToast(`Cupom aplicado: ${cp.percent}% de desconto!`, 'success');
+    const discLabel = cp.discountType==='value' ? `R$ ${Number(cp.discountValue||0).toFixed(2).replace('.',',')} de desconto` : `${cp.percent||0}% de desconto`;
+    pubAppliedCoupon = { id: cp.id, code: cp.code, percent: cp.percent||0, discountType: cp.discountType||'percent', discountValue: cp.discountValue||0, singleUse: !!cp.singleUse, maxUses: cp.maxUses||0 };
+    showToast(`Cupom aplicado: ${discLabel}!`, 'success');
     showPubCartModal();
 }
 function removePubCoupon() {
@@ -5238,14 +5688,14 @@ function showPubCartModal() {
 <input type="text" id="pub-coupon-code" class="form-control" style="text-transform:uppercase" placeholder="Digite o código do cupom" value="${pubAppliedCoupon?pubAppliedCoupon.code:''}">
 ${pubAppliedCoupon ? `<button class="btn btn-ghost" onclick="removePubCoupon()"><i class="fa-solid fa-times"></i></button>` : `<button class="btn btn-outline" onclick="applyPubCoupon()">Aplicar</button>`}
 </div>
-<div id="pub-coupon-msg">${pubAppliedCoupon ? `<div style="color:var(--success);font-size:12px;margin-top:6px"><i class="fa-solid fa-circle-check"></i> Cupom ${pubAppliedCoupon.code} aplicado — ${pubAppliedCoupon.percent}% de desconto</div>` : ''}</div>
+<div id="pub-coupon-msg">${pubAppliedCoupon ? `<div style="color:var(--success);font-size:12px;margin-top:6px"><i class="fa-solid fa-circle-check"></i> Cupom ${pubAppliedCoupon.code} aplicado — ${pubAppliedCoupon.discountType==='value'?'R$ '+Number(pubAppliedCoupon.discountValue||0).toFixed(2).replace('.',','):pubAppliedCoupon.percent+'%'} de desconto</div>` : ''}</div>
 </div>
 <div style="margin-top:10px;padding-top:12px;border-top:2px solid var(--border)">
     <div class="flex justify-between items-center mb-2">
         <span style="color:var(--gray)">Subtotal:</span>
         <span style="font-weight:700">${fmt(subtotal)}</span>
     </div>
-    ${t.discount > 0 ? `<div class="flex justify-between items-center mb-2" style="color:var(--success)"><span><i class="fa-solid fa-tag"></i> Desconto (${pubAppliedCoupon.percent}%):</span><span style="font-weight:700">- ${fmt(t.discount)}</span></div>` : ''}
+    ${t.discount > 0 ? `<div class="flex justify-between items-center mb-2" style="color:var(--success)"><span><i class="fa-solid fa-tag"></i> Desconto (${pubAppliedCoupon.discountType==='value'?'R$ '+Number(pubAppliedCoupon.discountValue||0).toFixed(2).replace('.',','):pubAppliedCoupon.percent+'%'}):</span><span style="font-weight:700">- ${fmt(t.discount)}</span></div>` : ''}
     <div class="flex justify-between items-center mb-3" id="pub-delivery-row" style="padding:10px;background:#f0fdf4;border-radius:8px;border:1px solid #86efac;display:${baseDeliveryFee > 0 ? 'flex' : 'none'}">
         <span style="color:#166534"><i class="fa-solid fa-truck"></i> Taxa de Entrega:</span>
         <span style="font-weight:700;color:#166534" id="pub-delivery-val">${fmt(t.delivery)}</span>
@@ -5488,17 +5938,22 @@ async function placePubOrder() {
                 pubCompany.coupons = pubCompany.coupons || [];
                 pubCompany.couponUsageHistory = pubCompany.couponUsageHistory || [];
                 const cp = pubCompany.coupons.find(x => x.id === pubAppliedCoupon.id || x.code === pubAppliedCoupon.code);
-                if (cp && cp.singleUse) {
-                    cp.used = true;
-                    cp.usedBy = name;
-                    cp.usedAt = now.toISOString();
-                    cp.usedOrderId = orderRef.id;
+                if (cp) {
+                    cp.usedCount = (cp.usedCount||0) + 1;
+                    if (cp.singleUse || (cp.maxUses > 0 && cp.usedCount >= cp.maxUses)) {
+                        cp.used = true;
+                        cp.usedBy = name;
+                        cp.usedAt = now.toISOString();
+                        cp.usedOrderId = orderRef.id;
+                    }
                 }
                 pubCompany.couponUsageHistory.push({
                     id: genId(),
                     couponId: cp ? cp.id : (pubAppliedCoupon.id||''),
                     code: pubAppliedCoupon.code,
+                    discountType: pubAppliedCoupon.discountType||'percent',
                     percent: pubAppliedCoupon.percent,
+                    discountValue: pubAppliedCoupon.discountValue||0,
                     customerId: guestId,
                     customerName: name,
                     orderId: orderRef.id,
