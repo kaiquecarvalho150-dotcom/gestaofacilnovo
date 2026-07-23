@@ -3526,7 +3526,8 @@ let lastMotoboyAppExtraTotal = 0;
 let lastFolhaPagamentoTotal = 0;
 let lastFiadoFeeReceivedTotal = 0;
 let lastThirdPartySalesTotal = 0;
-function refreshCustoLucroReport() { renderCustoLucroPorProduto(lastReportSales, lastMotoboyExpenseTotal, lastMotoboyAppExtraTotal, lastFolhaPagamentoTotal, lastFiadoFeeReceivedTotal, lastThirdPartySalesTotal); }
+let lastThirdPartySalesList = [];
+function refreshCustoLucroReport() { renderCustoLucroPorProduto(lastReportSales, lastMotoboyExpenseTotal, lastMotoboyAppExtraTotal, lastFolhaPagamentoTotal, lastFiadoFeeReceivedTotal, lastThirdPartySalesTotal, lastThirdPartySalesList); }
 function renderReportData(sales, expenses, totalSalary, totalMotoboyExpense, totalMotoboyAppExtra, totalFiadoFeeReceived) {
 lastReportSales = sales || [];
 // Vendas de apps terceiros (iFood, Aiqfome, etc) lançadas no mês selecionado - somam à receita
@@ -3565,7 +3566,8 @@ lastMotoboyAppExtraTotal = totalMotoboyAppExtra || 0;
 lastFolhaPagamentoTotal = totalSalary || 0;
 lastFiadoFeeReceivedTotal = totalFiadoFeeReceived || 0;
 lastThirdPartySalesTotal = renderThirdPartySales(selectedReportYM);
-renderCustoLucroPorProduto(sales, lastMotoboyExpenseTotal, lastMotoboyAppExtraTotal, lastFolhaPagamentoTotal, lastFiadoFeeReceivedTotal, lastThirdPartySalesTotal);
+lastThirdPartySalesList = thirdPartySalesThisMonth;
+renderCustoLucroPorProduto(sales, lastMotoboyExpenseTotal, lastMotoboyAppExtraTotal, lastFolhaPagamentoTotal, lastFiadoFeeReceivedTotal, lastThirdPartySalesTotal, lastThirdPartySalesList);
 }
 function buildDailyChart(sales, year, monthIdx, thirdPartySales) {
 if (chartInstances.daily) chartInstances.daily.destroy();
@@ -6658,12 +6660,13 @@ function getProductUnitEconomics(p) {
 }
 
 // ---------- CUSTO E LUCRO POR PRODUTO VENDIDO (baseado nas OS pagas / vendas do mês) ----------
-function renderCustoLucroPorProduto(sales, motoboyExpenseTotal, motoboyAppExtraTotal, folhaPagamentoTotal, fiadoFeeReceivedTotal, thirdPartySalesTotal) {
+function renderCustoLucroPorProduto(sales, motoboyExpenseTotal, motoboyAppExtraTotal, folhaPagamentoTotal, fiadoFeeReceivedTotal, thirdPartySalesTotal, thirdPartySalesList) {
     motoboyExpenseTotal = motoboyExpenseTotal || 0;
     motoboyAppExtraTotal = motoboyAppExtraTotal || 0;
     folhaPagamentoTotal = folhaPagamentoTotal || 0;
     fiadoFeeReceivedTotal = fiadoFeeReceivedTotal || 0;
     thirdPartySalesTotal = thirdPartySalesTotal || 0;
+    thirdPartySalesList = thirdPartySalesList || [];
     const el = document.getElementById('custo-lucro-produto-list');
     if (!el) return;
     const c = currentCompany;
@@ -6705,6 +6708,7 @@ function renderCustoLucroPorProduto(sales, motoboyExpenseTotal, motoboyAppExtraT
     let totalCustoGeral = 0, totalVendaGeral = 0, totalLucroGeral = 0;
     // Soma todas as taxas de entrega recebidas nas OS pagas do período (não depende de receita/insumo cadastrado)
     const totalTaxasEntrega = (sales || []).reduce((s, o) => s + (parseFloat(o.deliveryTotal) || 0), 0);
+
     let html = `
         <div class="custolucro-header">
             <div>PRODUTO</div>
@@ -6741,8 +6745,35 @@ function renderCustoLucroPorProduto(sales, motoboyExpenseTotal, motoboyAppExtraT
         </div>`;
     }).join('');
 
-    // Bloco de resumo "Faturamento Total / Total Geral" removido temporariamente a pedido do usuário
-    // (será refeito futuramente). A tabela de custo/lucro por produto acima permanece normalmente.
+    // Vendas de apps terceiros (iFood, Aiqfome, etc) também entram nos Totais: soma a quantidade
+    // de cada produto marcado no lançamento e o custo desses produtos (pelo custo/lucro cadastrado),
+    // e soma o valor recebido de cada lançamento (bate com a Receita do Mês do relatório).
+    let qtyTerceirosGeral = 0, custoTerceirosGeral = 0;
+    thirdPartySalesList.forEach(t => {
+        (t.items || []).forEach(i => {
+            qtyTerceirosGeral += (i.qty || 1);
+            const norm = normalizeProductNameForChart(i.name || '');
+            const pid = canonicalMap[norm];
+            const prod = pid ? items.find(x => x.id === pid) : null;
+            if (prod) {
+                const isBebidaTp = isBebidaProduct(prod);
+                const semReceitaTp = !isBebidaTp && (prod.recipe || []).length === 0;
+                if (!semReceitaTp) { const { custo: custoUnitTp } = getProductUnitEconomics(prod); custoTerceirosGeral += custoUnitTp * (i.qty || 1); }
+            }
+        });
+    });
+    const totalQtyComTerceiros = Object.values(qtyByProductId).reduce((s, q) => s + q, 0) + qtyTerceirosGeral;
+    const totalCustoComTerceiros = totalCustoGeral + custoTerceirosGeral;
+    const totalVendaComTerceiros = totalVendaGeral + thirdPartySalesTotal;
+    const totalLucroComTerceiros = totalVendaComTerceiros - totalCustoComTerceiros;
+    html += `
+        <div class="custolucro-row" style="background:#f8fafc;border:2px solid var(--border)">
+            <div data-label="Produto:" style="font-weight:800">Totais</div>
+            <div data-label="Vendidos:" style="font-weight:800">${totalQtyComTerceiros}</div>
+            <div data-label="Custo Total:" style="font-weight:800;color:var(--danger)">${fmt(totalCustoComTerceiros)}</div>
+            <div data-label="Valor Total:" style="font-weight:800;color:var(--primary)">${fmt(totalVendaComTerceiros)}</div>
+            <div data-label="Lucro Total:" style="font-weight:800;color:${totalLucroComTerceiros < 0 ? 'var(--danger)' : 'var(--success)'}">${fmt(totalLucroComTerceiros)}</div>
+        </div>`;
 
     el.innerHTML = html;
 }
