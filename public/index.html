@@ -2143,7 +2143,7 @@ document.getElementById('home-kpis').innerHTML = `
 <div class="kpi-card"><div class="kpi-icon">📦</div><div class="kpi-value text-primary">${(c.menuItems||[]).length}</div><div class="kpi-label">Produtos</div></div>
 <div class="kpi-card"><div class="kpi-icon">📬</div><div class="kpi-value text-warning">${pending}</div><div class="kpi-label">Pedidos Novos</div></div>
 <div class="kpi-card"><div class="kpi-icon">⚠️</div><div class="kpi-value text-${low>0?'danger':'success'}">${low}</div><div class="kpi-label">Estoque Baixo</div></div>
-<div class="kpi-card"><div class="kpi-icon">👥</div><div class="kpi-value">${(c.employees||[]).length}</div><div class="kpi-label">Funcionários</div></div>`;
+<div class="kpi-card"><div class="kpi-icon">👥</div><div class="kpi-value">${(c.employees||[]).length + (c.motoboys||[]).length}</div><div class="kpi-label">Funcionários</div></div>`;
 document.getElementById('home-quick').innerHTML = `
 <div class="quick-card" onclick="showSection('pos')"><div class="qc-icon" style="background:#dbeafe;color:var(--primary)"><i class="fa-solid fa-cash-register"></i></div><h3>PDV — Caixa</h3><p>Registrar vendas</p></div>
 <div class="quick-card" onclick="showSection('stock')"><div class="qc-icon" style="background:#dcfce7;color:var(--success)"><i class="fa-solid fa-boxes-stacked"></i></div><h3>Estoque</h3><p>Controle de produtos</p></div>
