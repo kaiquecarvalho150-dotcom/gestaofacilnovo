@@ -888,7 +888,7 @@ table th,table td{padding:7px 8px;font-size:11px}
 </div>
 <div class="flex items-center justify-between mb-4 flex-wrap gap-3">
 <div style="font-size:15px;font-weight:700">Itens do Cardápio</div>
-<button class="btn btn-ghost" onclick="showGlobalAdditionalsModal()"><i class="fa-solid fa-list-check"></i> Adicionais Globais</button>
+<button class="btn btn-ghost" onclick="showGlobalAdditionalsModal()"><i class="fa-solid fa-list-check"></i> Adicionais por Categoria</button>
 <button class="btn btn-primary" onclick="showMenuItemModal()"><i class="fa-solid fa-plus"></i> Adicionar Item</button>
 </div>
 <div class="products-grid" id="menu-grid"></div>
@@ -1247,6 +1247,16 @@ const mm = String(now.getMonth()+1).padStart(2,'0');
 const yyyy = now.getFullYear();
 const rand = Math.random().toString(36).substring(2,7).toUpperCase();
 return `OS-${dd}/${mm}/${yyyy}-${rand}`;
+}
+async function getNextOSNumber(companyId, companyObj) {
+    const now = new Date();
+    const dd = String(now.getDate()).padStart(2,'0');
+    const mm = String(now.getMonth()+1).padStart(2,'0');
+    const yyyy = now.getFullYear();
+    const next = (parseInt(companyObj?.osSeq) || 0) + 1;
+    if (companyObj) companyObj.osSeq = next;
+    try { await db.collection('companies').doc(companyId).update({ osSeq: next }); } catch(e) { console.error('Erro ao gerar numero sequencial da OS:', e); }
+    return `OS - ${dd}/${mm}/${yyyy} - ${String(next).padStart(5,'0')}`;
 }
 function fmt(v) { return 'R$ ' + Number(v||0).toLocaleString('pt-BR',{minimumFractionDigits:2,maximumFractionDigits:2}); }
 function fmtDate(iso) { if(!iso) return '—'; return new Date(iso).toLocaleDateString('pt-BR'); }
@@ -2192,6 +2202,39 @@ renderPDVGrid(); renderCart();
 }
 let pdvActiveCat = 'Todos';
 function setPDVCat(el, cat) { pdvActiveCat = cat; document.querySelectorAll('#pdv-cats .filter-chip').forEach(c=>c.classList.remove('active')); el.classList.add('active'); renderPDVGrid(); }
+function catPillHtml(cat) { return `<div style="display:inline-block;background:#cdeef2;color:var(--dark);font-weight:900;font-size:15px;padding:5px 16px;border-radius:16px;margin-bottom:10px">${escHtml(cat)}</div>`; }
+function renderMenuRowsTableHtml(rows) {
+    if (!rows.length) return '';
+    const maxCols = Math.min(4, Math.max(...rows.map(r=>r.sizes.length), 1));
+    const headerSizes = (rows.find(r=>r.sizes.length===maxCols) || rows[0]).sizes;
+    const colsTemplate = `92px minmax(0,2fr) repeat(${maxCols}, minmax(70px,1fr))`;
+    const headerRow = `<div style="display:contents">
+    <div></div><div></div>
+    ${Array.from({length:maxCols}).map((_,j)=>`<div style="text-align:center">${headerSizes[j]?`<span style="display:inline-block;background:#cdeef2;color:var(--dark);font-weight:800;font-size:12px;padding:4px 10px;border-radius:14px;white-space:nowrap">${escHtml(headerSizes[j].name)}</span>`:''}</div>`).join('')}
+    </div>`;
+    const itemRows = rows.map(r => `<div style="display:contents" onclick="${r.click}">
+    <div style="${r.oos?'opacity:.5':'cursor:pointer'}">${r.image ? `<img src="${r.image}" style="width:88px;height:88px;object-fit:cover;border-radius:10px;border:1px solid var(--border);display:block">` : `<div style="width:88px;height:88px;border-radius:10px;border:2px dashed var(--border);display:flex;align-items:center;justify-content:center;color:var(--gray);font-size:11px;text-align:center;font-weight:700">imagem</div>`}</div>
+    <div style="${r.oos?'opacity:.5':'cursor:pointer'}"><div style="font-weight:800;font-size:14px;color:var(--dark)">#${r.num} ${escHtml(r.name)}</div>${r.desc?`<div style="font-size:11px;color:var(--gray);margin-top:2px">${escHtml(r.desc)}</div>`:''}${r.oos?'<div style="color:var(--danger);font-size:11px;font-weight:700;margin-top:2px">Esgotado</div>':''}</div>
+    ${Array.from({length:maxCols}).map((_,j)=>`<div style="text-align:center;${r.oos?'opacity:.5':'cursor:pointer'}">${r.sizes[j]?`<span style="font-weight:800;font-size:15px;color:var(--dark)">${fmt(r.sizes[j].price)}</span>`:''}</div>`).join('')}
+    </div>`).join('');
+    return `<div style="display:grid;grid-template-columns:${colsTemplate};gap:8px 10px;align-items:center;margin-bottom:22px">${headerRow}${itemRows}</div>`;
+}
+function getPdvRows(p) {
+    const oos = (p.stock || 0) <= 0;
+    const flavors = normFlavors(p.flavors);
+    if (flavors.length) {
+        return flavors.map((f,fi) => ({
+            num: p._num, name: f.name, desc: p.description||'', image: p.image, oos,
+            sizes: (f.sizes&&f.sizes.length) ? f.sizes : [{name:'Único', price: p.price}],
+            click: oos ? "showToast('Produto sem estoque','warning')" : `addToCartWithAdditionals('${p.id}', ${fi})`
+        }));
+    }
+    return [{
+        num: p._num, name: p.name, desc: p.description||'', image: p.image, oos,
+        sizes: (p.sizes&&p.sizes.length>1) ? p.sizes : [{name:'Único', price: p.price}],
+        click: oos ? "showToast('Produto sem estoque','warning')" : `addToCartWithAdditionals('${p.id}')`
+    }];
+}
 function renderPDVGrid() {
 const c = currentCompany; if(!c) return;
 const allItems = c.menuItems||[];
@@ -2201,26 +2244,127 @@ const q = document.getElementById('pdv-search')?.value.toLowerCase().trim()||'';
 if (pdvActiveCat!=='Todos') items = items.filter(p=>p.category===pdvActiveCat);
 if (q) items = items.filter(p=>p.name.toLowerCase().includes(q) || String(p._num)===q);
 const g = document.getElementById('pdv-grid');
-const cards = items.map(p => { const oos = (p.stock||0)<=0; return `<div class="pdv-card ${oos?'out-of-stock':''}" style="position:relative" onclick="${oos?"showToast('Produto sem estoque','warning')":`addToCartWithAdditionals('${p.id}')`}"><span style="position:absolute;top:6px;left:6px;background:var(--primary);color:#fff;font-size:10px;font-weight:800;padding:2px 6px;border-radius:8px">#${p._num}</span>${p.image?`<img src="${p.image}" class="pdv-card-img">`:`<div class="pdv-card-no-img">${getCategoryEmoji(p.category)}</div>`}<div class="pdv-card-name">${p.name}</div><div class="pdv-card-price">${fmt(p.price)}</div><div class="pdv-card-stock">Estoque: ${p.stock||0}${oos?' · <span style="color:var(--danger)">Esgotado</span>':''}</div></div>`; });
-if (!cards.length) { g.innerHTML = '<div style="grid-column:1/-1;text-align:center;padding:40px;color:var(--gray)">Nenhum produto encontrado</div>'; return; }
-g.innerHTML = cards.join('');
+g.style.display = 'block';
+g.style.gridTemplateColumns = 'none';
+if (!items.length) { g.innerHTML = '<div style="text-align:center;padding:40px;color:var(--gray)">Nenhum produto encontrado</div>'; return; }
+if (pdvActiveCat !== 'Todos') {
+    g.innerHTML = catPillHtml(pdvActiveCat) + renderMenuRowsTableHtml(items.flatMap(getPdvRows));
+    return;
 }
-function addToCartWithAdditionals(itemId) {
+const catsOrder = [...new Set(items.map(p=>p.category||'Outros'))];
+g.innerHTML = catsOrder.map(cat => {
+    const catItems = items.filter(p => (p.category||'Outros') === cat);
+    return `<div>${catPillHtml(cat)}${renderMenuRowsTableHtml(catItems.flatMap(getPdvRows))}</div>`;
+}).join('');
+}
+function normFlavors(raw) { return (raw||[]).map(f => typeof f === 'string' ? { name: f, sizes: [] } : f); }
+function categoryDatalistHtml() { const c = currentCompany||{}; const cats = [...new Set((c.menuItems||[]).map(p=>p.category).filter(Boolean))]; return `<datalist id="pub-cats-datalist">${cats.map(cat=>`<option value="${(cat||'').replace(/"/g,'&quot;')}">`).join('')}</datalist>`; }
+function escHtml(v) { return (v==null?'':String(v)).replace(/</g,'&lt;').replace(/>/g,'&gt;'); }
+function productHasVariants(product) { return !!product && ((product.sizes&&product.sizes.length>1) || product.hasBorda || (normFlavors(product.flavors).length>0)); }
+function sizeRadiosHtml(sizes) {
+    return `<div style="margin-bottom:14px"><div style="font-size:12px;font-weight:700;color:var(--gray);text-transform:uppercase;letter-spacing:.3px;margin-bottom:8px">Tamanho</div>${sizes.map((s,i)=>`<label style="display:flex;align-items:center;justify-content:space-between;padding:8px 0;border-bottom:1px solid #f1f5f9;cursor:pointer"><span style="display:flex;align-items:center;gap:8px;font-weight:600"><input type="radio" name="var-size" value="${i}" ${i===0?'checked':''} class="var-size-radio" onchange="refreshVariantPrice()" style="width:16px;height:16px">${escHtml(s.name)}${s.slices?` <span style="color:var(--gray);font-weight:500;font-size:12px">(${s.slices} fatias)</span>`:''}</span><span style="color:var(--primary);font-weight:700">${fmt(s.price)}</span></label>`).join('')}</div>`;
+}
+function bordaRadiosHtml(bordaOptions) {
+    return `<div style="margin-bottom:14px"><div style="font-size:12px;font-weight:700;color:var(--gray);text-transform:uppercase;letter-spacing:.3px;margin-bottom:8px">Borda <span style="font-weight:500;color:var(--gray);text-transform:none">(escolha até 1 sabor de borda)</span></div><label style="display:flex;align-items:center;justify-content:space-between;padding:8px 0;border-bottom:1px solid #f1f5f9;cursor:pointer"><span style="display:flex;align-items:center;gap:8px;font-weight:600"><input type="radio" name="var-borda" value="-1" checked class="var-borda-radio" onchange="refreshVariantPrice()" style="width:16px;height:16px">Sem borda</span><span style="color:var(--gray)">Grátis</span></label>${bordaOptions.map((b,i)=>`<label style="display:flex;align-items:center;justify-content:space-between;padding:8px 0;border-bottom:1px solid #f1f5f9;cursor:pointer"><span style="display:flex;align-items:center;gap:8px;font-weight:600"><input type="radio" name="var-borda" value="${i}" class="var-borda-radio" onchange="refreshVariantPrice()" style="width:16px;height:16px">${escHtml(b.name)}</span><span style="color:var(--primary);font-weight:700">+ ${fmt(b.price)}</span></label>`).join('')}</div>`;
+}
+let __activeVariantProduct = null;
+function variantPickerHtml(product, presetFlavorIdx) {
+    __activeVariantProduct = product;
+    const flavors = normFlavors(product.flavors);
+    const bordaHtml = product.hasBorda ? bordaRadiosHtml(product.bordaOptions||[]) : '';
+    if (flavors.length) {
+        const initIdx = (presetFlavorIdx!=null && flavors[presetFlavorIdx]) ? presetFlavorIdx : 0;
+        const firstSizes = (flavors[initIdx].sizes&&flavors[initIdx].sizes.length) ? flavors[initIdx].sizes : [{name:'Único', price: product.price}];
+        const flavorsHtml = (presetFlavorIdx!=null)
+            ? `<input type="hidden" id="var-flavor" value="${initIdx}">`
+            : `<div style="margin-bottom:14px"><div style="font-size:12px;font-weight:700;color:var(--gray);text-transform:uppercase;letter-spacing:.3px;margin-bottom:8px">Sabor</div><select id="var-flavor" class="form-control" onchange="onVarFlavorChange()">${flavors.map((f,i)=>`<option value="${i}" ${i===initIdx?'selected':''}>${escHtml(f.name)}</option>`).join('')}</select></div>`;
+        const sizesWrap = `<div id="var-flavor-sizes-wrap">${sizeRadiosHtml(firstSizes)}</div>`;
+        return flavorsHtml + sizesWrap + bordaHtml;
+    }
+    const sizes = (product.sizes&&product.sizes.length) ? product.sizes : [{name:'Tamanho Único', price: product.price}];
+    const sizesHtml = sizes.length>1 ? sizeRadiosHtml(sizes) : '';
+    return sizesHtml + bordaHtml;
+}
+function onVarFlavorChange() {
+    const idx = parseInt(document.getElementById('var-flavor')?.value)||0;
+    const product = __activeVariantProduct;
+    if (!product) return;
+    const flavors = normFlavors(product.flavors);
+    const flavor = flavors[idx];
+    const sizes = (flavor && flavor.sizes && flavor.sizes.length) ? flavor.sizes : [{name:'Único', price: product.price}];
+    const wrap = document.getElementById('var-flavor-sizes-wrap');
+    if (wrap) wrap.innerHTML = sizeRadiosHtml(sizes);
+    refreshVariantPrice();
+}
+function getSelectedVariantInfo(product) {
+    const flavorSelectEl = document.getElementById('var-flavor');
+    const flavorSelectVisible = !!flavorSelectEl && flavorSelectEl.tagName === 'SELECT';
+    const flavors = normFlavors(product.flavors);
+    let size, flavorName = '';
+    if (flavors.length) {
+        const fIdx = parseInt(flavorSelectEl?.value)||0;
+        const flavor = flavors[fIdx];
+        flavorName = flavor?.name||'';
+        const sizes = (flavor && flavor.sizes && flavor.sizes.length) ? flavor.sizes : [{name:'Único', price: product.price}];
+        const sizeIdx = parseInt(document.querySelector('.var-size-radio:checked')?.value ?? 0);
+        size = sizes[sizeIdx] || sizes[0];
+    } else {
+        const sizes = (product.sizes&&product.sizes.length) ? product.sizes : [{name:'Tamanho Único', price: product.price}];
+        const sizeIdx = parseInt(document.querySelector('.var-size-radio:checked')?.value ?? 0);
+        size = sizes[sizeIdx] || sizes[0];
+    }
+    const bordaIdx = parseInt(document.querySelector('.var-borda-radio:checked')?.value ?? -1);
+    const borda = (product.hasBorda && bordaIdx>=0) ? (product.bordaOptions||[])[bordaIdx] : null;
+    const price = (size?.price??product.price) + (borda?.price||0);
+    const labelParts = [];
+    if (size && size.name && size.name!=='Tamanho Único') labelParts.push(size.name + (size.slices?` (${size.slices} fatias)`:''));
+    if (flavorName && flavorSelectVisible) labelParts.push(flavorName);
+    if (borda) labelParts.push('Borda de '+borda.name); else if (product.hasBorda) labelParts.push('Sem borda');
+    return { price, label: labelParts.join(' - '), sizeName: size?.name||'', bordaName: borda?borda.name:(product.hasBorda?'Sem borda':''), flavor: flavorName };
+}
+function getInitialVariantPrice(product, presetFlavorIdx) {
+    const flavors = normFlavors(product.flavors);
+    if (flavors.length) {
+        const initIdx = (presetFlavorIdx!=null && flavors[presetFlavorIdx]) ? presetFlavorIdx : 0;
+        const sizes = (flavors[initIdx].sizes&&flavors[initIdx].sizes.length) ? flavors[initIdx].sizes : [{name:'Único', price: product.price}];
+        return sizes[0]?.price ?? product.price;
+    }
+    const sizes = (product.sizes&&product.sizes.length) ? product.sizes : [{name:'Tamanho Único', price: product.price}];
+    return sizes[0]?.price ?? product.price;
+}
+function isDrinkCategory(cat) { const s=(cat||'').trim().toLowerCase(); return ['bebida','bebidas','suco','sucos','suco natural','sucos naturais','refrigerante','refrigerantes','drink','drinks','água','agua','cerveja','cervejas'].some(k=>s.includes(k)); }
+function getCategoryAdditionals(company, cat) {
+    if (!company || isDrinkCategory(cat)) return [];
+    const ca = company.categoryAdditionals && company.categoryAdditionals[cat];
+    if (ca && ca.length) return ca;
+    if (company.categoryAdditionals && Object.prototype.hasOwnProperty.call(company.categoryAdditionals, cat)) return [];
+    return company.globalAdditionals || [];
+}
+function refreshVariantPrice() {
+    const product = __activeVariantProduct;
+    if (!product) return;
+    const el = document.getElementById('var-price-display');
+    if (!el) return;
+    const info = getSelectedVariantInfo(product);
+    const addSel = [...document.querySelectorAll('.add-check:checked, .pub-add-check:checked')];
+    const addPrice = addSel.reduce((s,cb)=> s + (cb.dataset.isFree==='true' ? 0 : (parseFloat(cb.dataset.price)||0)), 0);
+    el.textContent = fmt(info.price + addPrice);
+}
+function addToCartWithAdditionals(itemId, presetFlavorIdx) {
 const c = currentCompany;
-const globalAdds = c.globalAdditionals || [];
 const product = (c.menuItems||[]).find(p=>p.id===itemId);
 if (!product) return;
-const isBebida = (product.category||'').trim().toLowerCase() === 'bebidas';
-if (globalAdds.length > 0 && !isBebida) { showAdditionalsModal(itemId, product); }
+const catAdds = getCategoryAdditionals(c, product.category);
+if (catAdds.length > 0 || productHasVariants(product)) { showAdditionalsModal(itemId, product, presetFlavorIdx); }
 else { addToCartDirect(itemId, product); }
 }
-function showAdditionalsModal(itemId, product) {
+function showAdditionalsModal(itemId, product, presetFlavorIdx) {
     const c = currentCompany;
-    const globalAdds = c.globalAdditionals || [];
-    const addsHtml = globalAdds.map(a => `
+    const catAdds = getCategoryAdditionals(c, product.category);
+    const addsHtml = catAdds.map(a => `
     <div class="flex items-center justify-between" style="padding:10px 0;border-bottom:1px solid #f1f5f9">
         <label style="display:flex;align-items:center;gap:10px;cursor:pointer;flex:1">
-            <input type="checkbox" class="add-check" data-id="${a.id}" data-name="${a.name}" data-price="${a.price}" data-is-free="${a.isFree||false}" style="width:18px;height:18px;cursor:pointer">
+            <input type="checkbox" class="add-check" data-id="${a.id}" data-name="${a.name}" data-price="${a.price}" data-is-free="${a.isFree||false}" onchange="refreshVariantPrice()" style="width:18px;height:18px;cursor:pointer">
             <span style="font-weight:600">${a.name}${a.isFree?' <span style="color:var(--gray);font-size:11px">(sem custo)</span>':''}</span>
         </label>
         <span style="color:${a.isFree?'var(--gray)': 'var(--primary)'};font-weight:700">${a.isFree?'Grátis':fmt(a.price)}</span>
@@ -2228,12 +2372,13 @@ function showAdditionalsModal(itemId, product) {
     `).join('');
     showModal(
     `<i class="fa-solid fa-plus-circle"></i> ${product.name}`,
-    `<div style="font-size:20px;font-weight:900;color:var(--primary);margin-bottom:16px">${fmt(product.price)}</div>
-    <div style="margin-bottom:16px">
-        <div style="font-size:12px;font-weight:700;color:var(--gray);text-transform:uppercase;letter-spacing:.3px;margin-bottom:10px">Adicionais Globais (opcional)</div>
+    `<div id="var-price-display" style="font-size:20px;font-weight:900;color:var(--primary);margin-bottom:16px">${fmt(getInitialVariantPrice(product, presetFlavorIdx))}</div>
+    ${variantPickerHtml(product, presetFlavorIdx)}
+    ${catAdds.length?`<div style="margin-bottom:16px">
+        <div style="font-size:12px;font-weight:700;color:var(--gray);text-transform:uppercase;letter-spacing:.3px;margin-bottom:10px">Adicionais desta Categoria (opcional)</div>
         ${addsHtml}
         <div style="font-size:11px;color:var(--gray);margin-top:8px;font-style:italic">Deixe em branco se não quiser adicionais</div>
-    </div>
+    </div>`:''}
     <div class="form-group mt-3"><label>Quantidade</label>
         <div class="flex items-center gap-3">
             <button class="btn btn-ghost btn-sm" onclick="document.getElementById('atc-qty').value=Math.max(1,+document.getElementById('atc-qty').value-1)">−</button>
@@ -2252,11 +2397,15 @@ function confirmAddToCartWithAdditionals(itemId, basePrice) {
         id:cb.dataset.id, name:cb.dataset.name, price:parseFloat(cb.dataset.price)||0, isFree:cb.dataset.isFree==='true'
     }));
     const addPrice = selected.filter(a=>!a.isFree).reduce((s,a)=>s+a.price, 0);
-    const totalPrice = basePrice + addPrice;
     const c = currentCompany;
     const product = (c.menuItems||[]).find(p=>p.id===itemId);
-    const cartName = selected.length ? `${product.name} (+${selected.map(a=>a.name).join(', ')})` : product.name;
-    const sigKey = itemId+'|'+selected.map(a=>a.id).sort().join(',');
+    const variantInfo = productHasVariants(product) ? getSelectedVariantInfo(product) : { price: basePrice, label:'' };
+    const totalPrice = variantInfo.price + addPrice;
+    const nameParts = [product.name];
+    if (variantInfo.label) nameParts.push(`(${variantInfo.label})`);
+    if (selected.length) nameParts.push(`(+${selected.map(a=>a.name).join(', ')})`);
+    const cartName = nameParts.join(' ');
+    const sigKey = itemId+'|'+(variantInfo.sizeName||'')+'|'+(variantInfo.bordaName||'')+'|'+(variantInfo.flavor||'')+'|'+selected.map(a=>a.id).sort().join(',');
     const item = cart.find(i=>i._sigKey===sigKey);
     if (item) { item.qty += qty; }
     else { cart.push({id:itemId, name:cartName, price:totalPrice, qty, additionals:selected, _sigKey:sigKey}); }
@@ -2383,7 +2532,7 @@ const total = subtotalCart + deliveryCart;
 showLoading('Salvando pedido pendente...');
 try {
 const now = new Date();
-const osNum = genOSNumber();
+const osNum = await getNextOSNumber(currentCompanyId, currentCompany);
 await db.collection('orders').add({
 companyId: currentCompanyId,
 customerId: null,
@@ -2427,7 +2576,7 @@ const p = c.menuItems.find(p=>p.id===item.id);
 if(p) { p.stock = Math.max(0, (p.stock||0) - item.qty); }
 });
 await db.collection('companies').doc(currentCompanyId).update({ menuItems: c.menuItems });
-const osNum = genOSNumber();
+const osNum = await getNextOSNumber(currentCompanyId, currentCompany);
 const sale = { companyId:currentCompanyId, items:[...cart], total, subtotal:subtotalCart, deliveryTotal:deliveryCart, paymentMethod:selectedPayment, valorPago, troco, date:now.toISOString(), yearMonth:ym, orderNumber:osNum, customerName:pdvCustomerName };
 await db.collection('sales').add(sale);
 await db.collection('orders').add({ 
@@ -2736,7 +2885,7 @@ function renderStock() {
 }
 function showAddStockModal() {
     const c = currentCompany; if(!c) return; const items = c.menuItems||[];
-    showModal('<i class="fa-solid fa-plus"></i> Adicionar ao Estoque', `<div class="flex gap-2 mb-3"><div class="filter-chip active" id="stk-tab-add" onclick="switchStockTab('add')" style="cursor:pointer">Produto Existente</div><div class="filter-chip" id="stk-tab-new" onclick="switchStockTab('new')" style="cursor:pointer">Cadastrar Novo Item</div></div><div id="stk-tab-add-body">${items.length?`<div class="form-group"><label>Produto</label><select id="ast-prod" class="form-control">${items.map(p=>`<option value="${p.id}">${p.name} (atual: ${p.stock||0} un)</option>`).join('')}</select></div><div class="form-group"><label>Quantidade a Adicionar</label><input type="number" id="ast-qty" class="form-control" value="10" min="1"></div><button class="btn btn-success w-full" onclick="doAddStock()"><i class="fa-solid fa-plus"></i> Adicionar Estoque</button>`:'<div class="text-center" style="padding:20px;color:var(--gray)">Nenhum produto cadastrado ainda.</div>'}</div><div id="stk-tab-new-body" class="hidden"><div class="form-group"><label>Nome do Item *</label><input type="text" id="nsi-name" class="form-control" placeholder="Nome do produto"></div><div class="form-row"><div class="form-group"><label>Preço de Venda (R$) *</label><input type="number" id="nsi-price" class="form-control" step="0.01" min="0"></div><div class="form-group"><label>Custo (R$)</label><input type="number" id="nsi-cost" class="form-control" step="0.01" min="0"></div></div><div class="form-row"><div class="form-group"><label>Categoria</label><input type="text" id="nsi-cat" class="form-control" placeholder="Ex: Bebida, Comida..."></div><div class="form-group"><label>Estoque Mínimo</label><input type="number" id="nsi-minstock" class="form-control" value="5" min="0"></div></div><div class="form-group"><label>Controle de Estoque</label><div style="background:#f8fafc;border:2px solid var(--border);border-radius:10px;padding:14px;margin-top:8px"><label style="display:flex;align-items:center;gap:10px;cursor:pointer;margin-bottom:10px"><input type="radio" name="nsi-stock-type" value="limited" checked onchange="toggleStockInput(true)" style="width:18px;height:18px;cursor:pointer"><div><div style="font-weight:700;color:var(--dark)">Quantidade Limitada</div><div style="font-size:12px;color:var(--gray)">Controlar estoque (ex: bebidas, insumos)</div></div></label><label style="display:flex;align-items:center;gap:10px;cursor:pointer"><input type="radio" name="nsi-stock-type" value="unlimited" onchange="toggleStockInput(false)" style="width:18px;height:18px;cursor:pointer"><div><div style="font-weight:700;color:var(--dark)">Estoque Ilimitado</div><div style="font-size:12px;color:var(--gray)">Sem controle de quantidade (ex: lanches sob demanda)</div></div></label></div></div><div id="nsi-stock-limited-wrap"><div class="form-group"><label>Quantidade Inicial</label><input type="number" id="nsi-stock" class="form-control" value="0" min="0"></div></div><div class="form-group"><label>Imagem (URL)</label><input type="text" id="nsi-img" class="form-control" placeholder="https://..."></div><div class="form-group"><label>Ou enviar foto do computador / celular</label><input type="file" id="nsi-img-file" accept="image/*" class="form-control" onchange="handleStockImageUpload(event)"><div id="nsi-img-preview" style="margin-top:8px"></div></div><div class="form-group"><label>Descrição</label><textarea id="nsi-desc" class="form-control" rows="2"></textarea></div><button class="btn btn-primary w-full" onclick="doAddNewStockItem()"><i class="fa-solid fa-save"></i> Cadastrar e Adicionar</button></div>`, `<button class="btn btn-ghost w-full" onclick="closeModal()">Fechar</button>`, true);
+    showModal('<i class="fa-solid fa-plus"></i> Adicionar ao Estoque', `<div class="flex gap-2 mb-3"><div class="filter-chip active" id="stk-tab-add" onclick="switchStockTab('add')" style="cursor:pointer">Produto Existente</div><div class="filter-chip" id="stk-tab-new" onclick="switchStockTab('new')" style="cursor:pointer">Cadastrar Novo Item</div></div><div id="stk-tab-add-body">${items.length?`<div class="form-group"><label>Produto</label><select id="ast-prod" class="form-control">${items.map(p=>`<option value="${p.id}">${p.name} (atual: ${p.stock||0} un)</option>`).join('')}</select></div><div class="form-group"><label>Quantidade a Adicionar</label><input type="number" id="ast-qty" class="form-control" value="10" min="1"></div><button class="btn btn-success w-full" onclick="doAddStock()"><i class="fa-solid fa-plus"></i> Adicionar Estoque</button>`:'<div class="text-center" style="padding:20px;color:var(--gray)">Nenhum produto cadastrado ainda.</div>'}</div><div id="stk-tab-new-body" class="hidden"><div class="form-group"><label>Nome do Item *</label><input type="text" id="nsi-name" class="form-control" placeholder="Nome do produto"></div><div class="form-row"><div class="form-group"><label>Preço de Venda (R$) *</label><input type="number" id="nsi-price" class="form-control" step="0.01" min="0"></div><div class="form-group"><label>Custo (R$)</label><input type="number" id="nsi-cost" class="form-control" step="0.01" min="0"></div></div><div class="form-row"><div class="form-group"><label>Categoria</label><input type="text" id="nsi-cat" class="form-control" list="pub-cats-datalist" placeholder="Ex: Bebida, Comida..."><p style="font-size:11px;color:var(--gray);margin-top:4px">Use o mesmo nome de uma categoria já existente para agrupar corretamente no cardápio online.</p>${categoryDatalistHtml()}</div><div class="form-group"><label>Estoque Mínimo</label><input type="number" id="nsi-minstock" class="form-control" value="5" min="0"></div></div><div class="form-group"><label>Controle de Estoque</label><div style="background:#f8fafc;border:2px solid var(--border);border-radius:10px;padding:14px;margin-top:8px"><label style="display:flex;align-items:center;gap:10px;cursor:pointer;margin-bottom:10px"><input type="radio" name="nsi-stock-type" value="limited" checked onchange="toggleStockInput(true)" style="width:18px;height:18px;cursor:pointer"><div><div style="font-weight:700;color:var(--dark)">Quantidade Limitada</div><div style="font-size:12px;color:var(--gray)">Controlar estoque (ex: bebidas, insumos)</div></div></label><label style="display:flex;align-items:center;gap:10px;cursor:pointer"><input type="radio" name="nsi-stock-type" value="unlimited" onchange="toggleStockInput(false)" style="width:18px;height:18px;cursor:pointer"><div><div style="font-weight:700;color:var(--dark)">Estoque Ilimitado</div><div style="font-size:12px;color:var(--gray)">Sem controle de quantidade (ex: lanches sob demanda)</div></div></label></div></div><div id="nsi-stock-limited-wrap"><div class="form-group"><label>Quantidade Inicial</label><input type="number" id="nsi-stock" class="form-control" value="0" min="0"></div></div><div class="form-group"><label>Imagem (URL)</label><input type="text" id="nsi-img" class="form-control" placeholder="https://..."></div><div class="form-group"><label>Ou enviar foto do computador / celular</label><input type="file" id="nsi-img-file" accept="image/*" class="form-control" onchange="handleStockImageUpload(event)"><p style="font-size:11px;color:var(--gray);margin-top:4px"><i class="fa-solid fa-circle-info"></i> Use uma imagem <strong>quadrada (proporção 1:1)</strong> — ela aparece em destaque no cardápio online.</p><div id="nsi-img-preview" style="margin-top:8px"></div></div><div class="form-group"><label>Descrição</label><textarea id="nsi-desc" class="form-control" rows="2"></textarea></div>${variantOptionsEditorHtml('nsi', null)}<button class="btn btn-primary w-full" onclick="doAddNewStockItem()"><i class="fa-solid fa-save"></i> Cadastrar e Adicionar</button></div>`, `<button class="btn btn-ghost w-full" onclick="closeModal()">Fechar</button>`, true);
 }
 function toggleStockInput(show) {
     const wrap = document.getElementById('nsi-stock-limited-wrap');
@@ -2746,7 +2895,8 @@ function switchStockTab(tab) { document.getElementById('stk-tab-add').classList.
 async function doAddNewStockItem() {
     const name=document.getElementById('nsi-name').value.trim(); const price=parseFloat(document.getElementById('nsi-price').value)||0; const cost=parseFloat(document.getElementById('nsi-cost').value)||0; const cat=document.getElementById('nsi-cat').value.trim(); const stockType=document.querySelector('input[name="nsi-stock-type"]:checked')?.value; const stock=parseInt(document.getElementById('nsi-stock').value)||0; const minStock=parseInt(document.getElementById('nsi-minstock').value)||5; const img=document.getElementById('nsi-img')?.value.trim()||''; const desc=document.getElementById('nsi-desc')?.value.trim()||'';
     if (!name||!price) { showToast('Nome e preço são obrigatórios','warning'); return; }
-    const c = currentCompany; c.menuItems = c.menuItems||[]; c.menuItems.push({id:genId(),name,price,cost,category:cat,stock:stockType==='unlimited'?999999:stock,minStock:stockType==='unlimited'?0:minStock,image:img,description:desc,createdAt:new Date().toISOString(),additionals:[],stockUnlimited:stockType==='unlimited'});
+    const variantData = collectVariantData('nsi', price);
+    const c = currentCompany; c.menuItems = c.menuItems||[]; c.menuItems.push({id:genId(),name,price,cost,category:cat,stock:stockType==='unlimited'?999999:stock,minStock:stockType==='unlimited'?0:minStock,image:img,description:desc,createdAt:new Date().toISOString(),additionals:[],stockUnlimited:stockType==='unlimited',sizes:variantData.sizes,hasBorda:variantData.hasBorda,bordaOptions:variantData.bordaOptions,flavors:variantData.flavors});
     showLoading('Salvando...'); try { await db.collection('companies').doc(currentCompanyId).update({menuItems:c.menuItems}); hideLoading(); closeModal(); renderStock(); renderMenu(); renderPDV(); showToast(`"${name}" cadastrado com sucesso!`,'success'); } catch(e) { hideLoading(); showToast('Erro: '+e.message,'danger'); }
 }
 function toggleStockEditInput(show) {
@@ -2754,9 +2904,9 @@ function toggleStockEditInput(show) {
     if (wrap) wrap.style.display = show ? 'block' : 'none';
 }
 async function doAddStock() { const pid = document.getElementById('ast-prod').value; const qty = parseInt(document.getElementById('ast-qty').value)||0; const c = currentCompany; const p = c.menuItems.find(p=>p.id===pid); if(!p) return; p.stock = (p.stock||0) + qty; showLoading('Atualizando...'); try { await db.collection('companies').doc(currentCompanyId).update({ menuItems: c.menuItems }); hideLoading(); closeModal(); renderStock(); renderMenu(); renderPDV(); showToast(`+${qty} un de "${p.name}" adicionadas!`,'success'); } catch(e) { hideLoading(); showToast('Erro: '+e.message,'danger'); } }
-function showStockModal(pid) { const c = currentCompany; const p = c.menuItems.find(p=>p.id===pid); if(!p) return; const isUnlimited = p.stockUnlimited===true; showModal(`<i class="fa-solid fa-boxes-stacked"></i> Editar Item — ${p.name}`, `<div class="form-group"><label>Nome do Item *</label><input type="text" id="sk-name" class="form-control" placeholder="Nome do produto" value="${(p.name||'').replace(/"/g,'&quot;')}"></div><div class="form-row"><div class="form-group"><label>Preço de Venda (R$) *</label><input type="number" id="sk-price" class="form-control" step="0.01" min="0" value="${p.price||0}"></div><div class="form-group"><label>Custo (R$)</label><input type="number" id="sk-cost" class="form-control" step="0.01" min="0" value="${p.cost||0}"></div></div><div class="form-row"><div class="form-group"><label>Categoria</label><input type="text" id="sk-cat" class="form-control" placeholder="Ex: Bebida, Comida..." value="${(p.category||'').replace(/"/g,'&quot;')}"></div><div class="form-group"><label>Estoque Mínimo</label><input type="number" id="sk-min" class="form-control" value="${p.minStock||5}" min="0"></div></div><div class="form-group"><label>Controle de Estoque</label><div style="background:#f8fafc;border:2px solid var(--border);border-radius:10px;padding:14px;margin-top:8px"><label style="display:flex;align-items:center;gap:10px;cursor:pointer;margin-bottom:10px"><input type="radio" name="sk-stock-type" value="limited" ${!isUnlimited?'checked':''} onchange="toggleStockEditInput(true)" style="width:18px;height:18px;cursor:pointer"><div><div style="font-weight:700;color:var(--dark)">Quantidade Limitada</div><div style="font-size:12px;color:var(--gray)">Controlar estoque (ex: bebidas, insumos)</div></div></label><label style="display:flex;align-items:center;gap:10px;cursor:pointer"><input type="radio" name="sk-stock-type" value="unlimited" ${isUnlimited?'checked':''} onchange="toggleStockEditInput(false)" style="width:18px;height:18px;cursor:pointer"><div><div style="font-weight:700;color:var(--dark)">Estoque Ilimitado</div><div style="font-size:12px;color:var(--gray)">Sem controle de quantidade (ex: lanches sob demanda)</div></div></label></div></div><div id="sk-stock-limited-wrap" style="${isUnlimited?'display:none':''}"><div class="form-group"><label>Quantidade em Estoque</label><input type="number" id="sk-qty" class="form-control" value="${p.stock||0}" min="0"></div></div><div class="form-group"><label>Imagem (URL)</label><input type="text" id="sk-img" class="form-control" placeholder="https://..." value="${(p.image||'').replace(/"/g,'&quot;')}"></div><div class="form-group"><label>Ou enviar foto do computador / celular</label><input type="file" id="sk-img-file" accept="image/*" class="form-control" onchange="handleStockImageUpload(event)"><div id="sk-img-preview" style="margin-top:8px">${p.image?`<img src="${p.image}" style="width:100%;max-height:160px;object-fit:contain;border-radius:8px">`:''}</div></div><div class="form-group"><label>Descrição</label><textarea id="sk-desc" class="form-control" rows="2">${p.description||''}</textarea></div>`, `<button class="btn btn-ghost" onclick="closeModal()">Cancelar</button><button class="btn btn-primary" onclick="saveStock('${pid}')"><i class="fa-solid fa-save"></i> Salvar</button>`, false); }
+function showStockModal(pid) { const c = currentCompany; const p = c.menuItems.find(p=>p.id===pid); if(!p) return; const isUnlimited = p.stockUnlimited===true; showModal(`<i class="fa-solid fa-boxes-stacked"></i> Editar Item — ${p.name}`, `<div class="form-group"><label>Nome do Item *</label><input type="text" id="sk-name" class="form-control" placeholder="Nome do produto" value="${(p.name||'').replace(/"/g,'&quot;')}"></div><div class="form-row"><div class="form-group"><label>Preço de Venda (R$) *</label><input type="number" id="sk-price" class="form-control" step="0.01" min="0" value="${p.price||0}"></div><div class="form-group"><label>Custo (R$)</label><input type="number" id="sk-cost" class="form-control" step="0.01" min="0" value="${p.cost||0}"></div></div><div class="form-row"><div class="form-group"><label>Categoria</label><input type="text" id="sk-cat" class="form-control" list="pub-cats-datalist" placeholder="Ex: Bebida, Comida..." value="${(p.category||'').replace(/"/g,'&quot;')}"><p style="font-size:11px;color:var(--gray);margin-top:4px">Use o mesmo nome de uma categoria já existente para agrupar corretamente no cardápio online.</p>${categoryDatalistHtml()}</div><div class="form-group"><label>Estoque Mínimo</label><input type="number" id="sk-min" class="form-control" value="${p.minStock||5}" min="0"></div></div><div class="form-group"><label>Controle de Estoque</label><div style="background:#f8fafc;border:2px solid var(--border);border-radius:10px;padding:14px;margin-top:8px"><label style="display:flex;align-items:center;gap:10px;cursor:pointer;margin-bottom:10px"><input type="radio" name="sk-stock-type" value="limited" ${!isUnlimited?'checked':''} onchange="toggleStockEditInput(true)" style="width:18px;height:18px;cursor:pointer"><div><div style="font-weight:700;color:var(--dark)">Quantidade Limitada</div><div style="font-size:12px;color:var(--gray)">Controlar estoque (ex: bebidas, insumos)</div></div></label><label style="display:flex;align-items:center;gap:10px;cursor:pointer"><input type="radio" name="sk-stock-type" value="unlimited" ${isUnlimited?'checked':''} onchange="toggleStockEditInput(false)" style="width:18px;height:18px;cursor:pointer"><div><div style="font-weight:700;color:var(--dark)">Estoque Ilimitado</div><div style="font-size:12px;color:var(--gray)">Sem controle de quantidade (ex: lanches sob demanda)</div></div></label></div></div><div id="sk-stock-limited-wrap" style="${isUnlimited?'display:none':''}"><div class="form-group"><label>Quantidade em Estoque</label><input type="number" id="sk-qty" class="form-control" value="${p.stock||0}" min="0"></div></div><div class="form-group"><label>Imagem (URL)</label><input type="text" id="sk-img" class="form-control" placeholder="https://..." value="${(p.image||'').replace(/"/g,'&quot;')}"></div><div class="form-group"><label>Ou enviar foto do computador / celular</label><input type="file" id="sk-img-file" accept="image/*" class="form-control" onchange="handleStockImageUpload(event)"><p style="font-size:11px;color:var(--gray);margin-top:4px"><i class="fa-solid fa-circle-info"></i> Use uma imagem <strong>quadrada (proporção 1:1)</strong> — ela aparece em destaque no cardápio online.</p><div id="sk-img-preview" style="margin-top:8px">${p.image?`<img src="${p.image}" style="width:100%;max-height:160px;object-fit:contain;border-radius:8px">`:''}</div></div><div class="form-group"><label>Descrição</label><textarea id="sk-desc" class="form-control" rows="2">${p.description||''}</textarea></div>${variantOptionsEditorHtml('sk', p)}`, `<button class="btn btn-ghost" onclick="closeModal()">Cancelar</button><button class="btn btn-primary" onclick="saveStock('${pid}')"><i class="fa-solid fa-save"></i> Salvar</button>`, false); }
 async function deleteStockProduct(pid) { const c = currentCompany; const p = (c.menuItems||[]).find(p=>p.id===pid); if(!p) return; if (!confirm(`Excluir "${p.name}" do estoque e do cadastro?`)) return; c.menuItems = c.menuItems.filter(p=>p.id!==pid); showLoading('Excluindo...'); try { await db.collection('companies').doc(currentCompanyId).update({menuItems:c.menuItems}); hideLoading(); renderStock(); renderMenu(); renderPDV(); showToast('Produto excluído!','success'); } catch(e) { hideLoading(); showToast('Erro: '+e.message,'danger'); } }
-async function saveStock(pid) { const c = currentCompany; const p = c.menuItems.find(p=>p.id===pid); if(!p) return; const name=document.getElementById('sk-name')?.value.trim(); const price=parseFloat(document.getElementById('sk-price')?.value)||0; if (!name||!price) { showToast('Nome e preço são obrigatórios','warning'); return; } const stockType=document.querySelector('input[name="sk-stock-type"]:checked')?.value; p.name = name; p.price = price; p.cost = parseFloat(document.getElementById('sk-cost')?.value)||0; p.category = document.getElementById('sk-cat')?.value.trim()||''; p.image = document.getElementById('sk-img')?.value.trim()||''; p.description = document.getElementById('sk-desc')?.value.trim()||''; p.stock = stockType==='unlimited'?999999:(parseInt(document.getElementById('sk-qty').value)||0); p.minStock = stockType==='unlimited'?0:(parseInt(document.getElementById('sk-min').value)||5); p.stockUnlimited = stockType==='unlimited'; showLoading('Salvando...'); try { await db.collection('companies').doc(currentCompanyId).update({ menuItems: c.menuItems }); hideLoading(); closeModal(); renderStock(); renderMenu(); renderPDV(); showToast('Item atualizado!','success'); } catch(e) { hideLoading(); showToast('Erro: '+e.message,'danger'); } }
+async function saveStock(pid) { const c = currentCompany; const p = c.menuItems.find(p=>p.id===pid); if(!p) return; const name=document.getElementById('sk-name')?.value.trim(); const price=parseFloat(document.getElementById('sk-price')?.value)||0; if (!name||!price) { showToast('Nome e preço são obrigatórios','warning'); return; } const stockType=document.querySelector('input[name="sk-stock-type"]:checked')?.value; p.name = name; p.price = price; p.cost = parseFloat(document.getElementById('sk-cost')?.value)||0; p.category = document.getElementById('sk-cat')?.value.trim()||''; p.image = document.getElementById('sk-img')?.value.trim()||''; p.description = document.getElementById('sk-desc')?.value.trim()||''; p.stock = stockType==='unlimited'?999999:(parseInt(document.getElementById('sk-qty').value)||0); p.minStock = stockType==='unlimited'?0:(parseInt(document.getElementById('sk-min').value)||5); p.stockUnlimited = stockType==='unlimited'; const variantData = collectVariantData('sk', price); p.sizes = variantData.sizes; p.hasBorda = variantData.hasBorda; p.bordaOptions = variantData.bordaOptions; p.flavors = variantData.flavors; showLoading('Salvando...'); try { await db.collection('companies').doc(currentCompanyId).update({ menuItems: c.menuItems }); hideLoading(); closeModal(); renderStock(); renderMenu(); renderPDV(); showToast('Item atualizado!','success'); } catch(e) { hideLoading(); showToast('Erro: '+e.message,'danger'); } }
 
 // ============================================================
 // MENU (CARDÁPIO)
@@ -3176,9 +3326,13 @@ function handleAdminChatImage(event, chatId) {
 // ============================================================
 // ADICIONAIS GLOBAIS
 // ============================================================
-function showGlobalAdditionalsModal() {
+function showGlobalAdditionalsModal(selectedCat) {
     const c = currentCompany;
-    const adds = c.globalAdditionals||[];
+    const allCats = [...new Set((c.menuItems||[]).map(p=>p.category).filter(Boolean))];
+    const foodCats = allCats.filter(cat=>!isDrinkCategory(cat));
+    if (!foodCats.length) { showToast('Cadastre produtos de comida com uma categoria definida primeiro (bebidas não têm adicionais).','warning'); return; }
+    const cat = (selectedCat && foodCats.includes(selectedCat)) ? selectedCat : foodCats[0];
+    const adds = (c.categoryAdditionals && c.categoryAdditionals[cat]) || c.globalAdditionals || [];
     const addsHtml = adds.map((a,idx)=>`
     <div class="flex items-center gap-2 mb-2" id="gl-add-row-${a.id}">
         <input type="text" class="form-control" id="gl-add-name-${a.id}" value="${a.name}" placeholder="Ex: Bacon extra ou SEM ALFACE" style="flex:2">
@@ -3189,8 +3343,9 @@ function showGlobalAdditionalsModal() {
         </label>
         <button class="btn btn-sm btn-danger" onclick="document.getElementById('gl-add-row-${a.id}').remove()"><i class="fa-solid fa-times"></i></button>
     </div>`).join('');
-    showModal('<i class="fa-solid fa-list-check"></i> Adicionais Globais',
-    `<p style="color:var(--gray);font-size:13px;margin-bottom:14px">Estes adicionais aparecem para o cliente ao adicionar <strong>qualquer produto</strong> ao carrinho, tanto no PDV quanto no cardápio online.</p>
+    showModal('<i class="fa-solid fa-list-check"></i> Adicionais por Categoria',
+    `<div class="form-group"><label>Categoria</label><select id="gl-cat-select" class="form-control" onchange="showGlobalAdditionalsModal(this.value)">${foodCats.map(cc=>`<option value="${cc.replace(/"/g,'&quot;')}" ${cc===cat?'selected':''}>${escHtml(cc)}</option>`).join('')}</select></div>
+    <p style="color:var(--gray);font-size:13px;margin:10px 0 14px">Estes adicionais aparecem só para produtos da categoria <strong>${escHtml(cat)}</strong>, tanto no PDV quanto no cardápio online. Cada categoria pode ter sua própria lista. Categorias de bebida (Bebidas, Sucos, Refrigerantes...) não têm opção de adicionais.</p>
     <div style="background:#dbeafe;border:2px solid var(--primary);border-radius:8px;padding:12px;margin-bottom:16px">
         <div style="font-size:12px;font-weight:700;color:var(--primary);margin-bottom:6px"><i class="fa-solid fa-info-circle"></i> Como usar:</div>
         <ul style="font-size:12px;color:var(--dark3);margin:0;padding-left:16px;line-height:1.6">
@@ -3198,7 +3353,7 @@ function showGlobalAdditionalsModal() {
             <li><strong>Adicionais grátis:</strong> SEM ALFACE, SEM TOMATE, SEM CEBOLA... (marque "Sem custo" ou deixe R$ 0,00)</li>
         </ul>
     </div>
-    <div id="gl-adds-container">${addsHtml}</div>
+    <div id="gl-adds-container" data-cat="${cat.replace(/"/g,'&quot;')}">${addsHtml}</div>
     <button type="button" class="btn btn-ghost btn-sm mt-2 w-full" onclick="addGlobalAdditionalRow()"><i class="fa-solid fa-plus"></i> Adicionar Opção</button>`,
     `<button class="btn btn-ghost" onclick="closeModal()">Cancelar</button>
     <button class="btn btn-primary" onclick="saveGlobalAdditionals()"><i class="fa-solid fa-save"></i> Salvar Adicionais</button>`,
@@ -3217,6 +3372,8 @@ function addGlobalAdditionalRow() {
 }
 async function saveGlobalAdditionals() {
     const c = currentCompany;
+    const cat = document.getElementById('gl-adds-container')?.dataset.cat;
+    if (!cat) return;
     const additionals = [];
     document.querySelectorAll('#gl-adds-container [id^="gl-add-row-"]').forEach(row => {
         const rid = row.id.replace('gl-add-row-','');
@@ -3226,12 +3383,13 @@ async function saveGlobalAdditionals() {
         const pr = isFree ? 0 : (parseFloat(prInput)||0);
         if (nm) additionals.push({id:rid.startsWith('new_')?genId():rid, name:nm, price:pr, isFree:isFree});
     });
+    c.categoryAdditionals = c.categoryAdditionals || {};
+    c.categoryAdditionals[cat] = additionals;
     showLoading('Salvando adicionais...');
     try {
-        await db.collection('companies').doc(currentCompanyId).update({globalAdditionals:additionals});
-        c.globalAdditionals = additionals;
+        await db.collection('companies').doc(currentCompanyId).update({categoryAdditionals:c.categoryAdditionals});
         hideLoading(); closeModal();
-        showToast(additionals.length?`${additionals.length} adicional(is) salvos!`:'Adicionais removidos.','success');
+        showToast(additionals.length?`${additionals.length} adicional(is) salvos para "${cat}"!`:`Adicionais de "${cat}" removidos.`,'success');
     } catch(e) { hideLoading(); showToast('Erro: '+e.message,'danger'); }
 }
 function handleMenuItemImageUpload(event) {
@@ -3287,29 +3445,125 @@ function handleStockImageUpload(event) {
     };
     reader.readAsDataURL(file);
 }
+function sizeRowHtml(prefix, s) { return `<div class="variant-row" style="display:flex;gap:8px;margin-bottom:6px"><input type="text" class="form-control ${prefix}-size-name" value="${(s&&s.name||'').replace(/"/g,'&quot;')}" placeholder="Nome do tamanho (ex: Grande)" style="flex:2"><input type="number" class="form-control ${prefix}-size-price" value="${s&&s.price!=null?s.price:0}" step="0.01" min="0" placeholder="Preço (R$)" style="flex:1"><button type="button" class="btn btn-ghost btn-sm" onclick="this.parentElement.remove()"><i class="fa-solid fa-trash"></i></button></div>`; }
+function bordaRowHtml(prefix, b) { return `<div class="variant-row" style="display:flex;gap:8px;margin-bottom:6px"><input type="text" class="form-control ${prefix}-borda-name" value="${(b&&b.name||'').replace(/"/g,'&quot;')}" placeholder="Nome da borda (ex: Catupiry)" style="flex:2"><input type="number" class="form-control ${prefix}-borda-price" value="${b&&b.price!=null?b.price:0}" step="0.01" min="0" placeholder="Preço adicional (R$)" style="flex:1"><button type="button" class="btn btn-ghost btn-sm" onclick="this.parentElement.remove()"><i class="fa-solid fa-trash"></i></button></div>`; }
+function flavorSizeRowHtml(prefix, s) { return `<div class="flavor-size-row" style="display:flex;gap:6px;margin-bottom:6px;align-items:center"><input type="text" class="form-control ${prefix}-fsize-name" value="${(s&&s.name||'').replace(/"/g,'&quot;')}" placeholder="Tamanho (ex: 20CM ou Pequena)" style="flex:2"><input type="number" class="form-control ${prefix}-fsize-price" value="${s&&s.price!=null?s.price:0}" step="0.01" min="0" placeholder="Preço (R$)" style="flex:1"><input type="number" class="form-control ${prefix}-fsize-slices" value="${s&&s.slices!=null?s.slices:''}" min="0" step="1" placeholder="Fatias (opc.)" style="flex:1"><button type="button" class="btn btn-ghost btn-sm" onclick="this.parentElement.remove()"><i class="fa-solid fa-trash"></i></button></div>`; }
+function flavorBlockHtml(prefix, flavor) {
+    const sizes = (flavor && flavor.sizes && flavor.sizes.length) ? flavor.sizes : [null];
+    return `<div class="flavor-block" style="border:1px solid var(--border);border-radius:8px;padding:10px;margin-bottom:10px;background:#fff">
+        <div style="display:flex;gap:8px;align-items:center;margin-bottom:8px">
+            <input type="text" class="form-control ${prefix}-flavor-name" value="${(flavor&&flavor.name||'').replace(/"/g,'&quot;')}" placeholder="Nome do sabor (ex: Carne, Bolonhesa)" style="flex:1;font-weight:700">
+            <button type="button" class="btn btn-ghost btn-sm" onclick="this.closest('.flavor-block').remove()"><i class="fa-solid fa-trash"></i></button>
+        </div>
+        <div style="font-size:11px;color:var(--gray);margin-bottom:6px;font-weight:700;text-transform:uppercase">Tamanhos e preços deste sabor</div>
+        <div class="${prefix}-flavor-sizes-list">${sizes.map(s=>flavorSizeRowHtml(prefix,s)).join('')}</div>
+        <button type="button" class="btn btn-ghost btn-sm mt-1" onclick="addFlavorSizeRow(this,'${prefix}')"><i class="fa-solid fa-plus"></i> Adicionar Tamanho a este Sabor</button>
+    </div>`;
+}
+function addFlavorSizeRow(btn, prefix) {
+    const block = btn.closest('.flavor-block'); if (!block) return;
+    const list = block.querySelector('.'+prefix+'-flavor-sizes-list'); if (!list) return;
+    const d = document.createElement('div'); d.innerHTML = flavorSizeRowHtml(prefix, null); list.appendChild(d.firstElementChild);
+}
+function addVariantRow(prefix, kind) {
+    if (kind==='size') { const w=document.getElementById(prefix+'-sizes-list'); if(!w) return; const d=document.createElement('div'); d.innerHTML=sizeRowHtml(prefix,null); w.appendChild(d.firstElementChild); }
+    else if (kind==='borda') { const w=document.getElementById(prefix+'-borda-list'); if(!w) return; const d=document.createElement('div'); d.innerHTML=bordaRowHtml(prefix,null); w.appendChild(d.firstElementChild); }
+    else if (kind==='flavor') { const w=document.getElementById(prefix+'-flavors-list'); if(!w) return; const d=document.createElement('div'); d.innerHTML=flavorBlockHtml(prefix,null); w.appendChild(d.firstElementChild); }
+}
+function toggleBordaOptions(prefix, show) { const el=document.getElementById(prefix+'-borda-wrap'); if(el) el.style.display = show ? '' : 'none'; }
+function variantOptionsEditorHtml(prefix, item) {
+    const allSizes = (item && item.sizes && item.sizes.length) ? item.sizes : [{name:'Tamanho Único', price:0}];
+    const extraSizes = allSizes.slice(1);
+    const hasBorda = item ? !!item.hasBorda : false;
+    const bordaOptions = (item && item.bordaOptions) || [];
+    const flavors = normFlavors(item && item.flavors);
+    return `
+    <div class="form-group" style="background:#f8fafc;border:2px solid var(--border);border-radius:10px;padding:14px;margin-top:8px">
+        <label style="font-weight:800;color:var(--dark);text-transform:uppercase;font-size:12px;letter-spacing:.3px"><i class="fa-solid fa-ruler-combined"></i> Tamanhos</label>
+        <p style="font-size:11px;color:var(--gray);margin:4px 0 8px">Use esta seção para produtos <strong>sem sabores</strong> (ex: uma bebida ou lanche com tamanhos simples). Por padrão vem <strong>Tamanho Único</strong> (com o Valor informado acima). Se o produto tiver Sabores cadastrados abaixo, os tamanhos e preços de cada sabor são usados no lugar desta seção.</p>
+        <div style="font-size:12px;font-weight:700;color:var(--success);margin-bottom:8px"><i class="fa-solid fa-circle-check"></i> Tamanho Único (selecionado por padrão)</div>
+        <div id="${prefix}-sizes-list">${extraSizes.map(s=>sizeRowHtml(prefix,s)).join('')}</div>
+        <button type="button" class="btn btn-ghost btn-sm mt-2" onclick="addVariantRow('${prefix}','size')"><i class="fa-solid fa-plus"></i> Adicionar Tamanho</button>
+    </div>
+    <div class="form-group" style="background:#f8fafc;border:2px solid var(--border);border-radius:10px;padding:14px;margin-top:8px">
+        <label style="font-weight:800;color:var(--dark);text-transform:uppercase;font-size:12px;letter-spacing:.3px"><i class="fa-solid fa-pizza-slice"></i> Borda</label>
+        <p style="font-size:11px;color:var(--gray);margin:4px 0 8px">A borda é um adicional único por pedido (o cliente escolhe no máximo 1 sabor de borda, ou nenhuma).</p>
+        <div style="margin-top:8px">
+            <label style="display:flex;align-items:center;gap:10px;cursor:pointer;margin-bottom:8px"><input type="radio" name="${prefix}-borda-type" value="no" ${!hasBorda?'checked':''} onchange="toggleBordaOptions('${prefix}',false)" style="width:18px;height:18px;cursor:pointer"><div style="font-weight:700;color:var(--dark)">Sem borda</div></label>
+            <label style="display:flex;align-items:center;gap:10px;cursor:pointer"><input type="radio" name="${prefix}-borda-type" value="yes" ${hasBorda?'checked':''} onchange="toggleBordaOptions('${prefix}',true)" style="width:18px;height:18px;cursor:pointer"><div style="font-weight:700;color:var(--dark)">Com opção de borda</div></label>
+        </div>
+        <div id="${prefix}-borda-wrap" style="${hasBorda?'':'display:none'};margin-top:10px">
+            <div id="${prefix}-borda-list">${(bordaOptions.length?bordaOptions:[null]).map(b=>bordaRowHtml(prefix,b)).join('')}</div>
+            <button type="button" class="btn btn-ghost btn-sm mt-2" onclick="addVariantRow('${prefix}','borda')"><i class="fa-solid fa-plus"></i> Adicionar Opção de Borda</button>
+        </div>
+    </div>
+    <div class="form-group" style="background:#f8fafc;border:2px solid var(--border);border-radius:10px;padding:14px;margin-top:8px">
+        <label style="font-weight:800;color:var(--dark);text-transform:uppercase;font-size:12px;letter-spacing:.3px"><i class="fa-solid fa-tags"></i> Sabores (opcional)</label>
+        <p style="font-size:11px;color:var(--gray);margin:4px 0 8px">Cadastre os sabores do produto. Cada sabor pode ter seus próprios tamanhos e preços (ex: Carne 20CM R$18,00, Carne 27CM R$20,00 / Bolonhesa Pequena R$35,00, Média R$45,00, Grande R$60,00). O campo "Fatias" é opcional (útil para pizzas). Deixe sem sabores se o produto usar apenas os Tamanhos acima.</p>
+        <div id="${prefix}-flavors-list">${(flavors.length?flavors:[null]).map(f=>flavorBlockHtml(prefix,f)).join('')}</div>
+        <button type="button" class="btn btn-primary btn-sm mt-2" onclick="addVariantRow('${prefix}','flavor')"><i class="fa-solid fa-plus"></i> Adicionar Sabor</button>
+    </div>`;
+}
+function collectVariantData(prefix, basePrice) {
+    const extraSizeNames = [...document.querySelectorAll('.'+prefix+'-size-name')];
+    const extraSizePrices = [...document.querySelectorAll('.'+prefix+'-size-price')];
+    const extraSizes = extraSizeNames.map((inp,i)=>{ const name=inp.value.trim(); const price=parseFloat(extraSizePrices[i]?.value)||0; return name?{name,price}:null; }).filter(Boolean);
+    const sizes = [{name:'Tamanho Único', price: basePrice}, ...extraSizes];
+    const hasBorda = document.querySelector(`input[name="${prefix}-borda-type"]:checked`)?.value === 'yes';
+    const bordaNames = [...document.querySelectorAll('.'+prefix+'-borda-name')];
+    const bordaPrices = [...document.querySelectorAll('.'+prefix+'-borda-price')];
+    const bordaOptions = hasBorda ? bordaNames.map((inp,i)=>{ const name=inp.value.trim(); const price=parseFloat(bordaPrices[i]?.value)||0; return name?{name,price}:null; }).filter(Boolean) : [];
+    const flavorBlocks = [...document.querySelectorAll('#'+prefix+'-flavors-list .flavor-block')];
+    const flavors = flavorBlocks.map(block => {
+        const nameInp = block.querySelector('.'+prefix+'-flavor-name');
+        const name = nameInp ? nameInp.value.trim() : '';
+        if (!name) return null;
+        const sizeRows = [...block.querySelectorAll('.flavor-size-row')];
+        const fsizes = sizeRows.map(row => {
+            const nm = row.querySelector('.'+prefix+'-fsize-name')?.value.trim();
+            const pr = parseFloat(row.querySelector('.'+prefix+'-fsize-price')?.value)||0;
+            const slRaw = row.querySelector('.'+prefix+'-fsize-slices')?.value;
+            const sl = (slRaw!==undefined && slRaw!==null && slRaw!=='') ? (parseInt(slRaw)||0) : null;
+            return nm ? {name:nm, price:pr, slices: sl} : null;
+        }).filter(Boolean);
+        return { name, sizes: fsizes };
+    }).filter(Boolean);
+    return { sizes, hasBorda, bordaOptions, flavors };
+}
 function showMenuItemModal(iid) {
 const c = currentCompany;
 const item = iid ? (c.menuItems||[]).find(i=>i.id===iid) : null;
+const isUnlimited = item ? item.stockUnlimited===true : false;
 showModal(`<i class="fa-solid fa-utensils"></i> ${item?'Editar Item':'Adicionar Item ao Cardápio'}`,
 `<div class="form-group"><label>Nome *</label><input type="text" id="mi-name" class="form-control" value="${item?.name||''}" placeholder="Nome do produto"></div>
 <div class="form-row">
 <div class="form-group"><label>Valor (R$) *</label><input type="number" id="mi-price" class="form-control" value="${item?.price||''}" step="0.01" min="0"></div>
-<div class="form-group"><label>Categoria</label><input type="text" id="mi-cat" class="form-control" value="${item?.category||''}" placeholder="Ex: Lanches, Bebidas..."></div>
+<div class="form-group"><label>Categoria</label><input type="text" id="mi-cat" class="form-control" list="pub-cats-datalist" value="${item?.category||''}" placeholder="Ex: Lanches, Bebidas..."><p style="font-size:11px;color:var(--gray);margin-top:4px">Use o mesmo nome de uma categoria já existente para agrupar corretamente no cardápio online.</p>${categoryDatalistHtml()}</div>
 </div>
+<div class="form-group"><label>Controle de Estoque</label><div style="background:#f8fafc;border:2px solid var(--border);border-radius:10px;padding:14px;margin-top:8px"><label style="display:flex;align-items:center;gap:10px;cursor:pointer;margin-bottom:10px"><input type="radio" name="mi-stock-type" value="limited" ${!isUnlimited?'checked':''} onchange="toggleMenuStockInput(true)" style="width:18px;height:18px;cursor:pointer"><div><div style="font-weight:700;color:var(--dark)">Quantidade Limitada</div><div style="font-size:12px;color:var(--gray)">Controlar estoque (ex: bebidas, insumos)</div></div></label><label style="display:flex;align-items:center;gap:10px;cursor:pointer"><input type="radio" name="mi-stock-type" value="unlimited" ${isUnlimited?'checked':''} onchange="toggleMenuStockInput(false)" style="width:18px;height:18px;cursor:pointer"><div><div style="font-weight:700;color:var(--dark)">Estoque Ilimitado</div><div style="font-size:12px;color:var(--gray)">Sem controle de quantidade (ex: lanches sob demanda)</div></div></label></div></div>
+<div id="mi-stock-limited-wrap" style="${isUnlimited?'display:none':''}">
 <div class="form-row">
 <div class="form-group"><label>Estoque Inicial</label><input type="number" id="mi-stock" class="form-control" value="${item?.stock||0}" min="0"></div>
 <div class="form-group"><label>Estoque Mínimo</label><input type="number" id="mi-minstock" class="form-control" value="${item?.minStock||5}" min="0"></div>
 </div>
+</div>
 <div class="form-group"><label>Custo (R$)</label><input type="number" id="mi-cost" class="form-control" value="${item?.cost||0}" step="0.01" min="0"></div>
 <div class="form-group"><label>Descrição</label><textarea id="mi-desc" class="form-control" rows="2" placeholder="Ingredientes, detalhes...">${item?.description||''}</textarea></div>
 <div class="form-group"><label>Imagem (URL)</label><input type="text" id="mi-img" class="form-control" value="${item?.image||''}" placeholder="https://..."></div>
-<div class="form-group"><label>Ou enviar foto do computador / celular</label><input type="file" id="mi-img-file" accept="image/*" class="form-control" onchange="handleMenuItemImageUpload(event)"><div id="mi-img-preview" style="margin-top:8px">${item?.image?`<img src="${item.image}" style="width:100%;max-height:160px;object-fit:contain;border-radius:8px">`:''}</div></div>`,
+<p style="font-size:11px;color:var(--gray);margin-top:-8px;margin-bottom:8px"><i class="fa-solid fa-circle-info"></i> Use uma imagem <strong>quadrada (proporção 1:1)</strong> — ela aparece em destaque no cardápio online.</p>
+<div class="form-group"><label>Ou enviar foto do computador / celular</label><input type="file" id="mi-img-file" accept="image/*" class="form-control" onchange="handleMenuItemImageUpload(event)"><div id="mi-img-preview" style="margin-top:8px">${item?.image?`<img src="${item.image}" style="width:100%;max-height:160px;object-fit:contain;border-radius:8px">`:''}</div></div>
+${variantOptionsEditorHtml('mi', item)}`,
 `<button class="btn btn-ghost" onclick="closeModal()">Cancelar</button><button class="btn btn-primary" onclick="saveMenuItem('${iid||''}')"><i class="fa-solid fa-save"></i> Salvar</button>`,
 true
 );
 }
+function toggleMenuStockInput(show) { const wrap = document.getElementById('mi-stock-limited-wrap'); if (wrap) wrap.style.display = show ? 'block' : 'none'; }
 async function saveMenuItem(iid) {
-const name=document.getElementById('mi-name').value.trim(), price=parseFloat(document.getElementById('mi-price').value)||0, cat=document.getElementById('mi-cat').value.trim(), desc=document.getElementById('mi-desc').value.trim(), img=document.getElementById('mi-img').value.trim(), stock=parseInt(document.getElementById('mi-stock').value)||0, minStock=parseInt(document.getElementById('mi-minstock').value)||5, cost=parseFloat(document.getElementById('mi-cost').value)||0;
+const name=document.getElementById('mi-name').value.trim(), price=parseFloat(document.getElementById('mi-price').value)||0, cat=document.getElementById('mi-cat').value.trim(), desc=document.getElementById('mi-desc').value.trim(), img=document.getElementById('mi-img').value.trim(), cost=parseFloat(document.getElementById('mi-cost').value)||0;
+const stockType=document.querySelector('input[name="mi-stock-type"]:checked')?.value;
+const stock=stockType==='unlimited'?999999:(parseInt(document.getElementById('mi-stock').value)||0);
+const minStock=stockType==='unlimited'?0:(parseInt(document.getElementById('mi-minstock').value)||5);
+const variantData = collectVariantData('mi', price);
 if (!name||!price) { showToast('Nome e valor são obrigatórios','warning'); return; }
 if (currentCompany.plan === 'trial' && (currentCompany.menuItems || []).length >= 20 && !iid) {
 showToast('Limite de 20 produtos atingido no plano Trial. Faça o upgrade!','warning');
@@ -3318,8 +3572,8 @@ return;
 }
 const c = currentCompany;
 c.menuItems = c.menuItems||[];
-if (iid) { const i=c.menuItems.find(i=>i.id===iid); if(i){i.name=name;i.price=price;i.category=cat;i.description=desc;i.image=img;i.stock=stock;i.minStock=minStock;i.cost=cost;} }
-else { c.menuItems.push({id:genId(),name,price,category:cat,description:desc,image:img,stock,minStock,cost,createdAt:new Date().toISOString(),additionals:[]}); }
+if (iid) { const i=c.menuItems.find(i=>i.id===iid); if(i){i.name=name;i.price=price;i.category=cat;i.description=desc;i.image=img;i.stock=stock;i.minStock=minStock;i.cost=cost;i.stockUnlimited=stockType==='unlimited';i.sizes=variantData.sizes;i.hasBorda=variantData.hasBorda;i.bordaOptions=variantData.bordaOptions;i.flavors=variantData.flavors;} }
+else { c.menuItems.push({id:genId(),name,price,category:cat,description:desc,image:img,stock,minStock,cost,createdAt:new Date().toISOString(),additionals:[],stockUnlimited:stockType==='unlimited',sizes:variantData.sizes,hasBorda:variantData.hasBorda,bordaOptions:variantData.bordaOptions,flavors:variantData.flavors}); }
 showLoading('Salvando...');
 try { await db.collection('companies').doc(currentCompanyId).update({menuItems:c.menuItems}); hideLoading(); closeModal(); renderMenu(); renderPDV(); renderStock(); showToast(iid?'Item atualizado!':'Item adicionado!','success'); }
 catch(e) { hideLoading(); showToast('Erro: '+e.message,'danger'); }
@@ -5589,20 +5843,53 @@ let filtered = pubActiveCat === 'Todos' ? items : items.filter(p => p.category =
 const q = (pubSearchTerm||'').toLowerCase().trim();
 if (q) filtered = filtered.filter(p => p.name.toLowerCase().includes(q) || String(p._num) === q);
 const grid = document.getElementById('pub-items');
-if (!filtered.length) { grid.innerHTML = '<div style="grid-column:1/-1;text-align:center;padding:40px;color:var(--gray)">Nenhum item encontrado</div>'; return; }
-grid.innerHTML = filtered.map(p => {
+grid.style.display = 'block';
+grid.style.gridTemplateColumns = 'none';
+if (!filtered.length) { grid.innerHTML = '<div style="text-align:center;padding:40px;color:var(--gray)">Nenhum item encontrado</div>'; return; }
+const getPubRows = (p) => {
 const oos = (p.stock || 0) <= 0;
-const isBebida = (p.category||'').trim().toLowerCase() === 'bebidas';
-return `<div class="pub-item ${oos?'out-of-stock':''}" style="position:relative" onclick="${oos ? "showToast('Esgotado','warning')" : (isBebida ? `quickAddPubCart('${p.id}')` : `showPubItemModal('${p.id}')`)}">
-<span style="position:absolute;top:6px;left:6px;background:var(--primary);color:#fff;font-size:11px;font-weight:800;padding:2px 8px;border-radius:10px;z-index:1">#${p._num}</span>
-${p.image ? `<img src="${p.image}">` : `<div class="pub-item-no-img">${getCategoryEmoji(p.category)}</div>`}
-<div class="pub-item-body">
-<div class="pub-item-name">${p.name}</div>
-<div class="pub-item-desc">${p.description || ''}</div>
-<div class="pub-item-price">${fmt(p.price)}</div>
-${oos ? '<div style="color:var(--danger);font-size:11px;font-weight:700">Esgotado</div>' : ''}
-</div>
+const flavors = normFlavors(p.flavors);
+const isBebida = isDrinkCategory(p.category);
+const hasVariants = productHasVariants(p);
+if (flavors.length) {
+return flavors.map((f,fi) => ({
+num: p._num, name: f.name, desc: p.description||'', image: p.image, oos,
+sizes: (f.sizes&&f.sizes.length) ? f.sizes : [{name:'Único', price: p.price}],
+click: oos ? "showToast('Esgotado','warning')" : `showPubItemModal('${p.id}', ${fi})`
+}));
+}
+return [{
+num: p._num, name: p.name, desc: p.description||'', image: p.image, oos,
+sizes: (p.sizes&&p.sizes.length>1) ? p.sizes : [{name:'Único', price: p.price}],
+click: oos ? "showToast('Esgotado','warning')" : ((isBebida && !hasVariants) ? `quickAddPubCart('${p.id}')` : `showPubItemModal('${p.id}')`)
+}];
+};
+const pubCatTableHtml = (catItems) => {
+const rows = catItems.flatMap(getPubRows);
+if (!rows.length) return '';
+const maxCols = Math.min(4, Math.max(...rows.map(r=>r.sizes.length), 1));
+const headerSizes = (rows.find(r=>r.sizes.length===maxCols) || rows[0]).sizes;
+const colsTemplate = `92px minmax(0,2fr) repeat(${maxCols}, minmax(70px,1fr))`;
+const headerRow = `<div style="display:contents">
+<div></div><div></div>
+${Array.from({length:maxCols}).map((_,j)=>`<div style="text-align:center">${headerSizes[j]?`<span style="display:inline-block;background:#cdeef2;color:var(--dark);font-weight:800;font-size:12px;padding:4px 10px;border-radius:14px;white-space:nowrap">${escHtml(headerSizes[j].name)}</span>`:''}</div>`).join('')}
 </div>`;
+const itemRows = rows.map(r => `<div style="display:contents" onclick="${r.click}">
+<div style="${r.oos?'opacity:.5':'cursor:pointer'}">${r.image ? `<img src="${r.image}" style="width:88px;height:88px;object-fit:cover;border-radius:10px;border:1px solid var(--border);display:block">` : `<div style="width:88px;height:88px;border-radius:10px;border:2px dashed var(--border);display:flex;align-items:center;justify-content:center;color:var(--gray);font-size:11px;text-align:center;font-weight:700">imagem</div>`}</div>
+<div style="${r.oos?'opacity:.5':'cursor:pointer'}"><div style="font-weight:800;font-size:14px;color:var(--dark)">#${r.num} ${escHtml(r.name)}</div>${r.desc?`<div style="font-size:11px;color:var(--gray);margin-top:2px">${escHtml(r.desc)}</div>`:''}${r.oos?'<div style="color:var(--danger);font-size:11px;font-weight:700;margin-top:2px">Esgotado</div>':''}</div>
+${Array.from({length:maxCols}).map((_,j)=>`<div style="text-align:center;${r.oos?'opacity:.5':'cursor:pointer'}">${r.sizes[j]?`<span style="font-weight:800;font-size:15px;color:var(--dark)">${fmt(r.sizes[j].price)}</span>`:''}</div>`).join('')}
+</div>`).join('');
+return `<div style="display:grid;grid-template-columns:${colsTemplate};gap:8px 10px;align-items:center;margin-bottom:22px">${headerRow}${itemRows}</div>`;
+};
+const catPillHtml = (cat) => `<div style="display:inline-block;background:#cdeef2;color:var(--dark);font-weight:900;font-size:15px;padding:5px 16px;border-radius:16px;margin-bottom:10px">${escHtml(cat)}</div>`;
+if (pubActiveCat !== 'Todos') {
+grid.innerHTML = catPillHtml(pubActiveCat) + pubCatTableHtml(filtered);
+return;
+}
+const catsOrder = [...new Set(filtered.map(p=>p.category||'Outros'))];
+grid.innerHTML = catsOrder.map(cat => {
+const catItems = filtered.filter(p => (p.category||'Outros') === cat);
+return `<div>${catPillHtml(cat)}${pubCatTableHtml(catItems)}</div>`;
 }).join('');
 }
 function setPubCat(cat) { pubActiveCat = cat; renderPublicMenu(); }
@@ -5617,23 +5904,24 @@ else pubCart.push({ id: iid, name: p.name, price: p.price, qty: 1, additionals: 
 updatePubCartCount();
 showToast('Adicionado ao carrinho!', 'success');
 }
-function showPubItemModal(iid) {
+function showPubItemModal(iid, presetFlavorIdx) {
 const p = (pubCompany.menuItems || []).find(x => x.id === iid);
 if (!p) return;
-const globalAdds = pubCompany.globalAdditionals || [];
-const addsHtml = globalAdds.map(a => `
+const catAdds = getCategoryAdditionals(pubCompany, p.category);
+const addsHtml = catAdds.map(a => `
 <div class="flex items-center justify-between" style="padding:8px 0;border-bottom:1px solid #f1f5f9">
 <label style="display:flex;align-items:center;gap:8px;cursor:pointer;flex:1">
-<input type="checkbox" class="pub-add-check" data-id="${a.id}" data-name="${a.name}" data-price="${a.price}" style="width:16px;height:16px">
-<span style="font-size:13px;font-weight:600">${a.name}</span>
+<input type="checkbox" class="pub-add-check" data-id="${a.id}" data-name="${a.name}" data-price="${a.price}" data-is-free="${a.isFree||false}" onchange="refreshVariantPrice()" style="width:16px;height:16px">
+<span style="font-size:13px;font-weight:600">${a.name}${a.isFree?' <span style="color:var(--gray);font-size:11px">(sem custo)</span>':''}</span>
 </label>
-<span style="color:var(--primary);font-weight:700;font-size:13px">+ ${fmt(a.price)}</span>
+<span style="color:${a.isFree?'var(--gray)':'var(--primary)'};font-weight:700;font-size:13px">${a.isFree?'Grátis':'+ '+fmt(a.price)}</span>
 </div>
 `).join('');
 showModal(`<i class="fa-solid fa-utensils"></i> ${p.name}`,
-`<div style="font-size:22px;font-weight:900;color:var(--primary);margin-bottom:12px">${fmt(p.price)}</div>
+`<div id="var-price-display" style="font-size:22px;font-weight:900;color:var(--primary);margin-bottom:12px">${fmt(getInitialVariantPrice(p, presetFlavorIdx))}</div>
 ${p.description ? `<div style="font-size:13px;color:var(--gray);margin-bottom:12px">${p.description}</div>` : ''}
-${globalAdds.length ? `<div style="margin-bottom:12px"><div style="font-size:12px;font-weight:700;color:var(--gray);text-transform:uppercase;margin-bottom:8px">Adicionais</div>${addsHtml}</div>` : ''}
+${variantPickerHtml(p, presetFlavorIdx)}
+${catAdds.length ? `<div style="margin-bottom:12px"><div style="font-size:12px;font-weight:700;color:var(--gray);text-transform:uppercase;margin-bottom:8px">Adicionais</div>${addsHtml}</div>` : ''}
 <div class="form-group"><label>Quantidade</label>
 <div class="flex items-center gap-3">
 <button class="btn btn-ghost btn-sm" onclick="document.getElementById('pub-qty').value=Math.max(1,+document.getElementById('pub-qty').value-1)">−</button>
@@ -5645,14 +5933,18 @@ ${globalAdds.length ? `<div style="margin-bottom:12px"><div style="font-size:12p
 }
 function confirmPubAddCart(iid, basePrice) {
 const qty = parseInt(document.getElementById('pub-qty').value) || 1;
-const selected = [...document.querySelectorAll('.pub-add-check:checked')].map(cb => ({ id: cb.dataset.id, name: cb.dataset.name, price: parseFloat(cb.dataset.price) || 0 }));
-const addPrice = selected.reduce((s, a) => s + a.price, 0);
+const selected = [...document.querySelectorAll('.pub-add-check:checked')].map(cb => ({ id: cb.dataset.id, name: cb.dataset.name, price: parseFloat(cb.dataset.price) || 0, isFree: cb.dataset.isFree==='true' }));
+const addPrice = selected.filter(a=>!a.isFree).reduce((s, a) => s + a.price, 0);
 const p = (pubCompany.menuItems || []).find(x => x.id === iid);
-const name = selected.length ? `${p.name} (+${selected.map(a=>a.name).join(', ')})` : p.name;
-const sigKey = iid + '|' + selected.map(a=>a.id).sort().join(',');
+const variantInfo = productHasVariants(p) ? getSelectedVariantInfo(p) : { price: basePrice, label:'' };
+const nameParts = [p.name];
+if (variantInfo.label) nameParts.push(`(${variantInfo.label})`);
+if (selected.length) nameParts.push(`(+${selected.map(a=>a.name).join(', ')})`);
+const name = nameParts.join(' ');
+const sigKey = iid + '|' + (variantInfo.sizeName||'') + '|' + (variantInfo.bordaName||'') + '|' + (variantInfo.flavor||'') + '|' + selected.map(a=>a.id).sort().join(',');
 const existing = pubCart.find(i => i._sigKey === sigKey);
 if (existing) existing.qty += qty;
-else pubCart.push({ id: iid, name, price: basePrice + addPrice, qty, additionals: selected, _sigKey: sigKey });
+else pubCart.push({ id: iid, name, price: variantInfo.price + addPrice, qty, additionals: selected, _sigKey: sigKey });
 closeModal();
 updatePubCartCount();
 showToast('Adicionado ao carrinho!', 'success');
@@ -5775,7 +6067,7 @@ ${pubAppliedCoupon ? `<button class="btn btn-ghost" onclick="removePubCoupon()">
     </select>
 </div>
 <div class="form-group" id="pub-pickup-pay-group" style="display:none"><label>Forma de Pagamento na Retirada *</label>
-    <select id="pub-order-pickup-pay" class="form-control">
+    <select id="pub-order-pickup-pay" class="form-control" onchange="handlePubPaymentChange()">
         <option value="">Selecione</option>
         <option value="dinheiro">Dinheiro</option>
         <option value="cartao">Cartão</option>
@@ -5835,7 +6127,9 @@ function handlePubPaymentChange() {
     if (totalEl) totalEl.textContent = fmt(total);
 
     // 4. Mostrar/Ocultar caixa de Troco e recalcular
-    if (pay === 'dinheiro') {
+    const pickupPayVal = document.getElementById('pub-order-pickup-pay')?.value;
+    const needsTroco = pay === 'dinheiro' || (pay === 'vem-buscar' && pickupPayVal === 'dinheiro');
+    if (needsTroco) {
         if (trocoBox) trocoBox.style.display = 'block';
         calcPubTroco(total); // Recalcula o troco com o novo total (sem taxa se for buscar)
     } else {
@@ -5943,7 +6237,7 @@ async function placePubOrder() {
     let valorPago = total;
     let troco = 0;
     
-    if (pay === 'dinheiro') {
+    if (pay === 'dinheiro' || (pay === 'vem-buscar' && pickupPay === 'dinheiro')) {
         valorPago = parseFloat(document.getElementById('pub-troco-input').value) || total;
         troco = Math.max(0, valorPago - total);
         if (valorPago < total) {
@@ -5955,7 +6249,7 @@ async function placePubOrder() {
     showLoading('Enviando pedido...');
     try {
         const now = new Date();
-        const osNum = genOSNumber();
+        const osNum = await getNextOSNumber(pubCompanyId, pubCompany);
         const orderRef = await db.collection('orders').add({
             companyId: pubCompanyId,
             customerId: guestId,
