@@ -1240,6 +1240,41 @@ let pendingCartSplit = [];
 // UTILITY
 // ============================================================
 function genId() { return Date.now().toString(36) + Math.random().toString(36).slice(2,7); }
+function compressImageToDataUrl(file, callback, opts) {
+    const maxW = (opts && opts.maxW) || 1000;
+    let quality = (opts && opts.quality) || 0.85;
+    const maxBytes = (opts && opts.maxBytes) || 700000;
+    const reader = new FileReader();
+    reader.onload = function(e) {
+        const img = new Image();
+        img.onload = function() {
+            let w = img.width, h = img.height;
+            const scale = Math.min(1, maxW / w);
+            w = Math.max(1, Math.round(w * scale));
+            h = Math.max(1, Math.round(h * scale));
+            function render(width, height, q) {
+                const canvas = document.createElement('canvas');
+                canvas.width = width; canvas.height = height;
+                const ctx = canvas.getContext('2d');
+                ctx.drawImage(img, 0, 0, width, height);
+                return canvas.toDataURL('image/jpeg', q);
+            }
+            let dataUrl = render(w, h, quality);
+            let attempts = 0;
+            while (dataUrl.length > maxBytes && attempts < 8) {
+                if (quality > 0.4) { quality = Math.max(0.4, quality - 0.15); }
+                else { w = Math.max(200, Math.round(w * 0.8)); h = Math.max(200, Math.round(h * 0.8)); }
+                dataUrl = render(w, h, quality);
+                attempts++;
+            }
+            callback(dataUrl);
+        };
+        img.onerror = function() { showToast('Não foi possível ler essa imagem. Tente outro arquivo.', 'danger'); };
+        img.src = e.target.result;
+    };
+    reader.onerror = function() { showToast('Erro ao carregar o arquivo de imagem.', 'danger'); };
+    reader.readAsDataURL(file);
+}
 function genOSNumber() {
 const now = new Date();
 const dd = String(now.getDate()).padStart(2,'0');
@@ -3303,23 +3338,9 @@ function handleAdminChatImage(event, chatId) {
     const file = event.target.files[0];
     if (!file) return;
     if (!file.type.startsWith('image/')) { showToast('Selecione uma imagem válida','warning'); event.target.value=''; return; }
-    const reader = new FileReader();
-    reader.onload = function(e) {
-        const img = new Image();
-        img.onload = function() {
-            const maxW = 700;
-            const scale = Math.min(1, maxW / img.width);
-            const canvas = document.createElement('canvas');
-            canvas.width = img.width * scale;
-            canvas.height = img.height * scale;
-            const ctx = canvas.getContext('2d');
-            ctx.drawImage(img, 0, 0, canvas.width, canvas.height);
-            const dataUrl = canvas.toDataURL('image/jpeg', 0.6);
-            sendAdminChatPayload(chatId, '', dataUrl);
-        };
-        img.src = e.target.result;
-    };
-    reader.readAsDataURL(file);
+    compressImageToDataUrl(file, function(dataUrl) {
+        sendAdminChatPayload(chatId, '', dataUrl);
+    }, { maxW: 900, quality: 0.75, maxBytes: 600000 });
     event.target.value = '';
 }
 
@@ -3396,54 +3417,26 @@ function handleMenuItemImageUpload(event) {
     const file = event.target.files[0];
     if (!file) return;
     if (!file.type.startsWith('image/')) { showToast('Selecione uma imagem válida','warning'); event.target.value=''; return; }
-    const reader = new FileReader();
-    reader.onload = function(e) {
-        const img = new Image();
-        img.onload = function() {
-            const maxW = 800;
-            const scale = Math.min(1, maxW / img.width);
-            const canvas = document.createElement('canvas');
-            canvas.width = img.width * scale;
-            canvas.height = img.height * scale;
-            const ctx = canvas.getContext('2d');
-            ctx.drawImage(img, 0, 0, canvas.width, canvas.height);
-            const dataUrl = canvas.toDataURL('image/jpeg', 0.8);
-            const input = document.getElementById('mi-img');
-            if (input) input.value = dataUrl;
-            const prev = document.getElementById('mi-img-preview');
-            if (prev) prev.innerHTML = '<img src="'+dataUrl+'" style="width:100%;max-height:160px;object-fit:contain;border-radius:8px">';
-            showToast('Foto carregada!','success');
-        };
-        img.src = e.target.result;
-    };
-    reader.readAsDataURL(file);
+    compressImageToDataUrl(file, function(dataUrl) {
+        const input = document.getElementById('mi-img');
+        if (input) input.value = dataUrl;
+        const prev = document.getElementById('mi-img-preview');
+        if (prev) prev.innerHTML = '<img src="'+dataUrl+'" style="width:100%;max-height:160px;object-fit:contain;border-radius:8px">';
+        showToast('Foto carregada!','success');
+    }, { maxW: 1200, quality: 0.85, maxBytes: 800000 });
 }
 function handleStockImageUpload(event) {
     const file = event.target.files[0];
     if (!file) return;
     if (!file.type.startsWith('image/')) { showToast('Selecione uma imagem válida','warning'); event.target.value=''; return; }
     const prefix = event.target.id.replace('-img-file','');
-    const reader = new FileReader();
-    reader.onload = function(e) {
-        const img = new Image();
-        img.onload = function() {
-            const maxW = 800;
-            const scale = Math.min(1, maxW / img.width);
-            const canvas = document.createElement('canvas');
-            canvas.width = img.width * scale;
-            canvas.height = img.height * scale;
-            const ctx = canvas.getContext('2d');
-            ctx.drawImage(img, 0, 0, canvas.width, canvas.height);
-            const dataUrl = canvas.toDataURL('image/jpeg', 0.8);
+    compressImageToDataUrl(file, function(dataUrl) {
             const input = document.getElementById(prefix + '-img');
             if (input) input.value = dataUrl;
             const prev = document.getElementById(prefix + '-img-preview');
             if (prev) prev.innerHTML = '<img src="'+dataUrl+'" style="width:100%;max-height:160px;object-fit:contain;border-radius:8px">';
             showToast('Foto carregada!','success');
-        };
-        img.src = e.target.result;
-    };
-    reader.readAsDataURL(file);
+    }, { maxW: 1200, quality: 0.85, maxBytes: 800000 });
 }
 function sizeRowHtml(prefix, s) { return `<div class="variant-row" style="display:flex;gap:8px;margin-bottom:6px"><input type="text" class="form-control ${prefix}-size-name" value="${(s&&s.name||'').replace(/"/g,'&quot;')}" placeholder="Nome do tamanho (ex: Grande)" style="flex:2"><input type="number" class="form-control ${prefix}-size-price" value="${s&&s.price!=null?s.price:0}" step="0.01" min="0" placeholder="Preço (R$)" style="flex:1"><button type="button" class="btn btn-ghost btn-sm" onclick="this.parentElement.remove()"><i class="fa-solid fa-trash"></i></button></div>`; }
 function bordaRowHtml(prefix, b) { return `<div class="variant-row" style="display:flex;gap:8px;margin-bottom:6px"><input type="text" class="form-control ${prefix}-borda-name" value="${(b&&b.name||'').replace(/"/g,'&quot;')}" placeholder="Nome da borda (ex: Catupiry)" style="flex:2"><input type="number" class="form-control ${prefix}-borda-price" value="${b&&b.price!=null?b.price:0}" step="0.01" min="0" placeholder="Preço adicional (R$)" style="flex:1"><button type="button" class="btn btn-ghost btn-sm" onclick="this.parentElement.remove()"><i class="fa-solid fa-trash"></i></button></div>`; }
@@ -5788,23 +5781,9 @@ function handlePubChatImage(event) {
     const file = event.target.files[0];
     if (!file) return;
     if (!file.type.startsWith('image/')) { showToast('Selecione uma imagem válida','warning'); event.target.value=''; return; }
-    const reader = new FileReader();
-    reader.onload = function(e) {
-        const img = new Image();
-        img.onload = function() {
-            const maxW = 700;
-            const scale = Math.min(1, maxW / img.width);
-            const canvas = document.createElement('canvas');
-            canvas.width = img.width * scale;
-            canvas.height = img.height * scale;
-            const ctx = canvas.getContext('2d');
-            ctx.drawImage(img, 0, 0, canvas.width, canvas.height);
-            const dataUrl = canvas.toDataURL('image/jpeg', 0.6);
-            sendPubChatPayload('', dataUrl);
-        };
-        img.src = e.target.result;
-    };
-    reader.readAsDataURL(file);
+    compressImageToDataUrl(file, function(dataUrl) {
+        sendPubChatPayload('', dataUrl);
+    }, { maxW: 900, quality: 0.75, maxBytes: 600000 });
     event.target.value = '';
 }
 async function showPublicMenu(cid) {
