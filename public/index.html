@@ -1344,9 +1344,28 @@ async function getNextOSNumber(companyId, companyObj) {
     const dd = String(now.getDate()).padStart(2,'0');
     const mm = String(now.getMonth()+1).padStart(2,'0');
     const yyyy = now.getFullYear();
-    const next = (parseInt(companyObj?.osSeq) || 0) + 1;
+    const counterRef = db.collection('companies').doc(companyId);
+    let next;
+    try {
+        // Transação atômica: lê o último número da OS direto do Firestore e incrementa em uma única operação.
+        // Isso impede a duplicação quando dois pedidos (com ou sem cadastro) chegam quase ao mesmo tempo,
+        // pois o Firestore serializa todas as transações concorrentes e garante um número único por vez.
+        next = await db.runTransaction(async (transaction) => {
+            const doc = await transaction.get(counterRef);
+            const currentSeq = parseInt(doc.data()?.osSeq) || 0;
+            const newSeq = currentSeq + 1;
+            transaction.update(counterRef, { osSeq: newSeq });
+            return newSeq;
+        });
+    } catch (e) {
+        console.error('Erro na transação ao gerar número sequencial da OS:', e);
+        // Fallback caso a transação falhe: usa o valor local em memória somando +1 e tenta atualizar o Firestore.
+        next = (parseInt(companyObj?.osSeq) || 0) + 1;
+        try { await counterRef.update({ osSeq: next }); } catch(e2) { console.error('Erro no fallback ao atualizar osSeq:', e2); }
+    }
+    // Sincroniza o objeto em memória com o número que foi efetivamente persistido,
+    // para que chamadas subsequentes na mesma sessão partam do número correto.
     if (companyObj) companyObj.osSeq = next;
-    try { await db.collection('companies').doc(companyId).update({ osSeq: next }); } catch(e) { console.error('Erro ao gerar numero sequencial da OS:', e); }
     return `OS - ${dd}/${mm}/${yyyy} - ${String(next).padStart(5,'0')}`;
 }
 function fmt(v) { return 'R$ ' + Number(v||0).toLocaleString('pt-BR',{minimumFractionDigits:2,maximumFractionDigits:2}); }
