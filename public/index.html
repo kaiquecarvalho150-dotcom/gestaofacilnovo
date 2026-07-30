@@ -2372,10 +2372,10 @@ function categoryDatalistHtml() { const c = currentCompany||{}; const cats = [..
 function escHtml(v) { return (v==null?'':String(v)).replace(/</g,'&lt;').replace(/>/g,'&gt;'); }
 function productHasVariants(product) { return !!product && ((product.sizes&&product.sizes.length>1) || product.hasBorda || (normFlavors(product.flavors).length>0)); }
 function sizeRadiosHtml(sizes) {
-    return `<div style="margin-bottom:14px"><div style="font-size:12px;font-weight:700;color:var(--gray);text-transform:uppercase;letter-spacing:.3px;margin-bottom:8px">Tamanho</div>${sizes.map((s,i)=>`<label style="display:flex;align-items:center;justify-content:space-between;padding:8px 0;border-bottom:1px solid #f1f5f9;cursor:pointer"><span style="display:flex;align-items:center;gap:8px;font-weight:600"><input type="radio" name="var-size" value="${i}" ${i===0?'checked':''} class="var-size-radio" onchange="refreshVariantPrice()" style="width:16px;height:16px">${escHtml(s.name)}${s.slices?` <span style="color:var(--gray);font-weight:500;font-size:12px">(${s.slices} fatias)</span>`:''}</span><span style="color:var(--primary);font-weight:700">${fmt(s.price)}</span></label>`).join('')}</div>`;
+    return `<div style="margin-bottom:14px"><div style="font-size:12px;font-weight:700;color:var(--gray);text-transform:uppercase;letter-spacing:.3px;margin-bottom:8px">Tamanho</div>${sizes.map((s,i)=>`<label style="display:flex;align-items:center;justify-content:space-between;padding:8px 0;border-bottom:1px solid #f1f5f9;cursor:pointer"><span style="display:flex;align-items:center;gap:8px;font-weight:600"><input type="radio" name="var-size" value="${i}" ${i===0?'checked':''} class="var-size-radio" onchange="onVarSizeChange()" style="width:16px;height:16px">${escHtml(s.name)}${s.slices?` <span style="color:var(--gray);font-weight:500;font-size:12px">(${s.slices} fatias)</span>`:''}</span><span style="color:var(--primary);font-weight:700">${fmt(s.price)}</span></label>`).join('')}</div>`;
 }
 function bordaRadiosHtml(bordaOptions) {
-    return `<div style="margin-bottom:14px"><div style="font-size:12px;font-weight:700;color:var(--gray);text-transform:uppercase;letter-spacing:.3px;margin-bottom:8px">Borda <span style="font-weight:500;color:var(--gray);text-transform:none">(escolha até 1 sabor de borda)</span></div><label style="display:flex;align-items:center;justify-content:space-between;padding:8px 0;border-bottom:1px solid #f1f5f9;cursor:pointer"><span style="display:flex;align-items:center;gap:8px;font-weight:600"><input type="radio" name="var-borda" value="-1" checked class="var-borda-radio" onchange="refreshVariantPrice()" style="width:16px;height:16px">Sem borda</span><span style="color:var(--gray)">Grátis</span></label>${bordaOptions.map((b,i)=>`<label style="display:flex;align-items:center;justify-content:space-between;padding:8px 0;border-bottom:1px solid #f1f5f9;cursor:pointer"><span style="display:flex;align-items:center;gap:8px;font-weight:600"><input type="radio" name="var-borda" value="${i}" class="var-borda-radio" onchange="refreshVariantPrice()" style="width:16px;height:16px">${escHtml(b.name)}</span><span style="color:var(--primary);font-weight:700">+ ${fmt(b.price)}</span></label>`).join('')}</div>`;
+    return `<div style="margin-bottom:14px"><div style="font-size:12px;font-weight:700;color:var(--gray);text-transform:uppercase;letter-spacing:.3px;margin-bottom:8px">Borda <span style="font-weight:500;color:var(--gray);text-transform:none">(escolha até 1 sabor de borda)</span></div><label style="display:flex;align-items:center;justify-content:space-between;padding:8px 0;border-bottom:1px solid #f1f5f9;cursor:pointer"><span style="display:flex;align-items:center;gap:8px;font-weight:600"><input type="radio" name="var-borda" value="-1" checked class="var-borda-radio" onchange="refreshVariantPrice()" style="width:16px;height:16px">Sem borda</span><span style="color:var(--gray)">Grátis</span></label><div id="var-borda-list">${bordaOptions.map((b,i)=>`<label data-borda-name="${escHtml(b.name)}" style="display:flex;align-items:center;justify-content:space-between;padding:8px 0;border-bottom:1px solid #f1f5f9;cursor:pointer"><span style="display:flex;align-items:center;gap:8px;font-weight:600"><input type="radio" name="var-borda" value="${i}" class="var-borda-radio" onchange="refreshVariantPrice()" style="width:16px;height:16px">${escHtml(b.name)}</span><span style="color:var(--primary);font-weight:700">+ ${fmt(b.price)}</span></label>`).join('')}</div></div>`;
 }
 let __activeVariantProduct = null;
 function variantPickerHtml(product, presetFlavorIdx) {
@@ -2389,10 +2389,12 @@ function variantPickerHtml(product, presetFlavorIdx) {
             ? `<input type="hidden" id="var-flavor" value="${initIdx}">`
             : `<div style="margin-bottom:14px"><div style="font-size:12px;font-weight:700;color:var(--gray);text-transform:uppercase;letter-spacing:.3px;margin-bottom:8px">Sabor</div><select id="var-flavor" class="form-control" onchange="onVarFlavorChange()">${flavors.map((f,i)=>`<option value="${i}" ${i===initIdx?'selected':''}>${escHtml(f.name)}</option>`).join('')}</select></div>`;
         const sizesWrap = `<div id="var-flavor-sizes-wrap">${sizeRadiosHtml(firstSizes)}</div>`;
+        setTimeout(filterBordaListBySize, 0);
         return flavorsHtml + sizesWrap + bordaHtml;
     }
     const sizes = (product.sizes&&product.sizes.length) ? product.sizes : [{name:'Tamanho Único', price: product.price}];
     const sizesHtml = sizes.length>1 ? sizeRadiosHtml(sizes) : '';
+    setTimeout(filterBordaListBySize, 0);
     return sizesHtml + bordaHtml;
 }
 function onVarFlavorChange() {
@@ -2404,6 +2406,54 @@ function onVarFlavorChange() {
     const sizes = (flavor && flavor.sizes && flavor.sizes.length) ? flavor.sizes : [{name:'Único', price: product.price}];
     const wrap = document.getElementById('var-flavor-sizes-wrap');
     if (wrap) wrap.innerHTML = sizeRadiosHtml(sizes);
+    refreshVariantPrice();
+    filterBordaListBySize();
+}
+// Filtra as bordas para mostrar SOMENTE as que correspondem ao tamanho selecionado.
+// Garante que ao escolher 20 CM só apareçam bordas de 20 CM, ao escolher 27 CM só de 27 CM, etc.
+function normSizeToken(s) { return String(s||'').trim().toLowerCase().replace(/\s+/g,' '); }
+function isGenericSizeName(name) {
+    const n = normSizeToken(name);
+    return !n || n === 'tamanho único' || n === 'tamanho unico' || n === 'único' || n === 'unico';
+}
+function getCurrentSizeName() {
+    const product = __activeVariantProduct;
+    if (!product) return '';
+    const flavors = normFlavors(product.flavors);
+    let sizes;
+    if (flavors.length) {
+        const flavorSelectEl = document.getElementById('var-flavor');
+        const fIdx = parseInt(flavorSelectEl?.value)||0;
+        const flavor = flavors[fIdx];
+        sizes = (flavor && flavor.sizes && flavor.sizes.length) ? flavor.sizes : [{name:'Único', price: product.price}];
+    } else {
+        sizes = (product.sizes && product.sizes.length) ? product.sizes : [{name:'Tamanho Único', price: product.price}];
+    }
+    const sizeIdx = parseInt(document.querySelector('.var-size-radio:checked')?.value ?? 0);
+    return (sizes[sizeIdx] && sizes[sizeIdx].name) || sizes[0]?.name || '';
+}
+function filterBordaListBySize() {
+    const sizeName = normSizeToken(getCurrentSizeName());
+    const filtered = isGenericSizeName(sizeName) ? '' : sizeName;
+    const labels = document.querySelectorAll('#var-borda-list label[data-borda-name]');
+    labels.forEach(l => {
+        const bname = normSizeToken(l.getAttribute('data-borda-name'));
+        const match = !filtered || bname.endsWith(filtered);
+        l.style.display = match ? '' : 'none';
+    });
+}
+function onVarSizeChange() {
+    filterBordaListBySize();
+    // Se a borda atualmente marcada não bate com o tamanho novo, reseta para "Sem borda"
+    const checked = document.querySelector('input.var-borda-radio:checked');
+    if (checked && parseInt(checked.value) >= 0) {
+        const label = checked.closest('label[data-borda-name]');
+        const isNowHidden = label && label.style.display === 'none';
+        if (isNowHidden) {
+            const semBordaRadio = document.querySelector('input.var-borda-radio[value="-1"]');
+            if (semBordaRadio) semBordaRadio.checked = true;
+        }
+    }
     refreshVariantPrice();
 }
 function getSelectedVariantInfo(product) {
