@@ -1374,6 +1374,14 @@ function ymFromDate(d) { return `${d.getFullYear()}-${String(d.getMonth()+1).pad
 // Converte uma string "YYYY-MM-DD" (sem horário) em Date local, evitando o deslocamento de
 // fuso horário que ocorre com `new Date("YYYY-MM-DD")` (interpretado como UTC meia-noite)
 function parseLocalDateOnly(dateStr) { const [y,m,d] = (dateStr||'').split('-').map(Number); return new Date(y||1970, (m||1)-1, d||1); }
+// Retorna a data no fuso horário LOCAL do usuário como string "YYYY-MM-DD".
+// Diferente de `new Date().toISOString().slice(0,10)` (que usa UTC e, no Brasil UTC-3,
+// "vira o dia" às 21:00 horário de Brasília em vez de meia-noite), esta função só
+// muda de dia exatamente à meia-noite LOCAL — junto com o relógio real do usuário.
+function localDateStr(d) {
+    d = d || new Date();
+    return `${d.getFullYear()}-${String(d.getMonth()+1).padStart(2,'0')}-${String(d.getDate()).padStart(2,'0')}`;
+}
 function getDaysRemaining(c) {
 if (!c || !c.startDate) return 0;
 const elapsed = Math.floor((Date.now() - new Date(c.startDate)) / 86400000);
@@ -4423,7 +4431,7 @@ showModal('<i class="fa-solid fa-plus"></i> Registrar Despesa',
 <div class="form-group"><label>Valor (R$) *</label><input type="number" id="exp-amount" class="form-control" step="0.01" min="0"></div>
 <div class="form-group"><label>Categoria</label><select id="exp-cat" class="form-control"><option>Aluguel</option><option>Luz</option><option>Água</option><option>Internet</option><option>Salário</option><option>Fornecedor</option><option>Marketing</option><option>Outros</option></select></div>
 </div>
-<div class="form-group"><label>Data</label><input type="date" id="exp-date" class="form-control" value="${new Date().toISOString().split('T')[0]}"></div>`,
+<div class="form-group"><label>Data</label><input type="date" id="exp-date" class="form-control" value="${localDateStr()}"></div>`,
 `<button class="btn btn-ghost" onclick="closeModal()">Cancelar</button><button class="btn btn-primary" onclick="saveExpense()"><i class="fa-solid fa-save"></i> Salvar</button>`, false);
 }
 async function saveExpense() {
@@ -4499,7 +4507,7 @@ const c = currentCompany;
 const e = (c.employees||[]).find(x=>x.id===eid);
 if (!e) return;
 const pay = payId ? (e.payments||[]).find(p=>p.id===payId) : null;
-const today = new Date().toISOString().slice(0,10);
+const today = localDateStr();
 showModal(`<i class="fa-solid fa-money-bill-wave"></i> ${pay ? 'Editar' : 'Registrar'} Pagamento — ${e.name}`,
 `<div class="form-group"><label>Valor Pago (R$) *</label><input type="number" id="pay-amount" class="form-control" step="0.01" min="0" value="${pay?.amount || ''}"></div>
 <div class="form-group"><label>Data</label><input type="date" id="pay-date" class="form-control" value="${pay ? new Date(pay.date).toISOString().slice(0,10) : today}"></div>
@@ -4508,7 +4516,7 @@ showModal(`<i class="fa-solid fa-money-bill-wave"></i> ${pay ? 'Editar' : 'Regis
 }
 async function saveEmployeePayment(eid, payId) {
 const amount = parseFloat(document.getElementById('pay-amount').value) || 0;
-const date = document.getElementById('pay-date').value || new Date().toISOString().slice(0,10);
+const date = document.getElementById('pay-date').value || localDateStr();
 const note = document.getElementById('pay-note').value.trim();
 if (amount <= 0) { showToast('Informe um valor válido', 'warning'); return; }
 const c = currentCompany;
@@ -4726,8 +4734,8 @@ async function showMotoboyOrderSelector(mid) {
 const c = currentCompany;
 const m = (c.motoboys || []).find(x => x.id === mid);
 if (!m) return;
-const today = new Date().toISOString().slice(0,10);
-const firstDay = new Date(new Date().getFullYear(), new Date().getMonth(), 1).toISOString().slice(0,10);
+const today = localDateStr();
+const firstDay = localDateStr(new Date(new Date().getFullYear(), new Date().getMonth(), 1));
 showModal(`<i class="fa-solid fa-list-check"></i> Selecionar OS — ${m.name}`,
 `<div class="form-row">
 <div class="form-group"><label>Data Início</label><input type="date" id="mb-sel-start" class="form-control" value="${firstDay}"></div>
@@ -4835,7 +4843,7 @@ const c = currentCompany;
 const m = (c.motoboys || []).find(x => x.id === mid);
 if (!m) return;
 const trip = tripId ? (m.assignedOrders||[]).find(o => o.id === tripId && o.type === 'manual') : null;
-const today = new Date().toISOString().slice(0,10);
+const today = localDateStr();
 showModal(`<i class="fa-solid fa-route"></i> ${trip ? 'Editar' : 'Lançar'} Corrida Avulsa — ${m.name}`,
 `<div class="form-group"><label>Local de Coleta *</label><input type="text" id="mtrip-pickup" class="form-control" placeholder="Ex: Mercado Central" value="${trip?.pickupLocation || ''}"></div>
 <div class="form-group"><label>Local de Entrega *</label><input type="text" id="mtrip-dropoff" class="form-control" placeholder="Ex: Rua X, 123" value="${trip?.dropoffLocation || ''}"></div>
@@ -4851,7 +4859,7 @@ async function saveManualTrip(mid, tripId) {
 const pickupLocation = document.getElementById('mtrip-pickup').value.trim();
 const dropoffLocation = document.getElementById('mtrip-dropoff').value.trim();
 const value = parseFloat(document.getElementById('mtrip-value').value) || 0;
-const date = document.getElementById('mtrip-date').value || new Date().toISOString().slice(0,10);
+const date = document.getElementById('mtrip-date').value || localDateStr();
 const description = document.getElementById('mtrip-desc').value.trim();
 if (!pickupLocation || !dropoffLocation || value <= 0) { showToast('Preencha coleta, entrega e um valor válido', 'warning'); return; }
 const c = currentCompany;
@@ -4938,7 +4946,7 @@ try {
 const now = new Date();
 const expenseId = genId();
 c.expenses = c.expenses || [];
-c.expenses.push({ id: expenseId, description: `Pagamento Motoboy${m.type==='app'?' (Aplicativo)':''} - ${m.name} (${orders.length} corrida${orders.length!==1?'s':''})`, amount: total, category: 'Motoboy', date: now.toISOString().slice(0,10), yearMonth: ymFromDate(now), motoboyId: m.id, motoboyType: m.type });
+c.expenses.push({ id: expenseId, description: `Pagamento Motoboy${m.type==='app'?' (Aplicativo)':''} - ${m.name} (${orders.length} corrida${orders.length!==1?'s':''})`, amount: total, category: 'Motoboy', date: localDateStr(now), yearMonth: ymFromDate(now), motoboyId: m.id, motoboyType: m.type });
 m.paymentsHistory = m.paymentsHistory || [];
 m.paymentsHistory.push({ id: genId(), amount: total, date: now.toISOString(), ordersCount: orders.length, expenseId, items: JSON.parse(JSON.stringify(orders)) });
 m.assignedOrders = [];
@@ -4979,7 +4987,7 @@ if (!list.length) {
 el.innerHTML = '<div style="grid-column:1/-1;text-align:center;padding:60px;color:var(--gray)"><i class="fa-solid fa-hand-holding-dollar" style="font-size:48px;display:block;margin-bottom:12px;color:var(--border)"></i><h3>Nenhuma conta de fiado cadastrada</h3></div>';
 return;
 }
-const today = new Date().toISOString().slice(0,10);
+const today = localDateStr();
 el.innerHTML = list.map(cl => {
 const orders = cl.assignedOrders || [];
 const saldoDevedor = orders.reduce((s,o) => s + (o.valorCobrado || 0), 0);
@@ -5086,8 +5094,8 @@ async function showFiadoOrderSelector(cid) {
 const c = currentCompany;
 const cl = (c.fiadoClients || []).find(x => x.id === cid);
 if (!cl) return;
-const today = new Date().toISOString().slice(0,10);
-const firstDay = new Date(new Date().getFullYear(), new Date().getMonth(), 1).toISOString().slice(0,10);
+const today = localDateStr();
+const firstDay = localDateStr(new Date(new Date().getFullYear(), new Date().getMonth(), 1));
 showModal(`<i class="fa-solid fa-list-check"></i> Selecionar OS para Fiado — ${cl.name}`,
 `<div class="form-row">
 <div class="form-group"><label>Data Início</label><input type="date" id="fc-sel-start" class="form-control" value="${firstDay}"></div>
@@ -5386,8 +5394,8 @@ async function showLoyaltyOrderSelector(cid) {
   const cl = (c.loyaltyClients || []).find(x => x.id === cid);
   if (!cl) return;
   loyaltySelectorCid = cid;
-  const today = new Date().toISOString().slice(0,10);
-  const firstDay = new Date(new Date().getFullYear(), new Date().getMonth(), 1).toISOString().slice(0,10);
+  const today = localDateStr();
+  const firstDay = localDateStr(new Date(new Date().getFullYear(), new Date().getMonth(), 1));
   const usedIds = new Set((cl.pointsHistory || []).map(p => p.saleId));
   showModal(`<i class="fa-solid fa-list-check"></i> Selecionar OS — ${cl.name} (${cl.currentPoints || 0}/${cl.pointsGoal || 10} pontos)`,
     `<div class="form-row">
@@ -6700,8 +6708,7 @@ ${(o.deliveryTotal || 0) > 0 ? `
     }
 }
 async function showOrderHistoryModal() {
-    const today = new Date();
-    const todayStr = today.toISOString().split('T')[0];
+    const todayStr = localDateStr();
     
     showModal(
         '<i class="fa-solid fa-history"></i> Histórico de OS',
@@ -7740,7 +7747,7 @@ function showThirdPartySaleModal(tid) {
     showModal(`<i class="fa-solid fa-mobile-screen-button"></i> ${t ? 'Editar' : 'Lançar'} Venda de App Terceiro`,
     `<div class="form-row">
 <div class="form-group"><label>Plataforma *</label><select id="tps-platform" class="form-control" onchange="document.getElementById('tps-platform-other-wrap').style.display = this.value==='Outro' ? 'block' : 'none'">${THIRD_PARTY_PLATFORMS.map(p => `<option value="${p}" ${t?.platform===p?'selected':''}>${p}</option>`).join('')}</select></div>
-<div class="form-group"><label>Data</label><input type="date" id="tps-date" class="form-control" value="${t?.date || new Date().toISOString().slice(0,10)}"></div>
+<div class="form-group"><label>Data</label><input type="date" id="tps-date" class="form-control" value="${t?.date || localDateStr()}"></div>
 </div>
 <div class="form-group" id="tps-platform-other-wrap" style="display:${t?.platform==='Outro' ? 'block' : 'none'}"><label>Nome da Plataforma</label><input type="text" id="tps-platform-other" class="form-control" value="${t?.platformOther || ''}"></div>
 <div class="form-group"><label>Produtos Vendidos</label><div style="max-height:220px;overflow-y:auto;border:1px solid var(--border);border-radius:8px;padding:8px 12px">${itemsHtml}</div></div>
