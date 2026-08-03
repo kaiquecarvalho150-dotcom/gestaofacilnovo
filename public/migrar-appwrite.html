@@ -28,7 +28,7 @@ p{color:#475569;margin-bottom:20px;font-size:14px}
 <div class="card">
 <h1>🚚 Migrar Dados para Appwrite</h1>
 <p>Este script vai ler todos os dados do Firebase Firestore e copiar para o Appwrite.</p>
-<div class="warning">⚠ Importante: Nao feche esta pagina durante a migracao.</div>
+<div class="warning">⚠ Importante: Nao feche esta pagina durante a migracao. Pode levar alguns minutos.</div>
 
 <div class="stats">
 <div class="stat-card"><div class="stat-num" id="stat-lidos">0</div><div class="stat-label">Lidos</div></div>
@@ -100,6 +100,27 @@ function pct(n) {
   b.textContent=Math.round(n)+"%";
 }
 
+async function escreverDoc(nomeAW,id,data,tentativa) {
+  try {
+    await AWD.createDocument(AW_DB,nomeAW,id,data);
+    return true;
+  } catch(e) {
+    if(e.code===409||(e.message||'').indexOf("already exists")!==-1){
+      try {
+        await AWD.updateDocument(AW_DB,nomeAW,id,data);
+        return true;
+      } catch(e2){ return false; }
+    }
+    if((e.message||'').indexOf("Rate limit")!==-1 && tentativa<5){
+      var espera = Math.pow(2,tentativa+1)*2000; // 4s, 8s, 16s, 32s, 64s
+      log("⏳ rate limit, aguardando "+(espera/1000)+"s... (tentativa "+(tentativa+1)+")");
+      await new Promise(function(r){setTimeout(r,espera);});
+      return await escreverDoc(nomeAW,id,data,tentativa+1);
+    }
+    return false;
+  }
+}
+
 async function migrarColecao(nomeFB,nomeAW,basePct,bloco) {
   log('Lendo "'+nomeFB+'"...');
   var snap;
@@ -111,24 +132,14 @@ async function migrarColecao(nomeFB,nomeAW,basePct,bloco) {
 
   for(var i=0;i<docs.length;i++){
     var d=docs[i];
-    try {
-      await AWD.createDocument(AW_DB,nomeAW,d.id,d.data);
-      escritos++;
-    } catch(e){
-      if(e.code===409||e.message.indexOf("already exists")!==-1){
-        try {
-          await AWD.updateDocument(AW_DB,nomeAW,d.id,d.data);
-          escritos++;
-        } catch(e2){ erros++; }
-      } else { erros++; }
-    }
+    var ok = await escreverDoc(nomeAW,d.id,d.data,0);
+    if(ok) escritos++; else erros++;
     lidos++;
     stats();
     pct(basePct+((i+1)/docs.length)*bloco);
-    // Delay de 300ms entre cada documento para evitar rate limit
-    await new Promise(function(r){setTimeout(r,300);});
+    await new Promise(function(r){setTimeout(r,2000);});
   }
-  log('"'+nomeFB+'" concluida!','ok');
+  log('"'+(nomeFB)+'" concluida!','ok');
 }
 
 async function iniciar() {
@@ -148,36 +159,6 @@ async function iniciar() {
   btn.textContent="✓ Finalizado";
   document.getElementById("btn-limpar").style.display="inline";
   log("MIGRACAO CONCLUIDA! "+escritos+" escritos, "+erros+" erros.","ok");
-}
-
-async function limpar() {
-  if(!confirm("Apagar TODOS os dados do Appwrite?")) return;
-  if(!confirm("ULTIMA CHANCE!")) return;
-  var btn=document.getElementById("btn-limpar");
-  btn.disabled=true;btn.textContent="Limpando...";
-  for(var i=0;i<COLECOES.length;i++){
-    var aw=COLECOES[i].aw;
-    var cursor=null,total=0;
-    while(true){
-      var q=[Appwrite.Query.limit(100)];
-      if(cursor)q.push(Appwrite.Query.cursorAfter(cursor));
-      try{
-        var r=await AWD.listDocuments(AW_DB,aw,q);
-        if(!r.documents||r.documents.length===0)break;
-        for(var j=0;j<r.documents.length;j++){
-          await AWD.deleteDocument(AW_DB,aw,r.documents[j].$id);
-          total++;await new Promise(function(rr){setTimeout(rr,150);});
-        }
-        if(r.documents.length<100)break;
-        cursor=r.documents[r.documents.length-1].$id;
-      }catch(e){log("Erro: "+e.message,'err');break;}
-    }
-    log(total+" removidos de "+aw,'ok');
-  }
-  log("Appwrite limpo.","ok");
-  btn.textContent="Limpar Appwrite";btn.disabled=false;
-  document.getElementById("btn-migrar").disabled=false;
-  document.getElementById("btn-migrar").textContent="▶ Iniciar Migracao";
 }
 </script>
 </body>
