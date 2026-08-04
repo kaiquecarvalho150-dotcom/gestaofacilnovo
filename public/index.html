@@ -290,6 +290,8 @@ table tr:hover td{background:#fafbfc}
 .expense-cat{font-size:11px;color:var(--gray)}
 .expense-val{font-size:16px;font-weight:800;color:var(--danger)}
 .employees-grid{display:grid;grid-template-columns:repeat(auto-fill,minmax(280px,1fr));gap:16px}
+#employees-grid{grid-template-columns:1fr!important;display:block!important}
+#employees-grid .emp-card{margin-bottom:16px}
 .emp-card{background:#fff;border-radius:12px;padding:20px;border:1px solid var(--border);display:flex;gap:14px;align-items:flex-start;min-width:0}
 .emp-avatar{width:50px;height:50px;background:linear-gradient(135deg,var(--primary),var(--secondary));border-radius:50%;display:flex;align-items:center;justify-content:center;color:#fff;font-size:20px;font-weight:800;flex-shrink:0}
 .emp-name{font-size:15px;font-weight:700;color:var(--dark);margin-bottom:4px}
@@ -1080,6 +1082,7 @@ table th,table td{padding:7px 8px;font-size:11px}
 <div style="font-size:15px;font-weight:700"><i class="fa-solid fa-hand-holding-dollar"></i> Contas de Fiado</div>
 <button class="btn btn-primary" onclick="showFiadoClientModal()"><i class="fa-solid fa-plus"></i> Abrir Conta de Fiado</button>
 </div>
+<div id="fiados-total-summary"></div>
 <p style="color:var(--gray);font-size:13px;margin:-8px 0 12px">Área restrita ao dono da empresa. Cadastre clientes com conta de fiado, defina limite de compra e vencimento, e marque OS pagas para receber depois. A OS fica registrada aqui e só entra nos Relatórios quando você der baixa (marcar como recebido).</p>
 <div class="employees-grid" id="fiados-grid"></div>
 </div>
@@ -4517,6 +4520,7 @@ renderMotoboys();
 const c = currentCompany;
 const emps = c.employees || [];
 const el = document.getElementById('employees-grid');
+if (el) { el.style.display = 'block'; el.style.gridTemplateColumns = ''; }
 if (!emps.length) {
 el.innerHTML = '<div style="grid-column:1/-1;text-align:center;padding:60px;color:var(--gray)"><i class="fa-solid fa-users" style="font-size:48px;display:block;margin-bottom:12px;color:var(--border)"></i><h3>Nenhum funcionário cadastrado</h3></div>';
 return;
@@ -5035,6 +5039,21 @@ const c = currentCompany;
 const list = c.fiadoClients || [];
 const el = document.getElementById('fiados-grid');
 if (!el) return;
+const summaryEl = document.getElementById('fiados-total-summary');
+if (summaryEl) {
+    const clientsWithDebt = list.map(cl => ({ cl, saldo: (cl.assignedOrders||[]).reduce((s,o)=>s+(o.valorCobrado||0),0) })).filter(x => x.saldo > 0);
+    const totalReceber = clientsWithDebt.reduce((s,x)=>s+x.saldo, 0);
+    summaryEl.innerHTML = clientsWithDebt.length ? `<div style="background:linear-gradient(135deg,#fef3c7,#fde68a);border:1px solid #fcd34d;border-radius:12px;padding:16px 20px;margin-bottom:16px;display:flex;align-items:center;justify-content:space-between;flex-wrap:wrap;gap:12px">
+        <div style="display:flex;align-items:center;gap:12px">
+            <div style="width:44px;height:44px;border-radius:10px;background:#f59e0b;display:flex;align-items:center;justify-content:center;font-size:20px;color:#fff;flex-shrink:0"><i class="fa-solid fa-hand-holding-dollar"></i></div>
+            <div>
+                <div style="font-size:12px;font-weight:700;color:#92400e;text-transform:uppercase;letter-spacing:.3px">Total a Receber (Fiado)</div>
+                <div style="font-size:11px;color:#92400e">${clientsWithDebt.length} cliente(s) com pendência</div>
+            </div>
+        </div>
+        <div style="font-size:26px;font-weight:900;color:#92400e">${fmt(totalReceber)}</div>
+    </div>` : '';
+}
 if (!list.length) {
 el.innerHTML = '<div style="grid-column:1/-1;text-align:center;padding:60px;color:var(--gray)"><i class="fa-solid fa-hand-holding-dollar" style="font-size:48px;display:block;margin-bottom:12px;color:var(--border)"></i><h3>Nenhuma conta de fiado cadastrada</h3></div>';
 return;
