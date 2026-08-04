@@ -889,7 +889,7 @@ table th,table td{padding:7px 8px;font-size:11px}
 <div class="flex items-center justify-between mb-4 flex-wrap gap-3">
 <div style="font-size:15px;font-weight:700">Itens do Cardápio</div>
 <button class="btn btn-ghost" onclick="showGlobalAdditionalsModal()"><i class="fa-solid fa-list-check"></i> Adicionais por Categoria</button>
-<button class="btn btn-ghost" onclick="optimizeCompanyImages()"><i class="fa-solid fa-compress"></i> Otimizar Imagens (liberar espaço)</button>
+<button class="btn btn-ghost" onclick="showBase64ImagesManager()"><i class="fa-solid fa-image"></i> Gerenciar Imagens Base64</button>
 <button class="btn btn-primary" onclick="showMenuItemModal()"><i class="fa-solid fa-plus"></i> Adicionar Item</button>
 </div>
 <div class="products-grid" id="menu-grid"></div>
@@ -1157,8 +1157,7 @@ table th,table td{padding:7px 8px;font-size:11px}
 </div>
 <div class="chat-panel-body" id="pub-chat-body"></div>
 <div class="chat-panel-footer">
-<input type="file" id="pub-chat-file" accept="image/*" style="display:none" onchange="handlePubChatImage(event)">
-<button class="chat-attach-btn" onclick="document.getElementById('pub-chat-file').click()" title="Enviar foto"><i class="fa-solid fa-camera"></i></button>
+<!-- Upload de imagem removido — apenas URLs -->
 <input type="text" id="pub-chat-input" placeholder="Digite sua mensagem..." onkeydown="if(event.key==='Enter') sendPubChatMessage()">
 <button class="chat-send-btn" onclick="sendPubChatMessage()" title="Enviar"><i class="fa-solid fa-paper-plane"></i></button>
 </div>
@@ -1241,95 +1240,58 @@ let pendingCartSplit = [];
 // UTILITY
 // ============================================================
 function genId() { return Date.now().toString(36) + Math.random().toString(36).slice(2,7); }
-function recompressDataUrlImage(dataUrl, callback, opts) {
-    if (!dataUrl || typeof dataUrl !== 'string' || !dataUrl.startsWith('data:image')) { callback(dataUrl); return; }
-    const maxW = (opts && opts.maxW) || 600;
-    let quality = (opts && opts.quality) || 0.6;
-    const maxBytes = (opts && opts.maxBytes) || 90000;
-    const img = new Image();
-    img.onload = function() {
-        let w = img.width, h = img.height;
-        const scale = Math.min(1, maxW / w);
-        w = Math.max(1, Math.round(w * scale));
-        h = Math.max(1, Math.round(h * scale));
-        function render(width, height, q) {
-            const canvas = document.createElement('canvas');
-            canvas.width = width; canvas.height = height;
-            const ctx = canvas.getContext('2d');
-            ctx.drawImage(img, 0, 0, width, height);
-            return canvas.toDataURL('image/jpeg', q);
-        }
-        let out = render(w, h, quality);
-        let attempts = 0;
-        while (out.length > maxBytes && attempts < 16) {
-            if (quality > 0.25) { quality = Math.max(0.25, quality - 0.1); }
-            else { w = Math.max(120, Math.round(w * 0.75)); h = Math.max(120, Math.round(h * 0.75)); }
-            out = render(w, h, quality);
-            attempts++;
-        }
-        callback(out.length < dataUrl.length ? out : dataUrl);
-    };
-    img.onerror = function() { callback(dataUrl); };
-    img.src = dataUrl;
-}
-async function optimizeCompanyImages() {
+function showBase64ImagesManager() {
     const c = currentCompany;
     if (!c || !currentCompanyId) { showToast('Nenhuma empresa carregada.', 'warning'); return; }
     const items = (c.menuItems||[]).filter(p => p.image && typeof p.image === 'string' && p.image.startsWith('data:image'));
-    if (!items.length) { showToast('Nenhuma imagem para otimizar (todas já estão leves ou são links externos).', 'info'); return; }
-    showLoading('Otimizando imagens para liberar espaço...');
-    const total = items.length;
-    let processed = 0;
-    const processNext = () => {
-        if (processed >= total) {
-            db.collection('companies').doc(currentCompanyId).update({ menuItems: c.menuItems })
-                .then(() => { hideLoading(); renderStock(); renderMenu(); renderPDV(); showToast(`${total} imagem(ns) otimizada(s) e salva(s)! Tente cadastrar/editar o produto novamente.`,'success'); })
-                .catch(e => { hideLoading(); showToast('Erro ao salvar: '+e.message+'. Considere apagar fotos de produtos antigos ou pouco usados para liberar mais espaço.', 'danger'); });
-            return;
-        }
-        const p = items[processed];
-        recompressDataUrlImage(p.image, (newDataUrl) => {
-            p.image = newDataUrl;
-            processed++;
-            processNext();
-        }, { maxW: 600, quality: 0.6, maxBytes: 90000 });
-    };
-    processNext();
+    if (!items.length) { showToast('Nenhuma imagem base64 encontrada no banco! Todas já são URLs externas.','info'); return; }
+    const totalSize = items.reduce((acc, p) => acc + p.image.length, 0);
+    const sizeMB = (totalSize / (1024*1024)).toFixed(2);
+    let html = `<div class="alert alert-warning"><i class="fa-solid fa-triangle-exclamation"></i> <strong>${items.length} imagem(ns) em base64</strong> — ocupando aproximadamente <strong>${sizeMB} MB</strong> no Firestore. Substitua por URLs externas para liberar espaço.</div>`;
+    html += items.map((p, idx) => {
+        const previewId = 'b64-preview-' + idx;
+        return `<div style="background:#fff;border:1px solid var(--border);border-radius:10px;padding:12px;margin-bottom:10px;display:flex;gap:12px;align-items:flex-start">
+            <div style="width:80px;height:80px;border-radius:8px;overflow:hidden;flex-shrink:0;background:#f1f5f9" id="${previewId}-thumb">
+                <img src="${p.image}" style="width:100%;height:100%;object-fit:cover;cursor:pointer" onclick="document.getElementById('${previewId}').classList.toggle('hidden')">
+            </div>
+            <div style="flex:1;min-width:0">
+                <div style="font-weight:700;font-size:14px">${p.name}</div>
+                <div style="font-size:11px;color:var(--gray);margin-top:2px">${(p.image.length/1024).toFixed(0)} KB</div>
+                <div id="${previewId}" class="hidden" style="margin-top:8px">
+                    <img src="${p.image}" style="max-width:100%;max-height:300px;border-radius:8px;display:block">
+                </div>
+                <div style="margin-top:8px;display:flex;gap:6px">
+                    <button class="btn btn-sm btn-outline" onclick="document.getElementById('${previewId}').classList.toggle('hidden')"><i class="fa-solid fa-eye"></i> Ver</button>
+                    <button class="btn btn-sm btn-danger" onclick="confirmDeleteBase64Image('${p.id}','${p.name.replace(/'/g,"\\'")}')"><i class="fa-solid fa-trash"></i> Remover Imagem</button>
+                </div>
+            </div>
+        </div>`;
+    }).join('');
+    showModal('<i class="fa-solid fa-image"></i> Gerenciar Imagens Base64', html,
+        `<button class="btn btn-ghost" onclick="closeModal()">Fechar</button><button class="btn btn-danger" onclick="confirmDeleteAllBase64Images()"><i class="fa-solid fa-trash"></i> Remover Todas</button>`,
+        true);
 }
-function compressImageToDataUrl(file, callback, opts) {
-    const maxW = (opts && opts.maxW) || 700;
-    let quality = (opts && opts.quality) || 0.7;
-    const maxBytes = (opts && opts.maxBytes) || 140000;
-    const reader = new FileReader();
-    reader.onload = function(e) {
-        const img = new Image();
-        img.onload = function() {
-            let w = img.width, h = img.height;
-            const scale = Math.min(1, maxW / w);
-            w = Math.max(1, Math.round(w * scale));
-            h = Math.max(1, Math.round(h * scale));
-            function render(width, height, q) {
-                const canvas = document.createElement('canvas');
-                canvas.width = width; canvas.height = height;
-                const ctx = canvas.getContext('2d');
-                ctx.drawImage(img, 0, 0, width, height);
-                return canvas.toDataURL('image/jpeg', q);
-            }
-            let dataUrl = render(w, h, quality);
-            let attempts = 0;
-            while (dataUrl.length > maxBytes && attempts < 16) {
-                if (quality > 0.3) { quality = Math.max(0.3, quality - 0.1); }
-                else { w = Math.max(150, Math.round(w * 0.75)); h = Math.max(150, Math.round(h * 0.75)); }
-                dataUrl = render(w, h, quality);
-                attempts++;
-            }
-            callback(dataUrl);
-        };
-        img.onerror = function() { showToast('Não foi possível ler essa imagem. Tente outro arquivo.', 'danger'); };
-        img.src = e.target.result;
-    };
-    reader.onerror = function() { showToast('Erro ao carregar o arquivo de imagem.', 'danger'); };
-    reader.readAsDataURL(file);
+function confirmDeleteBase64Image(pid, pname) {
+    if (!confirm(`Remover a imagem base64 de "${pname}"? O produto continuará existindo, mas sem imagem até que você adicione uma URL externa.`)) return;
+    const c = currentCompany;
+    const p = c.menuItems.find(i => i.id === pid);
+    if (!p) return;
+    p.image = '';
+    showLoading('Removendo imagem...');
+    db.collection('companies').doc(currentCompanyId).update({ menuItems: c.menuItems })
+        .then(() => { hideLoading(); closeModal(); showBase64ImagesManager(); renderStock(); renderMenu(); renderPDV(); showToast('Imagem removida!','success'); })
+        .catch(e => { hideLoading(); showToast('Erro: '+e.message,'danger'); });
+}
+function confirmDeleteAllBase64Images() {
+    const c = currentCompany;
+    const items = (c.menuItems||[]).filter(p => p.image && typeof p.image === 'string' && p.image.startsWith('data:image'));
+    if (!items.length) return;
+    if (!confirm(`REMOVER TODAS as ${items.length} imagem(ns) base64? Esta ação limpará a imagem de todos os produtos que ainda usam base64. Os produtos não serão excluídos, apenas ficarão sem imagem até você adicionar uma URL externa.`)) return;
+    items.forEach(p => { p.image = ''; });
+    showLoading('Removendo todas as imagens base64...');
+    db.collection('companies').doc(currentCompanyId).update({ menuItems: c.menuItems })
+        .then(() => { hideLoading(); closeModal(); renderStock(); renderMenu(); renderPDV(); showToast(`${items.length} imagem(ns) removidas! Agora só use URLs externas.`,'success'); })
+        .catch(e => { hideLoading(); showToast('Erro: '+e.message,'danger'); });
 }
 function genOSNumber() {
 const now = new Date();
@@ -3053,7 +3015,7 @@ function renderStock() {
 }
 function showAddStockModal() {
     const c = currentCompany; if(!c) return; const items = c.menuItems||[];
-    showModal('<i class="fa-solid fa-plus"></i> Adicionar ao Estoque', `<div class="flex gap-2 mb-3"><div class="filter-chip active" id="stk-tab-add" onclick="switchStockTab('add')" style="cursor:pointer">Produto Existente</div><div class="filter-chip" id="stk-tab-new" onclick="switchStockTab('new')" style="cursor:pointer">Cadastrar Novo Item</div></div><div id="stk-tab-add-body">${items.length?`<div class="form-group"><label>Produto</label><select id="ast-prod" class="form-control">${items.map(p=>`<option value="${p.id}">${p.name} (atual: ${p.stock||0} un)</option>`).join('')}</select></div><div class="form-group"><label>Quantidade a Adicionar</label><input type="number" id="ast-qty" class="form-control" value="10" min="1"></div><button class="btn btn-success w-full" onclick="doAddStock()"><i class="fa-solid fa-plus"></i> Adicionar Estoque</button>`:'<div class="text-center" style="padding:20px;color:var(--gray)">Nenhum produto cadastrado ainda.</div>'}</div><div id="stk-tab-new-body" class="hidden"><div class="form-group"><label>Nome do Item *</label><input type="text" id="nsi-name" class="form-control" placeholder="Nome do produto"></div><div class="form-row"><div class="form-group"><label>Preço de Venda (R$) *</label><input type="number" id="nsi-price" class="form-control" step="0.01" min="0"></div><div class="form-group"><label>Custo (R$)</label><input type="number" id="nsi-cost" class="form-control" step="0.01" min="0"></div></div><div class="form-row"><div class="form-group"><label>Categoria</label><input type="text" id="nsi-cat" class="form-control" list="pub-cats-datalist" placeholder="Ex: Bebida, Comida..."><p style="font-size:11px;color:var(--gray);margin-top:4px">Use o mesmo nome de uma categoria já existente para agrupar corretamente no cardápio online.</p>${categoryDatalistHtml()}</div><div class="form-group"><label>Estoque Mínimo</label><input type="number" id="nsi-minstock" class="form-control" value="5" min="0"></div></div><div class="form-group"><label>Controle de Estoque</label><div style="background:#f8fafc;border:2px solid var(--border);border-radius:10px;padding:14px;margin-top:8px"><label style="display:flex;align-items:center;gap:10px;cursor:pointer;margin-bottom:10px"><input type="radio" name="nsi-stock-type" value="limited" checked onchange="toggleStockInput(true)" style="width:18px;height:18px;cursor:pointer"><div><div style="font-weight:700;color:var(--dark)">Quantidade Limitada</div><div style="font-size:12px;color:var(--gray)">Controlar estoque (ex: bebidas, insumos)</div></div></label><label style="display:flex;align-items:center;gap:10px;cursor:pointer"><input type="radio" name="nsi-stock-type" value="unlimited" onchange="toggleStockInput(false)" style="width:18px;height:18px;cursor:pointer"><div><div style="font-weight:700;color:var(--dark)">Estoque Ilimitado</div><div style="font-size:12px;color:var(--gray)">Sem controle de quantidade (ex: lanches sob demanda)</div></div></label></div></div><div id="nsi-stock-limited-wrap"><div class="form-group"><label>Quantidade Inicial</label><input type="number" id="nsi-stock" class="form-control" value="0" min="0"></div></div><div class="form-group"><label>Imagem (URL)</label><input type="text" id="nsi-img" class="form-control" placeholder="https://..."></div><div class="form-group"><label>Ou enviar foto do computador / celular</label><input type="file" id="nsi-img-file" accept="image/*" class="form-control" onchange="handleStockImageUpload(event)"><p style="font-size:11px;color:var(--gray);margin-top:4px"><i class="fa-solid fa-circle-info"></i> Use uma imagem <strong>quadrada (proporção 1:1)</strong> — ela aparece em destaque no cardápio online.</p><div id="nsi-img-preview" style="margin-top:8px"></div></div><div class="form-group"><label>Descrição</label><textarea id="nsi-desc" class="form-control" rows="2"></textarea></div>${variantOptionsEditorHtml('nsi', null)}<button class="btn btn-primary w-full" onclick="doAddNewStockItem()"><i class="fa-solid fa-save"></i> Cadastrar e Adicionar</button></div>`, `<button class="btn btn-ghost w-full" onclick="closeModal()">Fechar</button>`, true);
+    showModal('<i class="fa-solid fa-plus"></i> Adicionar ao Estoque', `<div class="flex gap-2 mb-3"><div class="filter-chip active" id="stk-tab-add" onclick="switchStockTab('add')" style="cursor:pointer">Produto Existente</div><div class="filter-chip" id="stk-tab-new" onclick="switchStockTab('new')" style="cursor:pointer">Cadastrar Novo Item</div></div><div id="stk-tab-add-body">${items.length?`<div class="form-group"><label>Produto</label><select id="ast-prod" class="form-control">${items.map(p=>`<option value="${p.id}">${p.name} (atual: ${p.stock||0} un)</option>`).join('')}</select></div><div class="form-group"><label>Quantidade a Adicionar</label><input type="number" id="ast-qty" class="form-control" value="10" min="1"></div><button class="btn btn-success w-full" onclick="doAddStock()"><i class="fa-solid fa-plus"></i> Adicionar Estoque</button>`:'<div class="text-center" style="padding:20px;color:var(--gray)">Nenhum produto cadastrado ainda.</div>'}</div><div id="stk-tab-new-body" class="hidden"><div class="form-group"><label>Nome do Item *</label><input type="text" id="nsi-name" class="form-control" placeholder="Nome do produto"></div><div class="form-row"><div class="form-group"><label>Preço de Venda (R$) *</label><input type="number" id="nsi-price" class="form-control" step="0.01" min="0"></div><div class="form-group"><label>Custo (R$)</label><input type="number" id="nsi-cost" class="form-control" step="0.01" min="0"></div></div><div class="form-row"><div class="form-group"><label>Categoria</label><input type="text" id="nsi-cat" class="form-control" list="pub-cats-datalist" placeholder="Ex: Bebida, Comida..."><p style="font-size:11px;color:var(--gray);margin-top:4px">Use o mesmo nome de uma categoria já existente para agrupar corretamente no cardápio online.</p>${categoryDatalistHtml()}</div><div class="form-group"><label>Estoque Mínimo</label><input type="number" id="nsi-minstock" class="form-control" value="5" min="0"></div></div><div class="form-group"><label>Controle de Estoque</label><div style="background:#f8fafc;border:2px solid var(--border);border-radius:10px;padding:14px;margin-top:8px"><label style="display:flex;align-items:center;gap:10px;cursor:pointer;margin-bottom:10px"><input type="radio" name="nsi-stock-type" value="limited" checked onchange="toggleStockInput(true)" style="width:18px;height:18px;cursor:pointer"><div><div style="font-weight:700;color:var(--dark)">Quantidade Limitada</div><div style="font-size:12px;color:var(--gray)">Controlar estoque (ex: bebidas, insumos)</div></div></label><label style="display:flex;align-items:center;gap:10px;cursor:pointer"><input type="radio" name="nsi-stock-type" value="unlimited" onchange="toggleStockInput(false)" style="width:18px;height:18px;cursor:pointer"><div><div style="font-weight:700;color:var(--dark)">Estoque Ilimitado</div><div style="font-size:12px;color:var(--gray)">Sem controle de quantidade (ex: lanches sob demanda)</div></div></label></div></div><div id="nsi-stock-limited-wrap"><div class="form-group"><label>Quantidade Inicial</label><input type="number" id="nsi-stock" class="form-control" value="0" min="0"></div></div><div class="form-group"><label>Imagem (URL)</label><input type="text" id="nsi-img" class="form-control" placeholder="https://..."></div><p style="font-size:11px;color:var(--gray);margin-top:-8px;margin-bottom:12px"><i class="fa-solid fa-circle-info"></i> Use uma imagem <strong>quadrada (proporção 1:1)</strong> hospedada em link externo — ela aparece em destaque no cardápio online.</p><div class="form-group"><label>Descrição</label><textarea id="nsi-desc" class="form-control" rows="2"></textarea></div>${variantOptionsEditorHtml('nsi', null)}<button class="btn btn-primary w-full" onclick="doAddNewStockItem()"><i class="fa-solid fa-save"></i> Cadastrar e Adicionar</button></div>`, `<button class="btn btn-ghost w-full" onclick="closeModal()">Fechar</button>`, true);
 }
 function toggleStockInput(show) {
     const wrap = document.getElementById('nsi-stock-limited-wrap');
@@ -3072,7 +3034,7 @@ function toggleStockEditInput(show) {
     if (wrap) wrap.style.display = show ? 'block' : 'none';
 }
 async function doAddStock() { const pid = document.getElementById('ast-prod').value; const qty = parseInt(document.getElementById('ast-qty').value)||0; const c = currentCompany; const p = c.menuItems.find(p=>p.id===pid); if(!p) return; p.stock = (p.stock||0) + qty; showLoading('Atualizando...'); try { await db.collection('companies').doc(currentCompanyId).update({ menuItems: c.menuItems }); hideLoading(); closeModal(); renderStock(); renderMenu(); renderPDV(); showToast(`+${qty} un de "${p.name}" adicionadas!`,'success'); } catch(e) { hideLoading(); showToast('Erro: '+e.message,'danger'); } }
-function showStockModal(pid) { const c = currentCompany; const p = c.menuItems.find(p=>p.id===pid); if(!p) return; const isUnlimited = p.stockUnlimited===true; showModal(`<i class="fa-solid fa-boxes-stacked"></i> Editar Item — ${p.name}`, `<div class="form-group"><label>Nome do Item *</label><input type="text" id="sk-name" class="form-control" placeholder="Nome do produto" value="${(p.name||'').replace(/"/g,'&quot;')}"></div><div class="form-row"><div class="form-group"><label>Preço de Venda (R$) *</label><input type="number" id="sk-price" class="form-control" step="0.01" min="0" value="${p.price||0}"></div><div class="form-group"><label>Custo (R$)</label><input type="number" id="sk-cost" class="form-control" step="0.01" min="0" value="${p.cost||0}"></div></div><div class="form-row"><div class="form-group"><label>Categoria</label><input type="text" id="sk-cat" class="form-control" list="pub-cats-datalist" placeholder="Ex: Bebida, Comida..." value="${(p.category||'').replace(/"/g,'&quot;')}"><p style="font-size:11px;color:var(--gray);margin-top:4px">Use o mesmo nome de uma categoria já existente para agrupar corretamente no cardápio online.</p>${categoryDatalistHtml()}</div><div class="form-group"><label>Estoque Mínimo</label><input type="number" id="sk-min" class="form-control" value="${p.minStock||5}" min="0"></div></div><div class="form-group"><label>Controle de Estoque</label><div style="background:#f8fafc;border:2px solid var(--border);border-radius:10px;padding:14px;margin-top:8px"><label style="display:flex;align-items:center;gap:10px;cursor:pointer;margin-bottom:10px"><input type="radio" name="sk-stock-type" value="limited" ${!isUnlimited?'checked':''} onchange="toggleStockEditInput(true)" style="width:18px;height:18px;cursor:pointer"><div><div style="font-weight:700;color:var(--dark)">Quantidade Limitada</div><div style="font-size:12px;color:var(--gray)">Controlar estoque (ex: bebidas, insumos)</div></div></label><label style="display:flex;align-items:center;gap:10px;cursor:pointer"><input type="radio" name="sk-stock-type" value="unlimited" ${isUnlimited?'checked':''} onchange="toggleStockEditInput(false)" style="width:18px;height:18px;cursor:pointer"><div><div style="font-weight:700;color:var(--dark)">Estoque Ilimitado</div><div style="font-size:12px;color:var(--gray)">Sem controle de quantidade (ex: lanches sob demanda)</div></div></label></div></div><div id="sk-stock-limited-wrap" style="${isUnlimited?'display:none':''}"><div class="form-group"><label>Quantidade em Estoque</label><input type="number" id="sk-qty" class="form-control" value="${p.stock||0}" min="0"></div></div><div class="form-group"><label>Imagem (URL)</label><input type="text" id="sk-img" class="form-control" placeholder="https://..." value="${(p.image||'').replace(/"/g,'&quot;')}"></div><div class="form-group"><label>Ou enviar foto do computador / celular</label><input type="file" id="sk-img-file" accept="image/*" class="form-control" onchange="handleStockImageUpload(event)"><p style="font-size:11px;color:var(--gray);margin-top:4px"><i class="fa-solid fa-circle-info"></i> Use uma imagem <strong>quadrada (proporção 1:1)</strong> — ela aparece em destaque no cardápio online.</p><div id="sk-img-preview" style="margin-top:8px">${p.image?`<img src="${p.image}" style="width:100%;max-height:160px;object-fit:contain;border-radius:8px">`:''}</div></div><div class="form-group"><label>Descrição</label><textarea id="sk-desc" class="form-control" rows="2">${p.description||''}</textarea></div>${variantOptionsEditorHtml('sk', p)}`, `<button class="btn btn-ghost" onclick="closeModal()">Cancelar</button><button class="btn btn-primary" onclick="saveStock('${pid}')"><i class="fa-solid fa-save"></i> Salvar</button>`, false); }
+function showStockModal(pid) { const c = currentCompany; const p = c.menuItems.find(p=>p.id===pid); if(!p) return; const isUnlimited = p.stockUnlimited===true; showModal(`<i class="fa-solid fa-boxes-stacked"></i> Editar Item — ${p.name}`, `<div class="form-group"><label>Nome do Item *</label><input type="text" id="sk-name" class="form-control" placeholder="Nome do produto" value="${(p.name||'').replace(/"/g,'&quot;')}"></div><div class="form-row"><div class="form-group"><label>Preço de Venda (R$) *</label><input type="number" id="sk-price" class="form-control" step="0.01" min="0" value="${p.price||0}"></div><div class="form-group"><label>Custo (R$)</label><input type="number" id="sk-cost" class="form-control" step="0.01" min="0" value="${p.cost||0}"></div></div><div class="form-row"><div class="form-group"><label>Categoria</label><input type="text" id="sk-cat" class="form-control" list="pub-cats-datalist" placeholder="Ex: Bebida, Comida..." value="${(p.category||'').replace(/"/g,'&quot;')}"><p style="font-size:11px;color:var(--gray);margin-top:4px">Use o mesmo nome de uma categoria já existente para agrupar corretamente no cardápio online.</p>${categoryDatalistHtml()}</div><div class="form-group"><label>Estoque Mínimo</label><input type="number" id="sk-min" class="form-control" value="${p.minStock||5}" min="0"></div></div><div class="form-group"><label>Controle de Estoque</label><div style="background:#f8fafc;border:2px solid var(--border);border-radius:10px;padding:14px;margin-top:8px"><label style="display:flex;align-items:center;gap:10px;cursor:pointer;margin-bottom:10px"><input type="radio" name="sk-stock-type" value="limited" ${!isUnlimited?'checked':''} onchange="toggleStockEditInput(true)" style="width:18px;height:18px;cursor:pointer"><div><div style="font-weight:700;color:var(--dark)">Quantidade Limitada</div><div style="font-size:12px;color:var(--gray)">Controlar estoque (ex: bebidas, insumos)</div></div></label><label style="display:flex;align-items:center;gap:10px;cursor:pointer"><input type="radio" name="sk-stock-type" value="unlimited" ${isUnlimited?'checked':''} onchange="toggleStockEditInput(false)" style="width:18px;height:18px;cursor:pointer"><div><div style="font-weight:700;color:var(--dark)">Estoque Ilimitado</div><div style="font-size:12px;color:var(--gray)">Sem controle de quantidade (ex: lanches sob demanda)</div></div></label></div></div><div id="sk-stock-limited-wrap" style="${isUnlimited?'display:none':''}"><div class="form-group"><label>Quantidade em Estoque</label><input type="number" id="sk-qty" class="form-control" value="${p.stock||0}" min="0"></div></div><div class="form-group"><label>Imagem (URL)</label><input type="text" id="sk-img" class="form-control" placeholder="https://..." value="${(p.image||'').replace(/"/g,'&quot;')}"></div><p style="font-size:11px;color:var(--gray);margin-top:-8px;margin-bottom:12px"><i class="fa-solid fa-circle-info"></i> Use uma imagem <strong>quadrada (proporção 1:1)</strong> hospedada em link externo — ela aparece em destaque no cardápio online.</p><div class="form-group"><label>Descrição</label><textarea id="sk-desc" class="form-control" rows="2">${p.description||''}</textarea></div>${variantOptionsEditorHtml('sk', p)}`, `<button class="btn btn-ghost" onclick="closeModal()">Cancelar</button><button class="btn btn-primary" onclick="saveStock('${pid}')"><i class="fa-solid fa-save"></i> Salvar</button>`, false); }
 async function deleteStockProduct(pid) { const c = currentCompany; const p = (c.menuItems||[]).find(p=>p.id===pid); if(!p) return; if (!confirm(`Excluir "${p.name}" do estoque e do cadastro?`)) return; c.menuItems = c.menuItems.filter(p=>p.id!==pid); showLoading('Excluindo...'); try { await db.collection('companies').doc(currentCompanyId).update({menuItems:c.menuItems}); hideLoading(); renderStock(); renderMenu(); renderPDV(); showToast('Produto excluído!','success'); } catch(e) { hideLoading(); showToast('Erro: '+e.message,'danger'); } }
 async function saveStock(pid) { const c = currentCompany; const p = c.menuItems.find(p=>p.id===pid); if(!p) return; const name=document.getElementById('sk-name')?.value.trim(); const price=parseFloat(document.getElementById('sk-price')?.value)||0; if (!name||!price) { showToast('Nome e preço são obrigatórios','warning'); return; } const stockType=document.querySelector('input[name="sk-stock-type"]:checked')?.value; p.name = name; p.price = price; p.cost = parseFloat(document.getElementById('sk-cost')?.value)||0; p.category = document.getElementById('sk-cat')?.value.trim()||''; p.image = document.getElementById('sk-img')?.value.trim()||''; p.description = document.getElementById('sk-desc')?.value.trim()||''; p.stock = stockType==='unlimited'?999999:(parseInt(document.getElementById('sk-qty').value)||0); p.minStock = stockType==='unlimited'?0:(parseInt(document.getElementById('sk-min').value)||5); p.stockUnlimited = stockType==='unlimited'; const variantData = collectVariantData('sk', price); p.sizes = variantData.sizes; p.hasBorda = variantData.hasBorda; p.bordaOptions = variantData.bordaOptions; p.flavors = variantData.flavors; showLoading('Salvando...'); try { await db.collection('companies').doc(currentCompanyId).update({ menuItems: c.menuItems }); hideLoading(); closeModal(); renderStock(); renderMenu(); renderPDV(); showToast('Item atualizado!','success'); } catch(e) { hideLoading(); showToast('Erro: '+e.message,'danger'); } }
 
@@ -3406,8 +3368,7 @@ function renderAdminChatThread(chat) {
     </div>
     <div class="chat-admin-thread-body" id="chat-admin-thread-body">${msgsHtml}</div>
     <div class="chat-admin-thread-footer">
-        <input type="file" id="chat-admin-file" accept="image/*" style="display:none" onchange="handleAdminChatImage(event,'${chat.id}')">
-        <button class="chat-attach-btn" onclick="document.getElementById('chat-admin-file').click()" title="Enviar foto"><i class="fa-solid fa-camera"></i></button>
+        <!-- Upload de imagem removido — apenas URLs -->
         <input type="text" id="chat-admin-input" placeholder="Digite sua resposta..." onkeydown="if(event.key==='Enter') sendAdminChatMessage('${chat.id}')">
         <button class="chat-send-btn" onclick="sendAdminChatMessage('${chat.id}')" title="Enviar"><i class="fa-solid fa-paper-plane"></i></button>
     </div>`;
@@ -3467,15 +3428,7 @@ function sendAdminChatMessage(chatId) {
     input.value = '';
     sendAdminChatPayload(chatId, text, '');
 }
-function handleAdminChatImage(event, chatId) {
-    const file = event.target.files[0];
-    if (!file) return;
-    if (!file.type.startsWith('image/')) { showToast('Selecione uma imagem válida','warning'); event.target.value=''; return; }
-    compressImageToDataUrl(file, function(dataUrl) {
-        sendAdminChatPayload(chatId, '', dataUrl);
-    }, { maxW: 700, quality: 0.65, maxBytes: 120000 });
-    event.target.value = '';
-}
+// Upload de imagem removido — apenas URLs
 
 // ============================================================
 // ADICIONAIS GLOBAIS
@@ -3546,31 +3499,7 @@ async function saveGlobalAdditionals() {
         showToast(additionals.length?`${additionals.length} adicional(is) salvos para "${cat}"!`:`Adicionais de "${cat}" removidos.`,'success');
     } catch(e) { hideLoading(); showToast('Erro: '+e.message,'danger'); }
 }
-function handleMenuItemImageUpload(event) {
-    const file = event.target.files[0];
-    if (!file) return;
-    if (!file.type.startsWith('image/')) { showToast('Selecione uma imagem válida','warning'); event.target.value=''; return; }
-    compressImageToDataUrl(file, function(dataUrl) {
-        const input = document.getElementById('mi-img');
-        if (input) input.value = dataUrl;
-        const prev = document.getElementById('mi-img-preview');
-        if (prev) prev.innerHTML = '<img src="'+dataUrl+'" style="width:100%;max-height:160px;object-fit:contain;border-radius:8px">';
-        showToast('Foto carregada!','success');
-    }, { maxW: 700, quality: 0.7, maxBytes: 150000 });
-}
-function handleStockImageUpload(event) {
-    const file = event.target.files[0];
-    if (!file) return;
-    if (!file.type.startsWith('image/')) { showToast('Selecione uma imagem válida','warning'); event.target.value=''; return; }
-    const prefix = event.target.id.replace('-img-file','');
-    compressImageToDataUrl(file, function(dataUrl) {
-            const input = document.getElementById(prefix + '-img');
-            if (input) input.value = dataUrl;
-            const prev = document.getElementById(prefix + '-img-preview');
-            if (prev) prev.innerHTML = '<img src="'+dataUrl+'" style="width:100%;max-height:160px;object-fit:contain;border-radius:8px">';
-            showToast('Foto carregada!','success');
-    }, { maxW: 700, quality: 0.7, maxBytes: 150000 });
-}
+// Upload de imagem removido — apenas URLs
 function sizeRowHtml(prefix, s) { return `<div class="variant-row" style="display:flex;gap:8px;margin-bottom:6px"><input type="text" class="form-control ${prefix}-size-name" value="${(s&&s.name||'').replace(/"/g,'&quot;')}" placeholder="Nome do tamanho (ex: Grande)" style="flex:2"><input type="number" class="form-control ${prefix}-size-price" value="${s&&s.price!=null?s.price:0}" step="0.01" min="0" placeholder="Preço (R$)" style="flex:1"><button type="button" class="btn btn-ghost btn-sm" onclick="this.parentElement.remove()"><i class="fa-solid fa-trash"></i></button></div>`; }
 function bordaRowHtml(prefix, b) { return `<div class="variant-row" style="display:flex;gap:8px;margin-bottom:6px"><input type="text" class="form-control ${prefix}-borda-name" value="${(b&&b.name||'').replace(/"/g,'&quot;')}" placeholder="Nome da borda (ex: Catupiry)" style="flex:2"><input type="number" class="form-control ${prefix}-borda-price" value="${b&&b.price!=null?b.price:0}" step="0.01" min="0" placeholder="Preço adicional (R$)" style="flex:1"><button type="button" class="btn btn-ghost btn-sm" onclick="this.parentElement.remove()"><i class="fa-solid fa-trash"></i></button></div>`; }
 function flavorSizeRowHtml(prefix, s) { return `<div class="flavor-size-row" style="display:flex;gap:6px;margin-bottom:6px;align-items:center"><input type="text" class="form-control ${prefix}-fsize-name" value="${(s&&s.name||'').replace(/"/g,'&quot;')}" placeholder="Tamanho (ex: 20CM ou Pequena)" style="flex:2"><input type="number" class="form-control ${prefix}-fsize-price" value="${s&&s.price!=null?s.price:0}" step="0.01" min="0" placeholder="Preço (R$)" style="flex:1"><input type="number" class="form-control ${prefix}-fsize-slices" value="${s&&s.slices!=null?s.slices:''}" min="0" step="1" placeholder="Fatias (opc.)" style="flex:1"><button type="button" class="btn btn-ghost btn-sm" onclick="this.parentElement.remove()"><i class="fa-solid fa-trash"></i></button></div>`; }
@@ -3676,8 +3605,7 @@ showModal(`<i class="fa-solid fa-utensils"></i> ${item?'Editar Item':'Adicionar 
 <div class="form-group"><label>Custo (R$)</label><input type="number" id="mi-cost" class="form-control" value="${item?.cost||0}" step="0.01" min="0"></div>
 <div class="form-group"><label>Descrição</label><textarea id="mi-desc" class="form-control" rows="2" placeholder="Ingredientes, detalhes...">${item?.description||''}</textarea></div>
 <div class="form-group"><label>Imagem (URL)</label><input type="text" id="mi-img" class="form-control" value="${item?.image||''}" placeholder="https://..."></div>
-<p style="font-size:11px;color:var(--gray);margin-top:-8px;margin-bottom:8px"><i class="fa-solid fa-circle-info"></i> Use uma imagem <strong>quadrada (proporção 1:1)</strong> — ela aparece em destaque no cardápio online.</p>
-<div class="form-group"><label>Ou enviar foto do computador / celular</label><input type="file" id="mi-img-file" accept="image/*" class="form-control" onchange="handleMenuItemImageUpload(event)"><div id="mi-img-preview" style="margin-top:8px">${item?.image?`<img src="${item.image}" style="width:100%;max-height:160px;object-fit:contain;border-radius:8px">`:''}</div></div>
+<p style="font-size:11px;color:var(--gray);margin-top:-8px;margin-bottom:12px"><i class="fa-solid fa-circle-info"></i> Use uma imagem <strong>quadrada (proporção 1:1)</strong> hospedada em link externo — ela aparece em destaque no cardápio online.</p>
 ${variantOptionsEditorHtml('mi', item)}`,
 `<button class="btn btn-ghost" onclick="closeModal()">Cancelar</button><button class="btn btn-primary" onclick="saveMenuItem('${iid||''}')"><i class="fa-solid fa-save"></i> Salvar</button>`,
 true
@@ -5910,15 +5838,7 @@ function sendPubChatMessage() {
     input.value = '';
     sendPubChatPayload(text, '');
 }
-function handlePubChatImage(event) {
-    const file = event.target.files[0];
-    if (!file) return;
-    if (!file.type.startsWith('image/')) { showToast('Selecione uma imagem válida','warning'); event.target.value=''; return; }
-    compressImageToDataUrl(file, function(dataUrl) {
-        sendPubChatPayload('', dataUrl);
-    }, { maxW: 700, quality: 0.65, maxBytes: 120000 });
-    event.target.value = '';
-}
+// Upload de imagem removido — apenas URLs
 async function showPublicMenu(cid) {
 pubCompanyId = cid;
 showLoading('Carregando cardápio...');
