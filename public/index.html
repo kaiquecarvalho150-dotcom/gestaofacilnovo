@@ -2307,7 +2307,7 @@ function renderMenuRowsTableHtml(rows) {
     </div>`;
     const itemRows = rows.map(r => `<div style="display:contents" onclick="${r.click}">
     <div style="${r.oos?'opacity:.5':'cursor:pointer'}">${r.image ? `<img src="${r.image}" style="width:88px;height:88px;object-fit:cover;border-radius:10px;border:1px solid var(--border);display:block">` : `<div style="width:88px;height:88px;border-radius:10px;border:2px dashed var(--border);display:flex;align-items:center;justify-content:center;color:var(--gray);font-size:11px;text-align:center;font-weight:700">imagem</div>`}</div>
-    <div style="${r.oos?'opacity:.5':'cursor:pointer'}"><div style="font-weight:800;font-size:14px;color:var(--dark)">#${r.num} ${escHtml(r.name)}</div>${r.desc?`<div style="font-size:11px;color:var(--gray);margin-top:2px">${escHtml(r.desc)}</div>`:''}${r.oos?'<div style="color:var(--danger);font-size:11px;font-weight:700;margin-top:2px">Esgotado</div>':''}</div>
+    <div style="${r.oos?'opacity:.5':'cursor:pointer'}"><div style="font-weight:800;font-size:14px;color:var(--dark)">#${r.num} - ${escHtml(r.name)}</div>${r.desc?`<div style="font-size:11px;color:var(--gray);margin-top:2px">${escHtml(r.desc)}</div>`:''}${r.oos?'<div style="color:var(--danger);font-size:11px;font-weight:700;margin-top:2px">Esgotado</div>':''}</div>
     ${Array.from({length:maxCols}).map((_,j)=>`<div style="text-align:center;${r.oos?'opacity:.5':'cursor:pointer'}">${r.sizes[j]?`<span style="font-weight:800;font-size:15px;color:var(--dark)">${fmt(r.sizes[j].price)}</span>`:''}</div>`).join('')}
     </div>`).join('');
     return `<div style="display:grid;grid-template-columns:${colsTemplate};gap:8px 10px;align-items:center;margin-bottom:22px">${headerRow}${itemRows}</div>`;
@@ -3741,7 +3741,7 @@ const variantData = collectVariantData('mi', price);
 const isCombo = document.getElementById('mi-iscombo')?.checked || false;
 const comboItems = isCombo ? collectComboLines('mi') : [];
 if (isCombo && !comboItems.length) { showToast('Adicione ao menos um item ao combo','warning'); return; }
-const desc = isCombo ? (comboItems.map(l=>'+ '+l).join('  •  ') + (customDesc?' — '+customDesc:'')) : customDesc;
+const desc = isCombo ? (comboItems.map(l=>'• '+l).join('   ') + (customDesc?' — '+customDesc:'')) : customDesc;
 if (!name||!price) { showToast('Nome e valor são obrigatórios','warning'); return; }
 if (currentCompany.plan === 'trial' && (currentCompany.menuItems || []).length >= 20 && !iid) {
 showToast('Limite de 20 produtos atingido no plano Trial. Faça o upgrade!','warning');
@@ -6066,7 +6066,7 @@ ${Array.from({length:maxCols}).map((_,j)=>`<div style="text-align:center">${head
 </div>`;
 const itemRows = rows.map(r => `<div style="display:contents" onclick="${r.click}">
 <div style="${r.oos?'opacity:.5':'cursor:pointer'}">${r.image ? `<img src="${r.image}" style="width:88px;height:88px;object-fit:cover;border-radius:10px;border:1px solid var(--border);display:block">` : `<div style="width:88px;height:88px;border-radius:10px;border:2px dashed var(--border);display:flex;align-items:center;justify-content:center;color:var(--gray);font-size:11px;text-align:center;font-weight:700">imagem</div>`}</div>
-<div style="${r.oos?'opacity:.5':'cursor:pointer'}"><div style="font-weight:800;font-size:14px;color:var(--dark)">#${r.num} ${escHtml(r.name)}</div>${r.desc?`<div style="font-size:11px;color:var(--gray);margin-top:2px">${escHtml(r.desc)}</div>`:''}${r.oos?'<div style="color:var(--danger);font-size:11px;font-weight:700;margin-top:2px">Esgotado</div>':''}</div>
+<div style="${r.oos?'opacity:.5':'cursor:pointer'}"><div style="font-weight:800;font-size:14px;color:var(--dark)">#${r.num} - ${escHtml(r.name)}</div>${r.desc?`<div style="font-size:11px;color:var(--gray);margin-top:2px">${escHtml(r.desc)}</div>`:''}${r.oos?'<div style="color:var(--danger);font-size:11px;font-weight:700;margin-top:2px">Esgotado</div>':''}</div>
 ${Array.from({length:maxCols}).map((_,j)=>`<div style="text-align:center;${r.oos?'opacity:.5':'cursor:pointer'}">${r.sizes[j]?`<span style="font-weight:800;font-size:15px;color:var(--dark)">${fmt(r.sizes[j].price)}</span>`:''}</div>`).join('')}
 </div>`).join('');
 return `<div style="display:grid;grid-template-columns:${colsTemplate};gap:8px 10px;align-items:center;margin-bottom:22px">${headerRow}${itemRows}</div>`;
