@@ -902,6 +902,7 @@ table th,table td{padding:7px 8px;font-size:11px}
 <div class="flex items-center justify-between mb-4 flex-wrap gap-3">
 <div style="font-size:15px;font-weight:700">Itens do Cardápio</div>
 <button class="btn btn-ghost" onclick="showGlobalAdditionalsModal()"><i class="fa-solid fa-list-check"></i> Adicionais por Categoria</button>
+<button class="btn btn-ghost" onclick="showGlobalBordasModal()"><i class="fa-solid fa-pizza-slice"></i> Gerenciar Bordas</button>
 <button class="btn btn-ghost" onclick="showBase64ImagesManager()"><i class="fa-solid fa-image"></i> Gerenciar Imagens Base64</button>
 <button class="btn btn-primary" onclick="showMenuItemModal()"><i class="fa-solid fa-plus"></i> Adicionar Item</button>
 </div>
@@ -1507,7 +1508,7 @@ const company = {
 companyName: co, ownerName: own, cnpj, phone: ph, address: addr, email: em, password: pw,
 plan: pendingPlan.plan, planPrice: pendingPlan.price, accessDays: pendingPlan.days,
 startDate: new Date().toISOString(), createdAt: new Date().toISOString(),
-blocked: false, menuItems: [], employees: [], expenses: [], globalAdditionals: [], motoboys: [], fiadoClients: []
+blocked: false, menuItems: [], employees: [], expenses: [], globalAdditionals: [], globalBordas: [], motoboys: [], fiadoClients: []
 };
 await db.collection('companies').doc(id).set(company);
 hideLoading();
@@ -1910,7 +1911,7 @@ const snap = await db.collection('companies').where('email','==',em).get();
 if (!snap.empty) { hideLoading(); showToast('E-mail já cadastrado','danger'); return; }
 const id = genId();
 const prices = {trial:0, starter:29.90, professional:59.90};
-const company = { companyName:co, ownerName:own, cnpj, phone:ph, address:addr, email:em, password:pw, plan, planPrice:prices[plan]||0, accessDays:days, startDate:new Date().toISOString(), createdAt:new Date().toISOString(), blocked:false, menuItems:[], employees:[], expenses:[], globalAdditionals:[], motoboys:[], fiadoClients:[] };
+const company = { companyName:co, ownerName:own, cnpj, phone:ph, address:addr, email:em, password:pw, plan, planPrice:prices[plan]||0, accessDays:days, startDate:new Date().toISOString(), createdAt:new Date().toISOString(), blocked:false, menuItems:[], employees:[], expenses:[], globalAdditionals:[], globalBordas:[], motoboys:[], fiadoClients:[] };
 await db.collection('companies').doc(id).set(company);
 // Somar valor cobrado na receita manual
 if (chargedValue > 0) {
@@ -2356,7 +2357,7 @@ g.innerHTML = catsOrder.map(cat => {
 function normFlavors(raw) { return (raw||[]).map(f => typeof f === 'string' ? { name: f, sizes: [] } : f); }
 function categoryDatalistHtml() { const c = currentCompany||{}; const cats = [...new Set((c.menuItems||[]).map(p=>p.category).filter(Boolean))]; return `<datalist id="pub-cats-datalist">${cats.map(cat=>`<option value="${(cat||'').replace(/"/g,'&quot;')}">`).join('')}</datalist>`; }
 function escHtml(v) { return (v==null?'':String(v)).replace(/</g,'&lt;').replace(/>/g,'&gt;'); }
-function productHasVariants(product) { return !!product && ((product.sizes&&product.sizes.length>1) || product.hasBorda || (normFlavors(product.flavors).length>0)); }
+function productHasVariants(product) { return !!product && ((product.sizes&&product.sizes.length>1) || productHasBordaFromAnySource(product) || (normFlavors(product.flavors).length>0)); }
 function sizeRadiosHtml(sizes) {
     return `<div style="margin-bottom:14px"><div style="font-size:12px;font-weight:700;color:var(--gray);text-transform:uppercase;letter-spacing:.3px;margin-bottom:8px">Tamanho</div>${sizes.map((s,i)=>`<label style="display:flex;align-items:center;justify-content:space-between;padding:8px 0;border-bottom:1px solid #f1f5f9;cursor:pointer"><span style="display:flex;align-items:center;gap:8px;font-weight:600"><input type="radio" name="var-size" value="${i}" ${i===0?'checked':''} class="var-size-radio" onchange="onVarSizeChange()" style="width:16px;height:16px">${escHtml(s.name)}${s.slices?` <span style="color:var(--gray);font-weight:500;font-size:12px">(${s.slices} fatias)</span>`:''}</span><span style="color:var(--primary);font-weight:700">${fmt(s.price)}</span></label>`).join('')}</div>`;
 }
@@ -2367,7 +2368,9 @@ let __activeVariantProduct = null;
 function variantPickerHtml(product, presetFlavorIdx) {
     __activeVariantProduct = product;
     const flavors = normFlavors(product.flavors);
-    const bordaHtml = product.hasBorda ? bordaRadiosHtml(product.bordaOptions||[]) : '';
+    const productBordas = getBordasForProduct(product);
+    const hasBorda = productHasBordaFromAnySource(product);
+    const bordaHtml = hasBorda ? bordaRadiosHtml(productBordas) : '';
     if (flavors.length) {
         const initIdx = (presetFlavorIdx!=null && flavors[presetFlavorIdx]) ? presetFlavorIdx : 0;
         const firstSizes = (flavors[initIdx].sizes&&flavors[initIdx].sizes.length) ? flavors[initIdx].sizes : [{name:'Único', price: product.price}];
@@ -2460,13 +2463,15 @@ function getSelectedVariantInfo(product) {
         size = sizes[sizeIdx] || sizes[0];
     }
     const bordaIdx = parseInt(document.querySelector('.var-borda-radio:checked')?.value ?? -1);
-    const borda = (product.hasBorda && bordaIdx>=0) ? (product.bordaOptions||[])[bordaIdx] : null;
+    const productBordas = getBordasForProduct(product);
+    const hasBorda = productHasBordaFromAnySource(product);
+    const borda = (hasBorda && bordaIdx>=0) ? (productBordas||[])[bordaIdx] : null;
     const price = (size?.price??product.price) + (borda?.price||0);
     const labelParts = [];
     if (size && size.name && size.name!=='Tamanho Único') labelParts.push(size.name + (size.slices?` (${size.slices} fatias)`:''));
     if (flavorName && flavorSelectVisible) labelParts.push(flavorName);
-    if (borda) labelParts.push('Borda de '+borda.name); else if (product.hasBorda) labelParts.push('Sem borda');
-    return { price, label: labelParts.join(' - '), sizeName: size?.name||'', bordaName: borda?borda.name:(product.hasBorda?'Sem borda':''), flavor: flavorName };
+    if (borda) labelParts.push('Borda de '+borda.name); else if (hasBorda) labelParts.push('Sem borda');
+    return { price, label: labelParts.join(' - '), sizeName: size?.name||'', bordaName: borda?borda.name:(hasBorda?'Sem borda':''), flavor: flavorName };
 }
 function getInitialVariantPrice(product, presetFlavorIdx) {
     const flavors = normFlavors(product.flavors);
@@ -3518,13 +3523,30 @@ function sendAdminChatMessage(chatId) {
 // ============================================================
 // ADICIONAIS GLOBAIS
 // ============================================================
-function showGlobalAdditionalsModal(selectedCat) {
+function showGlobalAdditionalsModal() {
     const c = currentCompany;
     const allCats = [...new Set((c.menuItems||[]).map(p=>p.category).filter(Boolean))];
     const foodCats = allCats.filter(cat=>!isDrinkCategory(cat));
     if (!foodCats.length) { showToast('Cadastre produtos de comida com uma categoria definida primeiro (bebidas não têm adicionais).','warning'); return; }
-    const cat = (selectedCat && foodCats.includes(selectedCat)) ? selectedCat : foodCats[0];
-    const adds = (c.categoryAdditionals && c.categoryAdditionals[cat]) || c.globalAdditionals || [];
+    // Determina quais categorias já compartilham os MESMOS adicionais para pré-marcar
+    const catAddsMap = {};
+    foodCats.forEach(cat => {
+        const adds = (c.categoryAdditionals && c.categoryAdditionals[cat]) || [];
+        const key = adds.map(a=>a.id+'|'+a.name+'|'+a.price+'|'+(a.isFree?'1':'0')).sort().join('::');
+        catAddsMap[cat] = { adds, key };
+    });
+    // Agrupa categorias que têm os mesmos adicionais (mesma key)
+    const keyGroups = {};
+    foodCats.forEach(cat => {
+        const k = catAddsMap[cat].key || '__empty__';
+        if (!keyGroups[k]) keyGroups[k] = [];
+        keyGroups[k].push(cat);
+    });
+    // Escolhe o grupo mais populoso como pré-selecionado
+    const groupsSorted = Object.values(keyGroups).sort((a,b)=>b.length - a.length);
+    const defaultSelected = groupsSorted[0] || [foodCats[0]];
+    const firstCat = defaultSelected[0];
+    const adds = catAddsMap[firstCat]?.adds || [];
     const addsHtml = adds.map((a,idx)=>`
     <div class="flex items-center gap-2 mb-2" id="gl-add-row-${a.id}">
         <input type="text" class="form-control" id="gl-add-name-${a.id}" value="${a.name}" placeholder="Ex: Bacon extra ou SEM ALFACE" style="flex:2">
@@ -3535,9 +3557,19 @@ function showGlobalAdditionalsModal(selectedCat) {
         </label>
         <button class="btn btn-sm btn-danger" onclick="document.getElementById('gl-add-row-${a.id}').remove()"><i class="fa-solid fa-times"></i></button>
     </div>`).join('');
+    const catsHtml = foodCats.map(cc => {
+        const isChecked = defaultSelected.includes(cc);
+        return `<label style="display:inline-flex;align-items:center;gap:6px;margin:3px 6px 3px 0;padding:4px 10px;border-radius:6px;background:${isChecked?'var(--primary-light)':'#f8fafc'};border:1px solid ${isChecked?'var(--primary)':'var(--border)'};cursor:pointer;font-size:13px;font-weight:${isChecked?'700':'500'}">
+            <input type="checkbox" class="gl-cat-chk" value="${cc.replace(/"/g,'&quot;')}" ${isChecked?'checked':''} onchange="this.parentElement.style.background=this.checked?'var(--primary-light)':'#f8fafc';this.parentElement.style.borderColor=this.checked?'var(--primary)':'var(--border)';this.parentElement.style.fontWeight=this.checked?'700':'500'" style="width:16px;height:16px;cursor:pointer">
+            ${escHtml(cc)}
+        </label>`;
+    }).join('');
     showModal('<i class="fa-solid fa-list-check"></i> Adicionais por Categoria',
-    `<div class="form-group"><label>Categoria</label><select id="gl-cat-select" class="form-control" onchange="showGlobalAdditionalsModal(this.value)">${foodCats.map(cc=>`<option value="${cc.replace(/"/g,'&quot;')}" ${cc===cat?'selected':''}>${escHtml(cc)}</option>`).join('')}</select></div>
-    <p style="color:var(--gray);font-size:13px;margin:10px 0 14px">Estes adicionais aparecem só para produtos da categoria <strong>${escHtml(cat)}</strong>, tanto no PDV quanto no cardápio online. Cada categoria pode ter sua própria lista. Categorias de bebida (Bebidas, Sucos, Refrigerantes...) não têm opção de adicionais.</p>
+    `<div class="form-group">
+        <label>Categorias (marque todas que terão estes mesmos adicionais)</label>
+        <div style="display:flex;flex-wrap:wrap;gap:4px;padding:8px;background:#fafbfc;border-radius:8px;border:1px solid var(--border)">${catsHtml}</div>
+    </div>
+    <p style="color:var(--gray);font-size:13px;margin:10px 0 14px">Os adicionais abaixo serão salvos para <strong>TODAS</strong> as categorias marcadas acima. Assim você cadastra uma vez e reutiliza em várias categorias.</p>
     <div style="background:#dbeafe;border:2px solid var(--primary);border-radius:8px;padding:12px;margin-bottom:16px">
         <div style="font-size:12px;font-weight:700;color:var(--primary);margin-bottom:6px"><i class="fa-solid fa-info-circle"></i> Como usar:</div>
         <ul style="font-size:12px;color:var(--dark3);margin:0;padding-left:16px;line-height:1.6">
@@ -3545,7 +3577,7 @@ function showGlobalAdditionalsModal(selectedCat) {
             <li><strong>Adicionais grátis:</strong> SEM ALFACE, SEM TOMATE, SEM CEBOLA... (marque "Sem custo" ou deixe R$ 0,00)</li>
         </ul>
     </div>
-    <div id="gl-adds-container" data-cat="${cat.replace(/"/g,'&quot;')}">${addsHtml}</div>
+    <div id="gl-adds-container">${addsHtml}</div>
     <button type="button" class="btn btn-ghost btn-sm mt-2 w-full" onclick="addGlobalAdditionalRow()"><i class="fa-solid fa-plus"></i> Adicionar Opção</button>`,
     `<button class="btn btn-ghost" onclick="closeModal()">Cancelar</button>
     <button class="btn btn-primary" onclick="saveGlobalAdditionals()"><i class="fa-solid fa-save"></i> Salvar Adicionais</button>`,
@@ -3591,8 +3623,8 @@ function addGlobalAdditionalRow() {
 }
 async function saveGlobalAdditionals() {
     const c = currentCompany;
-    const cat = document.getElementById('gl-adds-container')?.dataset.cat;
-    if (!cat) return;
+    const checkedCats = [...document.querySelectorAll('.gl-cat-chk:checked')].map(cb => cb.value);
+    if (!checkedCats.length) { showToast('Selecione ao menos uma categoria.','warning'); return; }
     const additionals = [];
     document.querySelectorAll('#gl-adds-container [id^="gl-add-row-"]').forEach(row => {
         const rid = row.id.replace('gl-add-row-','');
@@ -3603,13 +3635,117 @@ async function saveGlobalAdditionals() {
         if (nm) additionals.push({id:rid.startsWith('new_')?genId():rid, name:nm, price:pr, isFree:isFree});
     });
     c.categoryAdditionals = c.categoryAdditionals || {};
-    c.categoryAdditionals[cat] = additionals;
+    checkedCats.forEach(cat => {
+        c.categoryAdditionals[cat] = additionals;
+    });
     showLoading('Salvando adicionais...');
     try {
         await db.collection('companies').doc(currentCompanyId).update({categoryAdditionals:c.categoryAdditionals});
         hideLoading(); closeModal();
-        showToast(additionals.length?`${additionals.length} adicional(is) salvos para "${cat}"!`:`Adicionais de "${cat}" removidos.`,'success');
+        const catsStr = checkedCats.join(', ');
+        showToast(additionals.length?`${additionals.length} adicional(is) salvos para: ${catsStr}!`:`Adicionais removidos de: ${catsStr}.`,'success');
     } catch(e) { hideLoading(); showToast('Erro: '+e.message,'danger'); }
+}
+// ============================================================
+// BORDAS GLOBAIS — cadastro centralizado com seleção de produtos
+// ============================================================
+let _glBordaCount = 0;
+function showGlobalBordasModal() {
+    const c = currentCompany;
+    const products = (c.menuItems||[]).filter(p => !isDrinkCategory(p.category));
+    if (!products.length) { showToast('Cadastre produtos de comida primeiro.','warning'); return; }
+    const bordas = c.globalBordas || [];
+    const bordasHtml = bordas.map((b,idx) => {
+        const bId = b.id || 'gb_'+idx;
+        return `<div class="global-borda-row" style="border:1px solid var(--border);border-radius:10px;padding:14px;margin-bottom:12px;background:#fafbfc">
+            <div class="flex items-center gap-2 mb-2">
+                <input type="text" class="form-control gb-name-${bId}" value="${(b.name||'').replace(/"/g,'&quot;')}" placeholder="Nome da borda (ex: Catupiry 20 CM)" style="flex:2">
+                <input type="number" class="form-control gb-price-${bId}" value="${b.price!=null?b.price:0}" step="0.01" min="0" placeholder="Preço (R$)" style="flex:1">
+                <button class="btn btn-sm btn-danger" onclick="this.closest('.global-borda-row').remove()"><i class="fa-solid fa-times"></i></button>
+            </div>
+            <div style="font-size:11px;font-weight:700;color:var(--gray);text-transform:uppercase;margin-bottom:4px">Produtos que terão esta borda:</div>
+            <div style="display:flex;flex-wrap:wrap;gap:4px;max-height:120px;overflow-y:auto;padding:4px;border:1px solid var(--border);border-radius:6px;background:#fff">
+                ${products.map(p => {
+                    const assigned = b.productIds && b.productIds.includes(p.id);
+                    return `<label style="display:inline-flex;align-items:center;gap:4px;margin:2px;padding:3px 8px;border-radius:4px;background:${assigned?'var(--primary-light)':'#fff'};border:1px solid ${assigned?'var(--primary)':'var(--border)'};cursor:pointer;font-size:12px">
+                        <input type="checkbox" class="gb-prod-${bId}" value="${p.id}" ${assigned?'checked':''} style="width:14px;height:14px;cursor:pointer">
+                        ${escHtml(p.name)}
+                    </label>`;
+                }).join('')}
+            </div>
+        </div>`;
+    }).join('');
+    showModal('<i class="fa-solid fa-pizza-slice"></i> Gerenciar Bordas Globais',
+    `<p style="color:var(--gray);font-size:13px;margin-bottom:14px">Cadastre as opções de borda uma única vez e selecione para quais produtos cada borda vai aparecer. O sistema já filtra automaticamente pelo tamanho do produto (ex: se a borda se chama "Catupiry 20 CM", ela só aparece quando o cliente seleciona o tamanho 20 CM).</p>
+    <div id="global-bordas-list">${bordasHtml}</div>
+    <button type="button" class="btn btn-ghost btn-sm mt-2 w-full" onclick="addGlobalBordaRow()"><i class="fa-solid fa-plus"></i> Adicionar Opção de Borda</button>`,
+    `<button class="btn btn-ghost" onclick="closeModal()">Cancelar</button>
+    <button class="btn btn-primary" onclick="saveGlobalBordas()"><i class="fa-solid fa-save"></i> Salvar Bordas</button>`,
+    true
+    );
+}
+function addGlobalBordaRow() {
+    const c = currentCompany;
+    const products = (c.menuItems||[]).filter(p => !isDrinkCategory(p.category));
+    if (!products.length) return;
+    const bId = 'gb_new_' + (++_glBordaCount);
+    const container = document.getElementById('global-bordas-list'); if(!container) return;
+    const div = document.createElement('div');
+    div.className = 'global-borda-row';
+    div.style.cssText = 'border:1px solid var(--border);border-radius:10px;padding:14px;margin-bottom:12px;background:#fafbfc';
+    div.innerHTML = `<div class="flex items-center gap-2 mb-2">
+        <input type="text" class="form-control gb-name-${bId}" placeholder="Nome da borda (ex: Catupiry 20 CM)" style="flex:2">
+        <input type="number" class="form-control gb-price-${bId}" step="0.01" min="0" placeholder="Preço (R$)" style="flex:1">
+        <button class="btn btn-sm btn-danger" onclick="this.closest('.global-borda-row').remove()"><i class="fa-solid fa-times"></i></button>
+    </div>
+    <div style="font-size:11px;font-weight:700;color:var(--gray);text-transform:uppercase;margin-bottom:4px">Produtos que terão esta borda:</div>
+    <div style="display:flex;flex-wrap:wrap;gap:4px;max-height:120px;overflow-y:auto;padding:4px;border:1px solid var(--border);border-radius:6px;background:#fff">
+        ${products.map(p => `<label style="display:inline-flex;align-items:center;gap:4px;margin:2px;padding:3px 8px;border-radius:4px;background:#fff;border:1px solid var(--border);cursor:pointer;font-size:12px">
+            <input type="checkbox" class="gb-prod-${bId}" value="${p.id}" style="width:14px;height:14px;cursor:pointer">
+            ${escHtml(p.name)}
+        </label>`).join('')}
+    </div>`;
+    container.appendChild(div);
+}
+async function saveGlobalBordas() {
+    const c = currentCompany;
+    const rows = [...document.querySelectorAll('#global-bordas-list .global-borda-row')];
+    const bordas = rows.map(row => {
+        const nameInp = row.querySelector('input[placeholder*="Nome da borda"]');
+        const priceInp = row.querySelector('input[placeholder*="Preço"]');
+        const name = nameInp ? nameInp.value.trim() : '';
+        const price = parseFloat(priceInp?.value) || 0;
+        if (!name) return null;
+        const prodCheckboxes = row.querySelectorAll('input[type="checkbox"][value]');
+        const productIds = [];
+        prodCheckboxes.forEach(cb => { if (cb.checked) productIds.push(cb.value); });
+        return { id: genId(), name, price, productIds };
+    }).filter(Boolean);
+    showLoading('Salvando bordas globais...');
+    try {
+        await db.collection('companies').doc(currentCompanyId).update({ globalBordas: bordas });
+        c.globalBordas = bordas;
+        hideLoading(); closeModal();
+        showToast(bordas.length?`${bordas.length} borda(s) global(is) salva(s)!`:'Nenhuma borda salva.','success');
+    } catch(e) { hideLoading(); showToast('Erro: '+e.message,'danger'); }
+}
+function getBordasForProduct(product) {
+    // Retorna as bordas aplicáveis a um produto: primeiro verifica bordas próprias do produto,
+    // depois busca nas bordas globais que têm o product.id na lista productIds
+    const c = currentCompany || pubCompany;
+    if (!c || !product) return [];
+    // Se o produto tem bordaOptions próprias, usa elas (para compatibilidade com dados antigos)
+    if (product.bordaOptions && product.bordaOptions.length && product.hasBorda) {
+        return product.bordaOptions;
+    }
+    // Busca nas bordas globais
+    const globalBordas = c.globalBordas || [];
+    return globalBordas.filter(b => b.productIds && b.productIds.includes(product.id)).map(b => ({ name: b.name, price: b.price }));
+}
+function productHasBordaFromAnySource(product) {
+    if (product.hasBorda) return true;
+    const bordas = getBordasForProduct(product);
+    return bordas.length > 0;
 }
 // Upload de imagem removido — apenas URLs
 function sizeRowHtml(prefix, s) { return `<div class="variant-row" style="display:flex;gap:8px;margin-bottom:6px"><input type="text" class="form-control ${prefix}-size-name" value="${(s&&s.name||'').replace(/"/g,'&quot;')}" placeholder="Nome do tamanho (ex: Grande)" style="flex:2"><input type="number" class="form-control ${prefix}-size-price" value="${s&&s.price!=null?s.price:0}" step="0.01" min="0" placeholder="Preço (R$)" style="flex:1"><button type="button" class="btn btn-ghost btn-sm" onclick="this.parentElement.remove()"><i class="fa-solid fa-trash"></i></button></div>`; }
