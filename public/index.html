@@ -3048,7 +3048,46 @@ document.getElementById('menu-link-text').textContent = url;
 const items = c.menuItems||[];
 const g = document.getElementById('menu-grid');
 if (!items.length) { g.innerHTML='<div style="grid-column:1/-1;text-align:center;padding:60px;color:var(--gray)"><i class="fa-solid fa-utensils" style="font-size:48px;display:block;margin-bottom:12px;color:var(--border)"></i><h3>Nenhum item no cardápio</h3></div>'; return; }
-g.innerHTML = items.map((item,idx)=>`<div class="product-card" style="position:relative"><span style="position:absolute;top:6px;left:6px;background:var(--primary);color:#fff;font-size:11px;font-weight:800;padding:2px 8px;border-radius:10px;z-index:1">#${idx+1}</span>${item.image?`<img src="${item.image}" class="product-card-img">`:`<div class="product-card-no-img">${getCategoryEmoji(item.category)}</div>`}<div class="product-card-body"><div class="product-card-name">${item.name}</div><div class="product-card-cat">${item.category||'Sem categoria'}</div><div class="product-card-price">${fmt(item.price)}</div>${item.description?`<div style="font-size:12px;color:var(--gray);margin-bottom:8px;line-height:1.4">${item.description}</div>`:''}<div style="font-size:11px;color:var(--gray);margin-bottom:12px"><i class="fa-solid fa-boxes-stacked"></i> Estoque: ${item.stock||0} · Mín: ${item.minStock||5}</div><div class="product-card-actions"><button class="btn btn-sm btn-primary" onclick="showMenuItemModal('${item.id}')"><i class="fa-solid fa-edit"></i> Editar</button><button class="btn btn-sm btn-danger" onclick="deleteMenuItem('${item.id}')"><i class="fa-solid fa-trash"></i></button></div></div></div>`).join('');
+g.innerHTML = items.map((item,idx)=>`<div class="product-card" style="position:relative"><span style="position:absolute;top:6px;left:6px;background:var(--primary);color:#fff;font-size:11px;font-weight:800;padding:2px 8px;border-radius:10px;z-index:1;cursor:pointer" title="Clique para reordenar" onclick="reorderMenuItem('${item.id}')">#${idx+1} ✏️</span>${item.image?`<img src="${item.image}" class="product-card-img">`:`<div class="product-card-no-img">${getCategoryEmoji(item.category)}</div>`}<div class="product-card-body"><div class="product-card-name">${item.name}</div><div class="product-card-cat">${item.category||'Sem categoria'}</div><div class="product-card-price">${fmt(item.price)}</div>${item.description?`<div style="font-size:12px;color:var(--gray);margin-bottom:8px;line-height:1.4">${item.description}</div>`:''}<div style="font-size:11px;color:var(--gray);margin-bottom:12px"><i class="fa-solid fa-boxes-stacked"></i> Estoque: ${item.stock||0} · Mín: ${item.minStock||5}</div><div class="product-card-actions"><button class="btn btn-sm btn-primary" onclick="showMenuItemModal('${item.id}')"><i class="fa-solid fa-edit"></i> Editar</button><button class="btn btn-sm btn-danger" onclick="deleteMenuItem('${item.id}')"><i class="fa-solid fa-trash"></i></button></div></div></div>`).join('');
+}
+function reorderMenuItem(iid) {
+    const c = currentCompany;
+    const items = c.menuItems||[];
+    const idx = items.findIndex(i => i.id === iid);
+    if (idx === -1) return;
+    const item = items[idx];
+    const total = items.length;
+    showModal(`<i class="fa-solid fa-arrow-up-1-9"></i> Reordenar — ${item.name}`,
+        `<p style="margin-bottom:16px;font-size:14px;color:var(--dark3)">Posição atual: <strong>#${idx+1}</strong> de ${total}</p>
+        <div class="form-group"><label>Nova posição (#)</label>
+        <input type="number" id="reorder-newpos" class="form-control" value="${idx+1}" min="1" max="${total}" step="1">
+        <p style="font-size:12px;color:var(--gray);margin-top:6px">Digite o número da posição desejada (1 a ${total}). Os demais itens serão reorganizados automaticamente.</p></div>`,
+        `<button class="btn btn-ghost" onclick="closeModal()">Cancelar</button><button class="btn btn-primary" onclick="doReorderMenuItem('${iid}', ${idx})"><i class="fa-solid fa-check"></i> Reordenar</button>`,
+        false);
+    setTimeout(() => {
+        const inp = document.getElementById('reorder-newpos');
+        if (inp) { inp.focus(); inp.select(); }
+    }, 100);
+}
+function doReorderMenuItem(iid, oldIdx) {
+    const newPosInput = document.getElementById('reorder-newpos');
+    if (!newPosInput) return;
+    let newPos = parseInt(newPosInput.value) || (oldIdx + 1);
+    const c = currentCompany;
+    const items = c.menuItems || [];
+    const total = items.length;
+    newPos = Math.max(1, Math.min(total, newPos));
+    const newIdx = newPos - 1;
+    if (newIdx === oldIdx) { closeModal(); showToast('O item já está nessa posição.','info'); return; }
+    const [moved] = items.splice(oldIdx, 1);
+    items.splice(newIdx, 0, moved);
+    showLoading('Reordenando...');
+    db.collection('companies').doc(currentCompanyId).update({ menuItems: items })
+        .then(() => {
+            hideLoading(); closeModal(); renderMenu(); renderPDV(); renderStock();
+            showToast(`"${moved.name}" movido para #${newPos}!`,'success');
+        })
+        .catch(e => { hideLoading(); showToast('Erro: '+e.message,'danger'); });
 }
 function copyMenuLink() {
 const url = window.location.origin + window.location.pathname + '?cardapio='+currentCompanyId;
