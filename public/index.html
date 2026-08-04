@@ -230,14 +230,14 @@ table tr:hover td{background:#fafbfc}
 .pub-side-banner:empty{display:none}
 @media (max-width:1100px){.pub-side-banner{display:none}}
 /* Carrossel de Banners */
-.pub-carousel{width:100%;max-width:100%;margin:12px 0 8px;border-radius:12px;overflow:hidden;position:relative;background:#f1f5f9;aspect-ratio:3/1;max-height:220px;box-shadow:0 2px 8px rgba(0,0,0,.08)}
+.pub-carousel{width:100%;max-width:100%;margin:16px 0 8px;border-radius:12px;overflow:hidden;position:relative;background:#f1f5f9;aspect-ratio:3/1;max-height:220px;box-shadow:0 2px 8px rgba(0,0,0,.08)}
 .pub-carousel-inner{width:100%;height:100%;position:relative;display:flex;transition:transform .6s ease-in-out}
-.pub-carousel-slide{min-width:100%;height:100%;flex-shrink:0;display:flex;align-items:center;justify-content:center;overflow:hidden}
-.pub-carousel-slide img{width:100%;height:100%;object-fit:cover;display:block}
+.pub-carousel-slide{min-width:100%;height:100%;flex-shrink:0;display:flex;align-items:center;justify-content:center;overflow:hidden;background:#f1f5f9}
+.pub-carousel-slide img{width:100%;height:100%;object-fit:contain;display:block}
 .pub-carousel-dots{position:absolute;bottom:10px;left:50%;transform:translateX(-50%);display:flex;gap:8px;z-index:5}
 .pub-carousel-dot{width:10px;height:10px;border-radius:50%;background:rgba(255,255,255,.5);border:2px solid rgba(255,255,255,.8);cursor:pointer;transition:all .3s}
 .pub-carousel-dot.active{background:#fff;transform:scale(1.2)}
-.pub-carousel-empty{width:100%;aspect-ratio:3/1;max-height:220px;border-radius:12px;background:linear-gradient(135deg,#f8fafc,#e2e8f0);display:flex;align-items:center;justify-content:center;color:var(--gray-light);font-size:14px;font-weight:600;margin:12px 0 8px;border:2px dashed var(--border)}
+.pub-carousel-empty{width:100%;aspect-ratio:3/1;max-height:220px;border-radius:12px;background:linear-gradient(135deg,#f8fafc,#e2e8f0);display:flex;align-items:center;justify-content:center;color:var(--gray-light);font-size:14px;font-weight:600;margin:16px 0 8px;border:2px dashed var(--border)}
 .stock-item-row{background:#fff;border-radius:10px;padding:14px 16px;border:1px solid var(--border);display:flex;align-items:center;gap:14px;margin-bottom:8px;transition:box-shadow .2s}
 .stock-item-row:hover{box-shadow:0 4px 12px rgba(0,0,0,.07)}
 .stock-item-icon{width:44px;height:44px;border-radius:10px;background:linear-gradient(135deg,#dbeafe,#ede9fe);display:flex;align-items:center;justify-content:center;font-size:20px;flex-shrink:0}
@@ -1128,11 +1128,11 @@ table th,table td{padding:7px 8px;font-size:11px}
 <button class="btn btn-sm btn-ghost" onclick="doPubLogout()"><i class="fa-solid fa-sign-out-alt"></i> Sair</button>
 </div>
 </div>
-<div id="pub-carousel-container"></div>
 <div id="pub-tab-menu" class="pub-body">
 <div class="pub-with-banners">
 <div class="pub-side-banner pub-side-banner-left" id="pub-banner-left"></div>
 <div class="pub-menu-center">
+<div id="pub-carousel-container"></div>
 <div class="form-group" style="margin-top:16px"><input type="text" id="pub-search" class="form-control" placeholder="Buscar por nome ou número (#) do lanche..." oninput="onPubSearchInput()"></div>
 <div class="pub-cats" id="pub-cats"></div>
 <div class="pub-items-grid" id="pub-items"></div>
@@ -5942,7 +5942,7 @@ function renderPubCarousel() {
     pubCarouselInterval = setInterval(() => {
         currentSlide = (currentSlide + 1) % active.length;
         goPubCarouselSlide(currentSlide);
-    }, 4000);
+    }, 6000);
     window.goPubCarouselSlide = function(idx) {
         currentSlide = idx;
         const inner = document.getElementById('pub-carousel-inner');
