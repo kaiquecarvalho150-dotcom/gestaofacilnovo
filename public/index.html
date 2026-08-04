@@ -3528,25 +3528,10 @@ function showGlobalAdditionalsModal() {
     const allCats = [...new Set((c.menuItems||[]).map(p=>p.category).filter(Boolean))];
     const foodCats = allCats.filter(cat=>!isDrinkCategory(cat));
     if (!foodCats.length) { showToast('Cadastre produtos de comida com uma categoria definida primeiro (bebidas não têm adicionais).','warning'); return; }
-    // Determina quais categorias já compartilham os MESMOS adicionais para pré-marcar
-    const catAddsMap = {};
-    foodCats.forEach(cat => {
-        const adds = (c.categoryAdditionals && c.categoryAdditionals[cat]) || [];
-        const key = adds.map(a=>a.id+'|'+a.name+'|'+a.price+'|'+(a.isFree?'1':'0')).sort().join('::');
-        catAddsMap[cat] = { adds, key };
-    });
-    // Agrupa categorias que têm os mesmos adicionais (mesma key)
-    const keyGroups = {};
-    foodCats.forEach(cat => {
-        const k = catAddsMap[cat].key || '__empty__';
-        if (!keyGroups[k]) keyGroups[k] = [];
-        keyGroups[k].push(cat);
-    });
-    // Escolhe o grupo mais populoso como pré-selecionado
-    const groupsSorted = Object.values(keyGroups).sort((a,b)=>b.length - a.length);
-    const defaultSelected = groupsSorted[0] || [foodCats[0]];
-    const firstCat = defaultSelected[0];
-    const adds = catAddsMap[firstCat]?.adds || [];
+    const ca = c.categoryAdditionals || {};
+    // Categoria-fonte: a primeira que tiver adicionais cadastrados, ou a primeira da lista
+    const sourceCat = foodCats.find(cat => ca[cat] && ca[cat].length) || foodCats[0];
+    const adds = (ca[sourceCat] || []).slice();
     const addsHtml = adds.map((a,idx)=>`
     <div class="flex items-center gap-2 mb-2" id="gl-add-row-${a.id}">
         <input type="text" class="form-control" id="gl-add-name-${a.id}" value="${a.name}" placeholder="Ex: Bacon extra ou SEM ALFACE" style="flex:2">
@@ -3557,19 +3542,28 @@ function showGlobalAdditionalsModal() {
         </label>
         <button class="btn btn-sm btn-danger" onclick="document.getElementById('gl-add-row-${a.id}').remove()"><i class="fa-solid fa-times"></i></button>
     </div>`).join('');
+    // Pré-marca categorias que JÁ têm os mesmos adicionais que a fonte
+    const sourceKey = (ca[sourceCat]||[]).map(a=>a.id+'|'+a.name+'|'+a.price+'|'+(a.isFree?'1':'0')).sort().join('::') || '__none__';
     const catsHtml = foodCats.map(cc => {
-        const isChecked = defaultSelected.includes(cc);
+        const ck = (ca[cc]||[]).map(a=>a.id+'|'+a.name+'|'+a.price+'|'+(a.isFree?'1':'0')).sort().join('::') || '__none__';
+        const isChecked = (ck === sourceKey);
         return `<label style="display:inline-flex;align-items:center;gap:6px;margin:3px 6px 3px 0;padding:4px 10px;border-radius:6px;background:${isChecked?'var(--primary-light)':'#f8fafc'};border:1px solid ${isChecked?'var(--primary)':'var(--border)'};cursor:pointer;font-size:13px;font-weight:${isChecked?'700':'500'}">
             <input type="checkbox" class="gl-cat-chk" value="${cc.replace(/"/g,'&quot;')}" ${isChecked?'checked':''} onchange="this.parentElement.style.background=this.checked?'var(--primary-light)':'#f8fafc';this.parentElement.style.borderColor=this.checked?'var(--primary)':'var(--border)';this.parentElement.style.fontWeight=this.checked?'700':'500'" style="width:16px;height:16px;cursor:pointer">
             ${escHtml(cc)}
         </label>`;
     }).join('');
+    // Dropdown para carregar adicionais de QUALQUER categoria (ver/editar/excluir)
+    const loadOpts = foodCats.map(cc => `<option value="${cc.replace(/"/g,'&quot;')}" ${cc===sourceCat?'selected':''}>${escHtml(cc)}</option>`).join('');
     showModal('<i class="fa-solid fa-list-check"></i> Adicionais por Categoria',
     `<div class="form-group">
-        <label>Categorias (marque todas que terão estes mesmos adicionais)</label>
+        <label>Categorias que receberão estes adicionais ao salvar</label>
         <div style="display:flex;flex-wrap:wrap;gap:4px;padding:8px;background:#fafbfc;border-radius:8px;border:1px solid var(--border)">${catsHtml}</div>
     </div>
-    <p style="color:var(--gray);font-size:13px;margin:10px 0 14px">Os adicionais abaixo serão salvos para <strong>TODAS</strong> as categorias marcadas acima. Assim você cadastra uma vez e reutiliza em várias categorias.</p>
+    <div class="form-group">
+        <label>Carregar adicionais de:</label>
+        <select class="form-control" onchange="loadAdditionalsFromCategory(this.value)">${loadOpts}</select>
+        <p style="font-size:11px;color:var(--gray);margin-top:4px">Selecione uma categoria para VER/EDITAR/EXCLUIR os adicionais dela. Depois marque acima em quais categorias salvar.</p>
+    </div>
     <div style="background:#dbeafe;border:2px solid var(--primary);border-radius:8px;padding:12px;margin-bottom:16px">
         <div style="font-size:12px;font-weight:700;color:var(--primary);margin-bottom:6px"><i class="fa-solid fa-info-circle"></i> Como usar:</div>
         <ul style="font-size:12px;color:var(--dark3);margin:0;padding-left:16px;line-height:1.6">
@@ -3583,6 +3577,27 @@ function showGlobalAdditionalsModal() {
     <button class="btn btn-primary" onclick="saveGlobalAdditionals()"><i class="fa-solid fa-save"></i> Salvar Adicionais</button>`,
     false
     );
+}
+function loadAdditionalsFromCategory(catName) {
+    const c = currentCompany;
+    const ca = c.categoryAdditionals || {};
+    const adds = (ca[catName] || []);
+    const container = document.getElementById('gl-adds-container');
+    if (!container) return;
+    if (!adds.length) {
+        container.innerHTML = '<div style="text-align:center;padding:20px;color:var(--gray)">Nenhum adicional cadastrado para esta categoria.</div>';
+        return;
+    }
+    container.innerHTML = adds.map(a => `
+    <div class="flex items-center gap-2 mb-2" id="gl-add-row-${a.id}">
+        <input type="text" class="form-control" id="gl-add-name-${a.id}" value="${a.name}" placeholder="Ex: Bacon extra ou SEM ALFACE" style="flex:2">
+        <input type="number" class="form-control" id="gl-add-price-${a.id}" value="${a.price}" step="0.01" min="0" placeholder="R$" style="flex:1">
+        <label style="display:flex;align-items:center;gap:6px;font-size:12px;color:var(--gray);cursor:pointer;white-space:nowrap">
+            <input type="checkbox" class="gl-add-free" data-id="${a.id}" ${!a.price || a.price===0 ? 'checked' : ''} style="width:16px;height:16px;cursor:pointer">
+            <span>Sem custo</span>
+        </label>
+        <button class="btn btn-sm btn-danger" onclick="document.getElementById('gl-add-row-${a.id}').remove()"><i class="fa-solid fa-times"></i></button>
+    </div>`).join('');
 }
 let _comboLineSeq = 0;
 function comboLineRowHtml(prefix, idx, value) {
@@ -3657,32 +3672,69 @@ function showGlobalBordasModal() {
     const bordas = c.globalBordas || [];
     const bordasHtml = bordas.map((b,idx) => {
         const bId = b.id || 'gb_'+idx;
+        const sizes = (b.sizes && b.sizes.length) ? b.sizes : (b.price!=null ? [{name:'Tamanho Único', price:b.price}] : [{name:'Tamanho Único', price:0}]);
+        const sizesHtml = sizes.map((s,i) => bordaSizeRowHtml(bId, s, i)).join('');
+        const prodHtml = productCheckboxesHtml(products, b.productIds||[], bId);
         return `<div class="global-borda-row" style="border:1px solid var(--border);border-radius:10px;padding:14px;margin-bottom:12px;background:#fafbfc">
             <div class="flex items-center gap-2 mb-2">
-                <input type="text" class="form-control gb-name-${bId}" value="${(b.name||'').replace(/"/g,'&quot;')}" placeholder="Nome da borda (ex: Catupiry 20 CM)" style="flex:2">
-                <input type="number" class="form-control gb-price-${bId}" value="${b.price!=null?b.price:0}" step="0.01" min="0" placeholder="Preço (R$)" style="flex:1">
+                <input type="text" class="form-control gb-name" value="${(b.name||'').replace(/"/g,'&quot;')}" placeholder="Nome da borda (ex: Catupiry)" style="flex:2">
                 <button class="btn btn-sm btn-danger" onclick="this.closest('.global-borda-row').remove()"><i class="fa-solid fa-times"></i></button>
             </div>
-            <div style="font-size:11px;font-weight:700;color:var(--gray);text-transform:uppercase;margin-bottom:4px">Produtos que terão esta borda:</div>
-            <div style="display:flex;flex-wrap:wrap;gap:4px;max-height:120px;overflow-y:auto;padding:4px;border:1px solid var(--border);border-radius:6px;background:#fff">
-                ${products.map(p => {
-                    const assigned = b.productIds && b.productIds.includes(p.id);
-                    return `<label style="display:inline-flex;align-items:center;gap:4px;margin:2px;padding:3px 8px;border-radius:4px;background:${assigned?'var(--primary-light)':'#fff'};border:1px solid ${assigned?'var(--primary)':'var(--border)'};cursor:pointer;font-size:12px">
-                        <input type="checkbox" class="gb-prod-${bId}" value="${p.id}" ${assigned?'checked':''} style="width:14px;height:14px;cursor:pointer">
-                        ${escHtml(p.name)}
-                    </label>`;
-                }).join('')}
+            <div style="font-size:11px;font-weight:700;color:var(--gray);text-transform:uppercase;margin-bottom:4px">Tamanhos e preços desta borda:</div>
+            <div class="gb-sizes-list-${bId}">${sizesHtml}</div>
+            <button type="button" class="btn btn-ghost btn-sm mt-1" onclick="addBordaSizeRow(this,'${bId}')"><i class="fa-solid fa-plus"></i> Adicionar Tamanho</button>
+            <div style="font-size:11px;font-weight:700;color:var(--gray);text-transform:uppercase;margin:10px 0 4px">Produtos que terão esta borda:
+                <span style="font-weight:400;text-transform:none;color:var(--primary);cursor:pointer;font-size:11px" onclick="selectAllBordaProds(this,'${bId}')"> Selecionar Todos</span>
+                <span style="font-weight:400;text-transform:none;color:var(--gray);cursor:pointer;font-size:11px" onclick="deselectAllBordaProds(this,'${bId}')"> | Desmarcar Todos</span>
+            </div>
+            <div class="gb-prods-${bId}" style="display:flex;flex-wrap:wrap;gap:4px;max-height:120px;overflow-y:auto;padding:4px;border:1px solid var(--border);border-radius:6px;background:#fff">
+                ${prodHtml}
             </div>
         </div>`;
     }).join('');
     showModal('<i class="fa-solid fa-pizza-slice"></i> Gerenciar Bordas Globais',
-    `<p style="color:var(--gray);font-size:13px;margin-bottom:14px">Cadastre as opções de borda uma única vez e selecione para quais produtos cada borda vai aparecer. O sistema já filtra automaticamente pelo tamanho do produto (ex: se a borda se chama "Catupiry 20 CM", ela só aparece quando o cliente seleciona o tamanho 20 CM).</p>
+    `<p style="color:var(--gray);font-size:13px;margin-bottom:14px">Cadastre as opções de borda uma única vez. Cada borda pode ter <strong>vários tamanhos</strong> com preços diferentes (ex: Chocolate 20 CM e 27 CM). Selecione para quais produtos cada borda vai aparecer. O sistema filtra automaticamente pelo tamanho.</p>
     <div id="global-bordas-list">${bordasHtml}</div>
-    <button type="button" class="btn btn-ghost btn-sm mt-2 w-full" onclick="addGlobalBordaRow()"><i class="fa-solid fa-plus"></i> Adicionar Opção de Borda</button>`,
+    <button type="button" class="btn btn-ghost btn-sm mt-2 w-full" onclick="addGlobalBordaRow()"><i class="fa-solid fa-plus"></i> Adicionar Borda</button>`,
     `<button class="btn btn-ghost" onclick="closeModal()">Cancelar</button>
     <button class="btn btn-primary" onclick="saveGlobalBordas()"><i class="fa-solid fa-save"></i> Salvar Bordas</button>`,
     true
     );
+}
+function bordaSizeRowHtml(bId, s, idx) {
+    return `<div class="flex items-center gap-2 mb-1" style="margin-bottom:4px">
+        <input type="text" class="form-control gb-sname-${bId}" value="${(s&&s.name||'').replace(/"/g,'&quot;')}" placeholder="Tamanho (ex: 20 CM)" style="flex:2">
+        <input type="number" class="form-control gb-sprice-${bId}" value="${s&&s.price!=null?s.price:0}" step="0.01" min="0" placeholder="Preço (R$)" style="flex:1">
+        <button type="button" class="btn btn-sm btn-ghost" onclick="this.parentElement.remove()"><i class="fa-solid fa-trash"></i></button>
+    </div>`;
+}
+function addBordaSizeRow(btn, bId) {
+    const list = btn.previousElementSibling;
+    if (!list) return;
+    const d = document.createElement('div'); d.innerHTML = bordaSizeRowHtml(bId, null, 0);
+    list.appendChild(d.firstElementChild);
+}
+function productCheckboxesHtml(products, selectedIds, bId) {
+    if (!products.length) return '<div style="color:var(--gray);font-size:12px">Nenhum produto.</div>';
+    const groups = {};
+    products.forEach(p => { const k = p.category || 'Sem cat.'; (groups[k]=groups[k]||[]).push(p); });
+    return Object.keys(groups).sort().map(k => {
+        const prods = groups[k];
+        return `<div style="margin-bottom:2px"><span style="font-size:10px;font-weight:700;color:var(--gray);text-transform:uppercase">${escHtml(k)}</span>
+            ${prods.map(p => `<label style="display:inline-flex;align-items:center;gap:3px;margin:1px;padding:2px 6px;border-radius:4px;background:${(selectedIds||[]).includes(p.id)?'var(--primary-light)':'#fff'};border:1px solid ${(selectedIds||[]).includes(p.id)?'var(--primary)':'var(--border)'};cursor:pointer;font-size:11px">
+                <input type="checkbox" class="gb-prod-${bId}" value="${p.id}" ${(selectedIds||[]).includes(p.id)?'checked':''} style="width:13px;height:13px;cursor:pointer">
+                <span style="overflow:hidden;text-overflow:ellipsis;white-space:nowrap;max-width:100px">${escHtml(p.name)}</span>
+            </label>`).join('')}
+        </div>`;
+    }).join('');
+}
+function selectAllBordaProds(el, bId) {
+    const container = el.closest('.global-borda-row') || document;
+    container.querySelectorAll('.gb-prod-'+bId).forEach(cb => { cb.checked = true; cb.parentElement.style.background='var(--primary-light)'; cb.parentElement.style.borderColor='var(--primary)'; });
+}
+function deselectAllBordaProds(el, bId) {
+    const container = el.closest('.global-borda-row') || document;
+    container.querySelectorAll('.gb-prod-'+bId).forEach(cb => { cb.checked = false; cb.parentElement.style.background='#fff'; cb.parentElement.style.borderColor='var(--border)'; });
 }
 function addGlobalBordaRow() {
     const c = currentCompany;
@@ -3694,16 +3746,18 @@ function addGlobalBordaRow() {
     div.className = 'global-borda-row';
     div.style.cssText = 'border:1px solid var(--border);border-radius:10px;padding:14px;margin-bottom:12px;background:#fafbfc';
     div.innerHTML = `<div class="flex items-center gap-2 mb-2">
-        <input type="text" class="form-control gb-name-${bId}" placeholder="Nome da borda (ex: Catupiry 20 CM)" style="flex:2">
-        <input type="number" class="form-control gb-price-${bId}" step="0.01" min="0" placeholder="Preço (R$)" style="flex:1">
+        <input type="text" class="form-control gb-name" placeholder="Nome da borda (ex: Catupiry)" style="flex:2">
         <button class="btn btn-sm btn-danger" onclick="this.closest('.global-borda-row').remove()"><i class="fa-solid fa-times"></i></button>
     </div>
-    <div style="font-size:11px;font-weight:700;color:var(--gray);text-transform:uppercase;margin-bottom:4px">Produtos que terão esta borda:</div>
-    <div style="display:flex;flex-wrap:wrap;gap:4px;max-height:120px;overflow-y:auto;padding:4px;border:1px solid var(--border);border-radius:6px;background:#fff">
-        ${products.map(p => `<label style="display:inline-flex;align-items:center;gap:4px;margin:2px;padding:3px 8px;border-radius:4px;background:#fff;border:1px solid var(--border);cursor:pointer;font-size:12px">
-            <input type="checkbox" class="gb-prod-${bId}" value="${p.id}" style="width:14px;height:14px;cursor:pointer">
-            ${escHtml(p.name)}
-        </label>`).join('')}
+    <div style="font-size:11px;font-weight:700;color:var(--gray);text-transform:uppercase;margin-bottom:4px">Tamanhos e preços desta borda:</div>
+    <div class="gb-sizes-list-${bId}">${bordaSizeRowHtml(bId, null, 0)}</div>
+    <button type="button" class="btn btn-ghost btn-sm mt-1" onclick="addBordaSizeRow(this,'${bId}')"><i class="fa-solid fa-plus"></i> Adicionar Tamanho</button>
+    <div style="font-size:11px;font-weight:700;color:var(--gray);text-transform:uppercase;margin:10px 0 4px">Produtos que terão esta borda:
+        <span style="font-weight:400;text-transform:none;color:var(--primary);cursor:pointer;font-size:11px" onclick="selectAllBordaProds(this,'${bId}')"> Selecionar Todos</span>
+        <span style="font-weight:400;text-transform:none;color:var(--gray);cursor:pointer;font-size:11px" onclick="deselectAllBordaProds(this,'${bId}')"> | Desmarcar Todos</span>
+    </div>
+    <div class="gb-prods-${bId}" style="display:flex;flex-wrap:wrap;gap:4px;max-height:120px;overflow-y:auto;padding:4px;border:1px solid var(--border);border-radius:6px;background:#fff">
+        ${productCheckboxesHtml(products, [], bId)}
     </div>`;
     container.appendChild(div);
 }
@@ -3711,15 +3765,23 @@ async function saveGlobalBordas() {
     const c = currentCompany;
     const rows = [...document.querySelectorAll('#global-bordas-list .global-borda-row')];
     const bordas = rows.map(row => {
-        const nameInp = row.querySelector('input[placeholder*="Nome da borda"]');
-        const priceInp = row.querySelector('input[placeholder*="Preço"]');
+        const nameInp = row.querySelector('input.gb-name');
         const name = nameInp ? nameInp.value.trim() : '';
-        const price = parseFloat(priceInp?.value) || 0;
         if (!name) return null;
+        // Coleta tamanhos
+        const sizeNames = [...row.querySelectorAll('input[class*="gb-sname-"]')];
+        const sizePrices = [...row.querySelectorAll('input[class*="gb-sprice-"]')];
+        const sizes = sizeNames.map((inp,i) => {
+            const sn = inp.value.trim();
+            const sp = parseFloat(sizePrices[i]?.value) || 0;
+            return sn ? {name:sn, price:sp} : null;
+        }).filter(Boolean);
+        if (!sizes.length) return null;
+        // Coleta produtos
         const prodCheckboxes = row.querySelectorAll('input[type="checkbox"][value]');
         const productIds = [];
         prodCheckboxes.forEach(cb => { if (cb.checked) productIds.push(cb.value); });
-        return { id: genId(), name, price, productIds };
+        return { id: genId(), name, sizes, productIds };
     }).filter(Boolean);
     showLoading('Salvando bordas globais...');
     try {
@@ -3730,17 +3792,25 @@ async function saveGlobalBordas() {
     } catch(e) { hideLoading(); showToast('Erro: '+e.message,'danger'); }
 }
 function getBordasForProduct(product) {
-    // Retorna as bordas aplicáveis a um produto: primeiro verifica bordas próprias do produto,
-    // depois busca nas bordas globais que têm o product.id na lista productIds
+    // Retorna as bordas aplicáveis a um produto
     const c = currentCompany || pubCompany;
     if (!c || !product) return [];
-    // Se o produto tem bordaOptions próprias, usa elas (para compatibilidade com dados antigos)
+    // Se o produto tem bordaOptions próprias, usa elas (compatibilidade com dados antigos)
     if (product.bordaOptions && product.bordaOptions.length && product.hasBorda) {
         return product.bordaOptions;
     }
     // Busca nas bordas globais
     const globalBordas = c.globalBordas || [];
-    return globalBordas.filter(b => b.productIds && b.productIds.includes(product.id)).map(b => ({ name: b.name, price: b.price }));
+    const result = [];
+    globalBordas.forEach(b => {
+        if (!b.productIds || !b.productIds.includes(product.id)) return;
+        const sizes = (b.sizes && b.sizes.length) ? b.sizes : (b.price!=null ? [{name:'', price:b.price}] : []);
+        sizes.forEach(s => {
+            const combinedName = s.name ? (b.name + ' ' + s.name) : b.name;
+            result.push({ name: combinedName, price: s.price });
+        });
+    });
+    return result;
 }
 function productHasBordaFromAnySource(product) {
     if (product.hasBorda) return true;
