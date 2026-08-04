@@ -238,6 +238,8 @@ table tr:hover td{background:#fafbfc}
 .pub-carousel-dot{width:10px;height:10px;border-radius:50%;background:rgba(255,255,255,.5);border:2px solid rgba(255,255,255,.8);cursor:pointer;transition:all .3s}
 .pub-carousel-dot.active{background:#fff;transform:scale(1.2)}
 .pub-carousel-empty{width:100%;aspect-ratio:3/1;max-height:220px;border-radius:12px;background:linear-gradient(135deg,#f8fafc,#e2e8f0);display:flex;align-items:center;justify-content:center;color:var(--gray-light);font-size:14px;font-weight:600;margin:16px 0 8px;border:2px dashed var(--border)}
+.pub-hours-closed{background:linear-gradient(90deg,#fef3c7,#fde68a);border:1px solid #fcd34d;border-radius:12px;padding:12px 16px;margin:16px 0 8px;display:flex;align-items:center;gap:10px;font-size:13px;color:#92400e;font-weight:600}
+.pub-hours-closed i{font-size:18px;flex-shrink:0}
 .stock-item-row{background:#fff;border-radius:10px;padding:14px 16px;border:1px solid var(--border);display:flex;align-items:center;gap:14px;margin-bottom:8px;transition:box-shadow .2s}
 .stock-item-row:hover{box-shadow:0 4px 12px rgba(0,0,0,.07)}
 .stock-item-icon{width:44px;height:44px;border-radius:10px;background:linear-gradient(135deg,#dbeafe,#ede9fe);display:flex;align-items:center;justify-content:center;font-size:20px;flex-shrink:0}
@@ -1133,6 +1135,7 @@ table th,table td{padding:7px 8px;font-size:11px}
 <div class="pub-side-banner pub-side-banner-left" id="pub-banner-left"></div>
 <div class="pub-menu-center">
 <div id="pub-carousel-container"></div>
+<div id="pub-hours-banner"></div>
 <div class="form-group" style="margin-top:16px"><input type="text" id="pub-search" class="form-control" placeholder="Buscar por nome ou número (#) do lanche..." oninput="onPubSearchInput()"></div>
 <div class="pub-cats" id="pub-cats"></div>
 <div class="pub-items-grid" id="pub-items"></div>
@@ -2879,6 +2882,24 @@ function isCompanyOpen(company) {
     const openMin = oh*60+om, closeMin = ch*60+cm;
     if (closeMin > openMin) return cur >= openMin && cur < closeMin;
     return cur >= openMin || cur < closeMin;
+}
+// Retorna o horário de funciona/fecha de hoje formatado, para exibir ao cliente quando o cardápio estiver fechado.
+function getTodayHoursLabel(company) {
+    const bh = company && company.businessHours;
+    if (!bh) return '';
+    const cfg = bh[new Date().getDay()];
+    if (!cfg || cfg.closed) return 'Hoje estamos fechados.';
+    if (!cfg.open || !cfg.close) return '';
+    return `Hoje funcionamos das ${cfg.open} às ${cfg.close}.`;
+}
+// Renderiza o aviso de "cardápio fechado" no topo do cardápio público, reaproveitando o mesmo
+// horário de funcionamento (businessHours) já usado para o chat.
+function renderPubHoursBanner() {
+    const el = document.getElementById('pub-hours-banner');
+    if (!el) return;
+    if (!pubCompany || isCompanyOpen(pubCompany)) { el.innerHTML = ''; return; }
+    const hoursLabel = getTodayHoursLabel(pubCompany);
+    el.innerHTML = `<div class="pub-hours-closed"><i class="fa-solid fa-clock"></i><div>Estamos fechados no momento. Você pode navegar pelo cardápio, mas não é possível adicionar itens ao carrinho ou finalizar pedidos fora do horário de funcionamento.${hoursLabel?' '+hoursLabel:''}</div></div>`;
 }
 function showBusinessHoursModal() {
     const c = currentCompany;
@@ -5961,6 +5982,7 @@ if (rightEl) rightEl.innerHTML = banners.right ? `<img src="${banners.right}" al
 }
 function renderPublicMenu() {
 renderPubBanners();
+renderPubHoursBanner();
 const rawItems = pubCompany.menuItems || [];
 const items = rawItems.map((p,idx)=>({...p, _num: idx+1}));
 const cats = ['Todos', ...new Set(items.map(p=>p.category).filter(Boolean))];
@@ -6021,6 +6043,7 @@ return `<div>${catPillHtml(cat)}${pubCatTableHtml(catItems)}</div>`;
 function setPubCat(cat) { pubActiveCat = cat; renderPublicMenu(); }
 function onPubSearchInput() { pubSearchTerm = document.getElementById('pub-search')?.value || ''; renderPublicMenu(); }
 function quickAddPubCart(iid) {
+if (!isCompanyOpen(pubCompany)) { showToast('Estamos fechados no momento. Não é possível adicionar itens fora do horário de funcionamento.', 'warning'); return; }
 const p = (pubCompany.menuItems || []).find(x => x.id === iid);
 if (!p) return;
 const sigKey = iid + '|';
@@ -6031,6 +6054,7 @@ updatePubCartCount();
 showToast('Adicionado ao carrinho!', 'success');
 }
 function showPubItemModal(iid, presetFlavorIdx) {
+if (!isCompanyOpen(pubCompany)) { showToast('Estamos fechados no momento. Não é possível adicionar itens fora do horário de funcionamento.', 'warning'); return; }
 const p = (pubCompany.menuItems || []).find(x => x.id === iid);
 if (!p) return;
 const catAdds = getCategoryAdditionals(pubCompany, p.category);
@@ -6058,6 +6082,7 @@ ${catAdds.length ? `<div style="margin-bottom:12px"><div style="font-size:12px;f
 `<button class="btn btn-ghost" onclick="closeModal()">Cancelar</button><button class="btn btn-success" onclick="confirmPubAddCart('${p.id}', ${p.price})"><i class="fa-solid fa-cart-plus"></i> Adicionar</button>`, false);
 }
 function confirmPubAddCart(iid, basePrice) {
+if (!isCompanyOpen(pubCompany)) { closeModal(); showToast('Estamos fechados no momento. Não é possível adicionar itens fora do horário de funcionamento.', 'warning'); return; }
 const qty = parseInt(document.getElementById('pub-qty').value) || 1;
 const selected = [...document.querySelectorAll('.pub-add-check:checked')].map(cb => ({ id: cb.dataset.id, name: cb.dataset.name, price: parseFloat(cb.dataset.price) || 0, isFree: cb.dataset.isFree==='true' }));
 const addPrice = selected.filter(a=>!a.isFree).reduce((s, a) => s + a.price, 0);
@@ -6316,6 +6341,7 @@ updatePubCartCount();
 showPubCartModal();
 }
 async function placePubOrder() {
+    if (!isCompanyOpen(pubCompany)) { showToast('Estamos fechados no momento. Não é possível finalizar pedidos fora do horário de funcionamento.', 'warning'); return; }
     if (!pubCart.length) { showToast('Carrinho vazio','warning'); return; }
     // Cadastro/login não é mais exigido para finalizar o pedido — apenas para usar o chat.
     // Sem login, usamos um ID de convidado apenas para vincular o pedido.
