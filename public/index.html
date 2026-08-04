@@ -3549,6 +3549,33 @@ function showGlobalAdditionalsModal(selectedCat) {
     false
     );
 }
+let _comboLineSeq = 0;
+function comboLineRowHtml(prefix, idx, value) {
+    return `<div class="flex items-center gap-2 mb-2" id="${prefix}-combo-row-${idx}"><input type="text" class="form-control ${prefix}-combo-line" placeholder="Ex: 3x X Salada" value="${(value||'').replace(/"/g,'&quot;')}" style="flex:1"><button type="button" class="btn btn-sm btn-danger" onclick="document.getElementById('${prefix}-combo-row-${idx}').remove()"><i class="fa-solid fa-times"></i></button></div>`;
+}
+function addComboLineRow(prefix, value) {
+    const container = document.getElementById(prefix + '-combo-lines');
+    if (!container) return;
+    const idx = ++_comboLineSeq;
+    const div = document.createElement('div');
+    div.className = 'flex items-center gap-2 mb-2';
+    div.id = `${prefix}-combo-row-${idx}`;
+    div.innerHTML = `<input type="text" class="form-control ${prefix}-combo-line" placeholder="Ex: 3x X Salada" value="${(value||'').replace(/"/g,'&quot;')}" style="flex:1"><button type="button" class="btn btn-sm btn-danger" onclick="document.getElementById('${prefix}-combo-row-${idx}').remove()"><i class="fa-solid fa-times"></i></button>`;
+    container.appendChild(div);
+}
+function toggleComboSection(prefix) {
+    const chk = document.getElementById(prefix + '-iscombo');
+    const sec = document.getElementById(prefix + '-combo-section');
+    if (!chk || !sec) return;
+    sec.style.display = chk.checked ? 'block' : 'none';
+    if (chk.checked) {
+        const container = document.getElementById(prefix + '-combo-lines');
+        if (container && !container.children.length) addComboLineRow(prefix);
+    }
+}
+function collectComboLines(prefix) {
+    return [...document.querySelectorAll('.' + prefix + '-combo-line')].map(i => i.value.trim()).filter(Boolean);
+}
 let _glAddCount = 500;
 function addGlobalAdditionalRow() {
     const id = 'new_'+(++_glAddCount);
@@ -3671,11 +3698,22 @@ function showMenuItemModal(iid) {
 const c = currentCompany;
 const item = iid ? (c.menuItems||[]).find(i=>i.id===iid) : null;
 const isUnlimited = item ? item.stockUnlimited===true : false;
+_comboLineSeq = 0;
+const comboLinesHtml = (item?.comboItems||[]).map(l => comboLineRowHtml('mi', ++_comboLineSeq, l)).join('');
 showModal(`<i class="fa-solid fa-utensils"></i> ${item?'Editar Item':'Adicionar Item ao Cardápio'}`,
 `<div class="form-group"><label>Nome *</label><input type="text" id="mi-name" class="form-control" value="${item?.name||''}" placeholder="Nome do produto"></div>
 <div class="form-row">
 <div class="form-group"><label>Valor (R$) *</label><input type="number" id="mi-price" class="form-control" value="${item?.price||''}" step="0.01" min="0"></div>
 <div class="form-group"><label>Categoria</label><input type="text" id="mi-cat" class="form-control" list="pub-cats-datalist" value="${item?.category||''}" placeholder="Ex: Lanches, Bebidas..."><p style="font-size:11px;color:var(--gray);margin-top:4px">Use o mesmo nome de uma categoria já existente para agrupar corretamente no cardápio online.</p>${categoryDatalistHtml()}</div>
+</div>
+<div class="form-group" style="background:#fff7ed;border:2px solid #fed7aa;border-radius:10px;padding:14px;margin-bottom:14px">
+<label style="display:flex;align-items:center;gap:10px;cursor:pointer;font-weight:700;color:#9a3412"><input type="checkbox" id="mi-iscombo" ${item?.isCombo?'checked':''} onchange="toggleComboSection('mi')" style="width:18px;height:18px;cursor:pointer"> Este item é um Combo (2 ou mais produtos por um valor único)</label>
+<div id="mi-combo-section" style="display:${item?.isCombo?'block':'none'};margin-top:12px">
+<label style="font-size:12px;font-weight:600;color:var(--dark3);text-transform:uppercase;margin-bottom:8px;display:block">Itens que compõem o combo</label>
+<div id="mi-combo-lines">${comboLinesHtml}</div>
+<button type="button" class="btn btn-ghost btn-sm w-full mt-2" onclick="addComboLineRow('mi')"><i class="fa-solid fa-plus"></i> Adicionar item ao combo</button>
+<p style="font-size:11px;color:var(--gray);margin-top:8px">Ex: "6x Pastel de Carne (10cm)" ou linhas separadas como "3x X Salada" e "1x Refrigerante Lata". Isso vai aparecer como lista com marcadores no cardápio.</p>
+</div>
 </div>
 <div class="form-group"><label>Controle de Estoque</label><div style="background:#f8fafc;border:2px solid var(--border);border-radius:10px;padding:14px;margin-top:8px"><label style="display:flex;align-items:center;gap:10px;cursor:pointer;margin-bottom:10px"><input type="radio" name="mi-stock-type" value="limited" ${!isUnlimited?'checked':''} onchange="toggleMenuStockInput(true)" style="width:18px;height:18px;cursor:pointer"><div><div style="font-weight:700;color:var(--dark)">Quantidade Limitada</div><div style="font-size:12px;color:var(--gray)">Controlar estoque (ex: bebidas, insumos)</div></div></label><label style="display:flex;align-items:center;gap:10px;cursor:pointer"><input type="radio" name="mi-stock-type" value="unlimited" ${isUnlimited?'checked':''} onchange="toggleMenuStockInput(false)" style="width:18px;height:18px;cursor:pointer"><div><div style="font-weight:700;color:var(--dark)">Estoque Ilimitado</div><div style="font-size:12px;color:var(--gray)">Sem controle de quantidade (ex: lanches sob demanda)</div></div></label></div></div>
 <div id="mi-stock-limited-wrap" style="${isUnlimited?'display:none':''}">
@@ -3685,7 +3723,7 @@ showModal(`<i class="fa-solid fa-utensils"></i> ${item?'Editar Item':'Adicionar 
 </div>
 </div>
 <div class="form-group"><label>Custo (R$)</label><input type="number" id="mi-cost" class="form-control" value="${item?.cost||0}" step="0.01" min="0"></div>
-<div class="form-group"><label>Descrição</label><textarea id="mi-desc" class="form-control" rows="2" placeholder="Ingredientes, detalhes...">${item?.description||''}</textarea></div>
+<div class="form-group"><label>Descrição ${item?.isCombo?'(observação extra, opcional)':''}</label><textarea id="mi-desc" class="form-control" rows="2" placeholder="Ingredientes, detalhes...">${(item && item.customDesc!=null) ? item.customDesc : ((item && !item.isCombo) ? (item.description||'') : '')}</textarea></div>
 <div class="form-group"><label>Imagem (URL)</label><input type="text" id="mi-img" class="form-control" value="${item?.image||''}" placeholder="https://..."></div>
 <p style="font-size:11px;color:var(--gray);margin-top:-8px;margin-bottom:12px"><i class="fa-solid fa-circle-info"></i> Use uma imagem <strong>quadrada (proporção 1:1)</strong> hospedada em link externo — ela aparece em destaque no cardápio online.</p>
 ${variantOptionsEditorHtml('mi', item)}`,
@@ -3695,11 +3733,15 @@ true
 }
 function toggleMenuStockInput(show) { const wrap = document.getElementById('mi-stock-limited-wrap'); if (wrap) wrap.style.display = show ? 'block' : 'none'; }
 async function saveMenuItem(iid) {
-const name=document.getElementById('mi-name').value.trim(), price=parseFloat(document.getElementById('mi-price').value)||0, cat=document.getElementById('mi-cat').value.trim(), desc=document.getElementById('mi-desc').value.trim(), img=document.getElementById('mi-img').value.trim(), cost=parseFloat(document.getElementById('mi-cost').value)||0;
+const name=document.getElementById('mi-name').value.trim(), price=parseFloat(document.getElementById('mi-price').value)||0, cat=document.getElementById('mi-cat').value.trim(), customDesc=document.getElementById('mi-desc').value.trim(), img=document.getElementById('mi-img').value.trim(), cost=parseFloat(document.getElementById('mi-cost').value)||0;
 const stockType=document.querySelector('input[name="mi-stock-type"]:checked')?.value;
 const stock=stockType==='unlimited'?999999:(parseInt(document.getElementById('mi-stock').value)||0);
 const minStock=stockType==='unlimited'?0:(parseInt(document.getElementById('mi-minstock').value)||5);
 const variantData = collectVariantData('mi', price);
+const isCombo = document.getElementById('mi-iscombo')?.checked || false;
+const comboItems = isCombo ? collectComboLines('mi') : [];
+if (isCombo && !comboItems.length) { showToast('Adicione ao menos um item ao combo','warning'); return; }
+const desc = isCombo ? (comboItems.map(l=>'+ '+l).join('  •  ') + (customDesc?' — '+customDesc:'')) : customDesc;
 if (!name||!price) { showToast('Nome e valor são obrigatórios','warning'); return; }
 if (currentCompany.plan === 'trial' && (currentCompany.menuItems || []).length >= 20 && !iid) {
 showToast('Limite de 20 produtos atingido no plano Trial. Faça o upgrade!','warning');
@@ -3708,8 +3750,8 @@ return;
 }
 const c = currentCompany;
 c.menuItems = c.menuItems||[];
-if (iid) { const i=c.menuItems.find(i=>i.id===iid); if(i){i.name=name;i.price=price;i.category=cat;i.description=desc;i.image=img;i.stock=stock;i.minStock=minStock;i.cost=cost;i.stockUnlimited=stockType==='unlimited';i.sizes=variantData.sizes;i.hasBorda=variantData.hasBorda;i.bordaOptions=variantData.bordaOptions;i.flavors=variantData.flavors;} }
-else { c.menuItems.push({id:genId(),name,price,category:cat,description:desc,image:img,stock,minStock,cost,createdAt:new Date().toISOString(),additionals:[],stockUnlimited:stockType==='unlimited',sizes:variantData.sizes,hasBorda:variantData.hasBorda,bordaOptions:variantData.bordaOptions,flavors:variantData.flavors}); }
+if (iid) { const i=c.menuItems.find(i=>i.id===iid); if(i){i.name=name;i.price=price;i.category=cat;i.description=desc;i.customDesc=customDesc;i.isCombo=isCombo;i.comboItems=comboItems;i.image=img;i.stock=stock;i.minStock=minStock;i.cost=cost;i.stockUnlimited=stockType==='unlimited';i.sizes=variantData.sizes;i.hasBorda=variantData.hasBorda;i.bordaOptions=variantData.bordaOptions;i.flavors=variantData.flavors;} }
+else { c.menuItems.push({id:genId(),name,price,category:cat,description:desc,customDesc:customDesc,isCombo:isCombo,comboItems:comboItems,image:img,stock,minStock,cost,createdAt:new Date().toISOString(),additionals:[],stockUnlimited:stockType==='unlimited',sizes:variantData.sizes,hasBorda:variantData.hasBorda,bordaOptions:variantData.bordaOptions,flavors:variantData.flavors}); }
 showLoading('Salvando...');
 try { await db.collection('companies').doc(currentCompanyId).update({menuItems:c.menuItems}); hideLoading(); closeModal(); renderMenu(); renderPDV(); renderStock(); showToast(iid?'Item atualizado!':'Item adicionado!','success'); }
 catch(e) { hideLoading(); showToast('Erro: '+e.message,'danger'); }
