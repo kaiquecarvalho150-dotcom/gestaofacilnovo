@@ -229,6 +229,15 @@ table tr:hover td{background:#fafbfc}
 .pub-side-banner img{width:100%;height:auto;display:block;border-radius:12px;box-shadow:0 4px 12px rgba(0,0,0,.08)}
 .pub-side-banner:empty{display:none}
 @media (max-width:1100px){.pub-side-banner{display:none}}
+/* Carrossel de Banners */
+.pub-carousel{width:100%;max-width:100%;margin:12px 0 8px;border-radius:12px;overflow:hidden;position:relative;background:#f1f5f9;aspect-ratio:3/1;max-height:220px;box-shadow:0 2px 8px rgba(0,0,0,.08)}
+.pub-carousel-inner{width:100%;height:100%;position:relative;display:flex;transition:transform .6s ease-in-out}
+.pub-carousel-slide{min-width:100%;height:100%;flex-shrink:0;display:flex;align-items:center;justify-content:center;overflow:hidden}
+.pub-carousel-slide img{width:100%;height:100%;object-fit:cover;display:block}
+.pub-carousel-dots{position:absolute;bottom:10px;left:50%;transform:translateX(-50%);display:flex;gap:8px;z-index:5}
+.pub-carousel-dot{width:10px;height:10px;border-radius:50%;background:rgba(255,255,255,.5);border:2px solid rgba(255,255,255,.8);cursor:pointer;transition:all .3s}
+.pub-carousel-dot.active{background:#fff;transform:scale(1.2)}
+.pub-carousel-empty{width:100%;aspect-ratio:3/1;max-height:220px;border-radius:12px;background:linear-gradient(135deg,#f8fafc,#e2e8f0);display:flex;align-items:center;justify-content:center;color:var(--gray-light);font-size:14px;font-weight:600;margin:12px 0 8px;border:2px dashed var(--border)}
 .stock-item-row{background:#fff;border-radius:10px;padding:14px 16px;border:1px solid var(--border);display:flex;align-items:center;gap:14px;margin-bottom:8px;transition:box-shadow .2s}
 .stock-item-row:hover{box-shadow:0 4px 12px rgba(0,0,0,.07)}
 .stock-item-icon{width:44px;height:44px;border-radius:10px;background:linear-gradient(135deg,#dbeafe,#ede9fe);display:flex;align-items:center;justify-content:center;font-size:20px;flex-shrink:0}
@@ -1119,6 +1128,7 @@ table th,table td{padding:7px 8px;font-size:11px}
 <button class="btn btn-sm btn-ghost" onclick="doPubLogout()"><i class="fa-solid fa-sign-out-alt"></i> Sair</button>
 </div>
 </div>
+<div id="pub-carousel-container"></div>
 <div id="pub-tab-menu" class="pub-body">
 <div class="pub-with-banners">
 <div class="pub-side-banner pub-side-banner-left" id="pub-banner-left"></div>
@@ -2984,21 +2994,33 @@ function showPubBannersModal() {
 const c = currentCompany;
 const leftUrl = (c.adBanners && c.adBanners.left) || '';
 const rightUrl = (c.adBanners && c.adBanners.right) || '';
-showModal('<i class="fa-solid fa-image" style="color:#7c3aed"></i> Banners Publicitários — Cardápio Online',
-`<p style="color:var(--gray);margin-bottom:16px;font-size:13px">Adicione imagens informativas que aparecem nas laterais do cardápio online para chamar atenção dos clientes. São apenas banners visuais, sem link/clique.</p>
+const carousel = (c.pubCarouselBanners && c.pubCarouselBanners.length) ? c.pubCarouselBanners : ['','',''];
+showModal('<i class="fa-solid fa-image" style="color:#7c3aed"></i> Banners — Cardápio Online',
+`<div style="border-bottom:1px solid var(--border);padding-bottom:16px;margin-bottom:16px">
+<h4 style="font-size:14px;font-weight:700;margin-bottom:12px"><i class="fa-solid fa-photo-film"></i> Carrossel de Propaganda</h4>
+<p style="font-size:12px;color:var(--gray);margin-bottom:12px">Até 3 imagens em formato retangular que ficam rodando automaticamente no topo do cardápio. Apenas URLs externas.</p>
+${[0,1,2].map(i => `<div class="form-group"><label>Banner ${i+1} (URL)</label><input type="text" id="car-banner-${i}" class="form-control" placeholder="https://..." value="${(carousel[i]||'').replace(/"/g,'&quot;')}"></div>`).join('')}
+<div style="font-size:11px;color:var(--gray)">Dica: use imagens retangulares com proporção 3:1 (ex: 900x300px) para melhor encaixe.</div>
+</div>
+<div style="padding-top:8px">
+<h4 style="font-size:14px;font-weight:700;margin-bottom:12px"><i class="fa-solid fa-panorama"></i> Banners Laterais</h4>
+<p style="font-size:12px;color:var(--gray);margin-bottom:12px">Aparecem nas laterais do cardápio em telas maiores.</p>
 <div class="form-group"><label>Imagem Lateral Esquerda (URL)</label><input type="text" id="ban-left" class="form-control" placeholder="https://..." value="${leftUrl.replace(/"/g,'&quot;')}"></div>
 <div class="form-group"><label>Imagem Lateral Direita (URL)</label><input type="text" id="ban-right" class="form-control" placeholder="https://..." value="${rightUrl.replace(/"/g,'&quot;')}"></div>
-<div style="font-size:11px;color:var(--gray)">Dica: use imagens verticais (ex: 300x600px) para melhor encaixe.</div>`,
-`<button class="btn btn-ghost" onclick="closeModal()">Cancelar</button><button class="btn btn-primary" onclick="savePubBanners()"><i class="fa-solid fa-save"></i> Salvar Banners</button>`, false);
+<div style="font-size:11px;color:var(--gray)">Use imagens verticais (ex: 300x600px) para melhor encaixe.</div>
+</div>`,
+`<button class="btn btn-ghost" onclick="closeModal()">Cancelar</button><button class="btn btn-primary" onclick="savePubBanners()"><i class="fa-solid fa-save"></i> Salvar Banners</button>`, true);
 }
 async function savePubBanners() {
 const left = document.getElementById('ban-left').value.trim();
 const right = document.getElementById('ban-right').value.trim();
+const carBanners = [0,1,2].map(i => (document.getElementById('car-banner-'+i)?.value||'').trim()).filter(u => u);
 const c = currentCompany;
 c.adBanners = { left, right };
+c.pubCarouselBanners = carBanners;
 showLoading('Salvando...');
 try {
-await db.collection('companies').doc(currentCompanyId).update({ adBanners: c.adBanners });
+await db.collection('companies').doc(currentCompanyId).update({ adBanners: c.adBanners, pubCarouselBanners: carBanners });
 hideLoading(); closeModal(); showToast('Banners salvos!', 'success');
 } catch(e) { hideLoading(); showToast('Erro: '+e.message, 'danger'); }
 }
@@ -5637,6 +5659,7 @@ document.getElementById('pub-cart-btn').style.display = 'none';
 function showPubMain() {
 document.getElementById('pub-auth-view').classList.add('hidden');
 document.getElementById('pub-main-view').classList.remove('hidden');
+renderPubCarousel();
 renderPublicMenu();
 document.getElementById('pub-chat-btn').style.display = 'flex';
 if (currentCustomer) {
@@ -5896,6 +5919,38 @@ if (cust) { currentCustomer = cust; }
 showPubMain();
 hideLoading();
 } catch(e) { hideLoading(); showToast('Erro: '+e.message, 'danger'); showPage('page-login'); }
+}
+let pubCarouselInterval = null;
+function renderPubCarousel() {
+    const container = document.getElementById('pub-carousel-container');
+    if (!container) return;
+    const banners = (pubCompany && pubCompany.pubCarouselBanners) || [];
+    const active = banners.filter(url => url && url.trim());
+    if (!active.length) {
+        container.innerHTML = '<div class="pub-carousel-empty"><i class="fa-solid fa-image" style="margin-right:8px"></i> Espaço para banners promocionais</div>';
+        if (pubCarouselInterval) { clearInterval(pubCarouselInterval); pubCarouselInterval = null; }
+        return;
+    }
+    let currentSlide = 0;
+    container.innerHTML = `<div class="pub-carousel">
+        <div class="pub-carousel-inner" id="pub-carousel-inner">
+            ${active.map(url => `<div class="pub-carousel-slide"><img src="${url}" alt="Banner" loading="lazy"></div>`).join('')}
+        </div>
+        <div class="pub-carousel-dots">${active.map((_, i) => `<div class="pub-carousel-dot ${i===0?'active':''}" data-idx="${i}" onclick="goPubCarouselSlide(${i})"></div>`).join('')}</div>
+    </div>`;
+    if (pubCarouselInterval) { clearInterval(pubCarouselInterval); }
+    pubCarouselInterval = setInterval(() => {
+        currentSlide = (currentSlide + 1) % active.length;
+        goPubCarouselSlide(currentSlide);
+    }, 4000);
+    window.goPubCarouselSlide = function(idx) {
+        currentSlide = idx;
+        const inner = document.getElementById('pub-carousel-inner');
+        if (inner) inner.style.transform = `translateX(-${idx * 100}%)`;
+        document.querySelectorAll('.pub-carousel-dot').forEach((d, i) => {
+            d.classList.toggle('active', i === idx);
+        });
+    };
 }
 function renderPubBanners() {
 const banners = (pubCompany && pubCompany.adBanners) || {};
