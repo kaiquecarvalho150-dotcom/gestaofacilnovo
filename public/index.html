@@ -4327,10 +4327,12 @@ const totalExpenses = expenses.reduce((s, x) => s + (x.amount || 0), 0);
 const totalCosts = totalExpenses;
 const profit = totalRevenue - totalCosts;
 const totalSales = sales.length;
+// Total recebido APENAS em taxas de entrega das OS do mês (informativo)
+const totalDeliveryFees = (sales || []).reduce((s, o) => s + (parseFloat(o.deliveryTotal) || 0), 0);
 document.getElementById('rpt-kpis').innerHTML = `
 <div class="rpt-kpi"><div class="rpt-kpi-val text-success">${fmt(totalRevenue)}</div><div class="rpt-kpi-label">Receita do Mês</div></div>
 <div class="rpt-kpi"><div class="rpt-kpi-val text-danger">${fmt(totalExpenses)}</div><div class="rpt-kpi-label">Despesas</div></div>
-<div class="rpt-kpi"><div class="rpt-kpi-val text-warning">${fmt(totalSalary)}</div><div class="rpt-kpi-label">Folha de Pagamento</div></div>
+<div class="rpt-kpi"><div class="rpt-kpi-val text-warning">${fmt(totalDeliveryFees)}</div><div class="rpt-kpi-label">Valor recebido de taxas de entrega</div></div>
 <div class="rpt-kpi"><div class="rpt-kpi-val" style="color:${profit>=0?'var(--success)':'var(--danger)'}">${fmt(profit)}</div><div class="rpt-kpi-label"><i class="fa-solid fa-circle" style="font-size:6px;color:${profit>=0?'var(--success)':'var(--danger)'};margin-right:4px"></i>${profit>=0?'LUCRO':'PREJUÍZO'}</div></div>
 <div class="rpt-kpi"><div class="rpt-kpi-val text-primary">${totalSales}</div><div class="rpt-kpi-label">Total de Vendas</div></div>
 `;
