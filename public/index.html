@@ -1081,7 +1081,10 @@ table th,table td{padding:7px 8px;font-size:11px}
 <div id="section-fiados" class="section">
 <div class="flex items-center justify-between mb-4 flex-wrap gap-3">
 <div style="font-size:15px;font-weight:700"><i class="fa-solid fa-hand-holding-dollar"></i> Contas de Fiado</div>
+<div class="flex gap-2 flex-wrap">
+<button class="btn btn-success" onclick="enviarCobrancasVencidas()"><i class="fa-brands fa-whatsapp"></i> Cobrar Vencidos no WhatsApp</button>
 <button class="btn btn-primary" onclick="showFiadoClientModal()"><i class="fa-solid fa-plus"></i> Abrir Conta de Fiado</button>
+</div>
 </div>
 <div id="fiados-total-summary"></div>
 <p style="color:var(--gray);font-size:13px;margin:-8px 0 12px">Área restrita ao dono da empresa. Cadastre clientes com conta de fiado, defina limite de compra e vencimento, e marque OS pagas para receber depois. A OS fica registrada aqui e só entra nos Relatórios quando você der baixa (marcar como recebido).</p>
@@ -5299,6 +5302,9 @@ ${paymentsCount ? `<div style="margin-top:4px;font-size:11px;color:var(--gray)">
 <div class="flex gap-2 mt-2">
 <button class="btn btn-sm btn-info flex-1" onclick="showFiadoManageModal('${cl.id}')"><i class="fa-solid fa-clipboard-list"></i> Ver OS / Dar Baixa</button>
 </div>
+${saldoDevedor > 0 ? `<div class="flex gap-2 mt-2">
+<button class="btn btn-sm btn-success flex-1" onclick="cobrarFiadoWhatsapp('${cl.id}')"><i class="fa-brands fa-whatsapp"></i> Cobrar no WhatsApp</button>
+</div>` : ''}
 <div class="flex gap-2 mt-2">
 <button class="btn btn-sm btn-primary flex-1" onclick="showFiadoClientModal('${cl.id}')"><i class="fa-solid fa-edit"></i> Editar</button>
 <button class="btn btn-sm btn-danger" onclick="deleteFiadoClient('${cl.id}')"><i class="fa-solid fa-trash"></i></button>
@@ -5306,6 +5312,65 @@ ${paymentsCount ? `<div style="margin-top:4px;font-size:11px;color:var(--gray)">
 </div>
 </div>`;
 }).join('');
+}
+// ============================================================
+// COBRANÇA AUTOMÁTICA NO WHATSAPP (link wa.me com mensagem pronta)
+// ============================================================
+function waPhone(phone) {
+    let d = (phone || '').replace(/\D/g, '');
+    if (!d) return '';
+    if (d.length === 10 || d.length === 11) d = '55' + d; // adiciona DDI do Brasil
+    return d;
+}
+function fiadoWhatsAppMessage(cl) {
+    const c = currentCompany;
+    const saldo = (cl.assignedOrders || []).reduce((s, o) => s + (o.valorCobrado || 0), 0);
+    const due = cl.dueDate ? new Date(cl.dueDate + 'T00:00:00').toLocaleDateString('pt-BR') : 'em aberto';
+    return 'Olá, ' + (cl.name || 'cliente') + '! 👋\n\n'
+        + 'Passando por aqui para lembrar que você tem uma pendência conosco:\n\n'
+        + '💰 Valor pendente: ' + fmt(saldo) + '\n'
+        + '📅 Vencimento: ' + due + '\n\n'
+        + 'Poderia acertar até o fim do prazo? Qualquer dúvida, estamos à disposição!\n\n'
+        + 'Obrigado(a) pela preferência!\n'
+        + (c.companyName || '');
+}
+function openFiadoWhatsApp(cl) {
+    const phone = waPhone(cl.phone);
+    if (!phone) { showToast((cl.name || 'Este cliente') + ' não tem telefone cadastrado para cobrança', 'warning'); return false; }
+    const url = 'https://wa.me/' + phone + '?text=' + encodeURIComponent(fiadoWhatsAppMessage(cl));
+    window.open(url, '_blank');
+    return true;
+}
+function cobrarFiadoWhatsapp(cid) {
+    const c = currentCompany;
+    const cl = (c.fiadoClients || []).find(x => x.id === cid);
+    if (!cl) return;
+    openFiadoWhatsApp(cl);
+}
+function enviarCobrancasVencidas() {
+    const c = currentCompany;
+    const today = localDateStr();
+    const list = (c.fiadoClients || []).filter(cl => {
+        const saldo = (cl.assignedOrders || []).reduce((s, o) => s + (o.valorCobrado || 0), 0);
+        return saldo > 0 && cl.dueDate && cl.dueDate < today;
+    });
+    if (!list.length) { showToast('Nenhuma conta de fiado vencida no momento 🎉', 'success'); return; }
+    const rows = list.map(cl => {
+        const saldo = (cl.assignedOrders || []).reduce((s, o) => s + (o.valorCobrado || 0), 0);
+        const due = cl.dueDate ? new Date(cl.dueDate + 'T00:00:00').toLocaleDateString('pt-BR') : '—';
+        const phoneOk = !!waPhone(cl.phone);
+        return `<div style="display:flex;align-items:center;gap:10px;padding:10px;border:1px solid var(--border);border-radius:8px;margin-bottom:8px">
+            <div style="flex:1;min-width:0">
+                <div style="font-weight:700">${escHtml(cl.name || '')} <span style="color:var(--danger)">${fmt(saldo)}</span></div>
+                <div style="font-size:12px;color:var(--gray)">Vencimento: ${due}${phoneOk ? ' · ' + escHtml(cl.phone) : ' · <b>sem telefone</b>'}</div>
+            </div>
+            <button class="btn btn-sm ${phoneOk ? 'btn-success' : 'btn-ghost'}" ${phoneOk ? `onclick="cobrarFiadoWhatsapp('${cl.id}')"` : 'disabled'}><i class="fa-brands fa-whatsapp"></i> Cobrar</button>
+        </div>`;
+    }).join('');
+    showModal('<i class="fa-brands fa-whatsapp"></i> Cobrança de Contas Vencidas',
+        `<p style="color:var(--gray);font-size:13px;margin-bottom:12px">${list.length} conta(s) vencida(s). Clique em <strong>Cobrar</strong> para abrir o WhatsApp com a mensagem de cobrança já pronta (nome, valor e vencimento).</p>
+        <div style="max-height:60vh;overflow-y:auto">${rows}</div>`,
+        `<button class="btn btn-ghost" onclick="closeModal()">Fechar</button>`, false);
 }
 function showFiadoClientModal(cid) {
 const c = currentCompany;
