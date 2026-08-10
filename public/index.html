@@ -2494,14 +2494,136 @@ function getCategoryAdditionals(company, cat) {
     if (company.categoryAdditionals && Object.prototype.hasOwnProperty.call(company.categoryAdditionals, cat)) return [];
     return company.globalAdditionals || [];
 }
+/* --- ADICIONAIS EM COMBO: grade com UMA COLUNA POR LANCHE, para o cliente marcar exatamente em qual lanche vai cada adicional (mesmo/separado) --- */
+function comboLancheList(product, menuItems) {
+    const out = [];
+    if (!product || !product.isCombo) return out;
+    menuItems = menuItems || ((currentCompany && currentCompany.menuItems) || []);
+    (product.comboItems || []).forEach(it => {
+        const cc = parseComboItem(it);
+        if (!cc || !cc.name) return;
+        let mi = null;
+        if (it && it.productId) mi = menuItems.find(m => m.id === it.productId);
+        if (!mi) mi = menuItems.find(m => String(m.name||'').trim().toLowerCase() === String(cc.name).trim().toLowerCase());
+        if (mi && isDrinkCategory(mi.category)) return; // bebida não recebe adicionais
+        if (!mi && isDrinkCategory(cc.name)) return;
+        const q = cc.qty || 1;
+        for (let i = 0; i < q; i++) out.push({ name: cc.name, productId: (mi ? mi.id : '') });
+    });
+    return out;
+}
+function buildAddsRowsHtml(catAdds, lanches, checkClass) {
+    if (!catAdds || !catAdds.length) return '';
+    const grid = lanches && lanches.length > 1;
+    if (grid) {
+        const thL = lanches.map((l, idx) => `<th style="text-align:center;font-size:11px;color:var(--dark);font-weight:800;padding:4px;white-space:nowrap">${lanches.length>1?(idx+1)+'º ':''}${escHtml(l.name)}</th>`).join('');
+        const rows = catAdds.map(a => {
+            const freeBadge = a.isFree ? ' <span style="color:var(--gray);font-size:11px">(sem custo)</span>' : '';
+            const valueHtml = a.isFree ? 'Grátis' : fmt(a.price);
+            const cells = lanches.map((l, idx) => `<td style="text-align:center;padding:6px 2px"><input type="checkbox" class="${checkClass}" data-id="${a.id}" data-name="${a.name}" data-price="${a.price}" data-is-free="${a.isFree||false}" data-lane="${idx}" onchange="refreshVariantPrice()" style="width:18px;height:18px;cursor:pointer"></td>`).join('');
+            return `<tr style="border-bottom:1px solid #f1f5f9"><td style="padding:6px;font-weight:600">${a.name}${freeBadge}</td><td style="text-align:right;color:${a.isFree?'var(--gray)':'var(--primary)'};font-weight:700;white-space:nowrap;padding:6px">${valueHtml}</td>${cells}</tr>`;
+        }).join('');
+        return `<div style="margin-bottom:10px"><div style="font-size:12px;font-weight:700;color:var(--gray);text-transform:uppercase;letter-spacing:.3px;margin-bottom:6px">Adicionais do combo — marque em qual lanche vai cada um</div><table style="width:100%;border-collapse:collapse;font-size:13px"><thead><tr><th style="text-align:left;font-size:11px;color:var(--gray);padding:4px">Adicional</th><th style="text-align:right;font-size:11px;color:var(--gray);padding:4px">Valor</th>${thL}</tr></thead><tbody>${rows}</tbody></table></div>`;
+    }
+    return catAdds.map(a => {
+        const freeBadge = a.isFree ? ' <span style="color:var(--gray);font-size:11px">(sem custo)</span>' : '';
+        const valueHtml = a.isFree ? 'Grátis' : fmt(a.price);
+        return `<div class="flex items-center justify-between" style="padding:10px 0;border-bottom:1px solid #f1f5f9">
+            <label style="display:flex;align-items:center;gap:10px;cursor:pointer;flex:1">
+                <input type="checkbox" class="${checkClass}" data-id="${a.id}" data-name="${a.name}" data-price="${a.price}" data-is-free="${a.isFree||false}" onchange="refreshVariantPrice()" style="width:18px;height:18px;cursor:pointer">
+                <span style="font-weight:600">${a.name}${freeBadge}</span>
+            </label>
+            <span style="color:${a.isFree?'var(--gray)':'var(--primary)'};font-weight:700">${valueHtml}</span>
+        </div>`;
+    }).join('');
+}
+function addSelQty(el) {
+    if (!el) return 0;
+    if (el.type === 'checkbox') return el.checked ? 1 : 0;
+    return parseInt(el.value) || 0;
+}
+function collectSelectedAdditionals(selector, lanches) {
+    const grid = lanches && lanches.length > 1;
+    if (grid) {
+        const laneChecks = Array.from({length:lanches.length}, () => []);
+        const meta = {};
+        document.querySelectorAll(selector).forEach(el => {
+            meta[el.dataset.id] = { id: el.dataset.id, name: el.dataset.name, price: parseFloat(el.dataset.price) || 0, isFree: el.dataset.isFree === 'true' };
+            if (el.checked) {
+                const lane = parseInt(el.dataset.lane || '-1', 10);
+                if (lane >= 0 && lane < laneChecks.length) laneChecks[lane].push(meta[el.dataset.id]);
+            }
+        });
+        const qtyMap = {};
+        laneChecks.forEach(grp => grp.forEach(a => { qtyMap[a.id] = (qtyMap[a.id] || 0) + 1; }));
+        const additionals = Object.keys(qtyMap).map(id => ({ id, name: meta[id].name, price: meta[id].price, isFree: meta[id].isFree, qty: qtyMap[id] }));
+        return { additionals, addPerLanes: laneChecks };
+    }
+    const out = [];
+    document.querySelectorAll(selector).forEach(el => {
+        const qty = addSelQty(el);
+        if (qty > 0) out.push({ id: el.dataset.id, name: el.dataset.name, price: parseFloat(el.dataset.price) || 0, isFree: el.dataset.isFree === 'true', qty });
+    });
+    return { additionals: out, addPerLanes: null };
+}
+/* --- DETALHES POR LANCHE NO RESUMO/IMPRESSÃO: cada produto do combo em sua própria linha,
+com os adicionais escolhidos logo abaixo (1º X Tudo / adicionais / 2º X Tudo / adicionais...) --- */
+function comboLanesData(item, menuItems) {
+    let baseName = item.name;
+    const m = baseName.match(/^(.+?)\s*\(\+(.+?)\)$/);
+    if (m) baseName = m[1].trim();
+    const combo = (menuItems || []).find(mi => (mi.name || '').trim() === baseName && mi.isCombo);
+    if (!combo || !combo.comboItems || !combo.comboItems.length || !(item.addPerLanes && item.addPerLanes.length)) return null;
+    const lanes = comboLancheList(combo, menuItems);
+    const rows = [];
+    let laneIdx = 0;
+    (combo.comboItems || []).forEach(ci => {
+        const cc = parseComboItem(ci);
+        if (!cc || !cc.name) return;
+        let mi = null;
+        if (ci && ci.productId) mi = (menuItems || []).find(x => x.id === ci.productId);
+        if (!mi) mi = (menuItems || []).find(x => String(x.name || '').trim().toLowerCase() === String(cc.name).trim().toLowerCase());
+        const isDrink = (mi && isDrinkCategory(mi.category)) || (!mi && isDrinkCategory(cc.name));
+        if (isDrink) { rows.push({ type: 'drink', name: cc.name, qty: cc.qty }); return; }
+        const q = cc.qty || 1;
+        for (let i = 0; i < q; i++) {
+            const lane = lanes[laneIdx] || { name: cc.name };
+            rows.push({ type: 'lane', name: lane.name, num: laneIdx + 1, adds: item.addPerLanes[laneIdx] || [] });
+            laneIdx++;
+        }
+    });
+    return rows;
+}
+// Nome do item no resumo do pedido: nome base + cada lanche com os adicionais logo abaixo
+function cartItemNameHtml(item, menuItems) {
+    const rows = comboLanesData(item, menuItems);
+    if (!rows) return item.name;
+    let baseName = item.name;
+    const m = baseName.match(/^(.+?)\s*\(\+(.+?)\)$/);
+    if (m) baseName = m[1].trim();
+    const parts = [baseName];
+    rows.forEach(r => {
+        if (r.type === 'drink') {
+            parts.push(`<div style="font-size:11.5px;font-weight:600;color:var(--dark3);margin-top:2px">${r.qty}x ${escHtml(r.name)}</div>`);
+        } else {
+            parts.push(`<div style="font-size:11.5px;font-weight:800;color:var(--dark3);margin-top:2px">${r.num}º ${escHtml(r.name)}</div>`);
+            if (r.adds.length) {
+                parts.push(`<div style="font-size:11.5px;color:var(--gray);padding-left:12px">${r.adds.map(a => ((a.qty && a.qty > 1) ? a.qty + 'x ' : '') + a.name).join(', +')}</div>`);
+            }
+        }
+    });
+    return parts.join('');
+}
+
+
 function refreshVariantPrice() {
     const product = __activeVariantProduct;
     if (!product) return;
     const el = document.getElementById('var-price-display');
     if (!el) return;
     const info = getSelectedVariantInfo(product);
-    const addSel = [...document.querySelectorAll('.add-check:checked, .pub-add-check:checked')];
-    const addPrice = addSel.reduce((s,cb)=> s + (cb.dataset.isFree==='true' ? 0 : (parseFloat(cb.dataset.price)||0)), 0);
+    const addSel = [...document.querySelectorAll('.add-check, .pub-add-check')];
+    const addPrice = addSel.reduce((s,el)=> s + (el.dataset.isFree==='true' ? 0 : (parseFloat(el.dataset.price)||0) * addSelQty(el)), 0);
     el.textContent = fmt(info.price + addPrice);
 }
 function addToCartWithAdditionals(itemId, presetFlavorIdx) {
@@ -2515,15 +2637,8 @@ else { addToCartDirect(itemId, product); }
 function showAdditionalsModal(itemId, product, presetFlavorIdx) {
     const c = currentCompany;
     const catAdds = getCategoryAdditionals(c, product.category);
-    const addsHtml = catAdds.map(a => `
-    <div class="flex items-center justify-between" style="padding:10px 0;border-bottom:1px solid #f1f5f9">
-        <label style="display:flex;align-items:center;gap:10px;cursor:pointer;flex:1">
-            <input type="checkbox" class="add-check" data-id="${a.id}" data-name="${a.name}" data-price="${a.price}" data-is-free="${a.isFree||false}" onchange="refreshVariantPrice()" style="width:18px;height:18px;cursor:pointer">
-            <span style="font-weight:600">${a.name}${a.isFree?' <span style="color:var(--gray);font-size:11px">(sem custo)</span>':''}</span>
-        </label>
-        <span style="color:${a.isFree?'var(--gray)': 'var(--primary)'};font-weight:700">${a.isFree?'Grátis':fmt(a.price)}</span>
-    </div>
-    `).join('');
+    const lanches = comboLancheList(product, c.menuItems);
+    const addsHtml = buildAddsRowsHtml(catAdds, lanches, 'add-check');
     showModal(
     `<i class="fa-solid fa-plus-circle"></i> ${product.name}`,
     `<div id="var-price-display" style="font-size:20px;font-weight:900;color:var(--primary);margin-bottom:16px">${fmt(getInitialVariantPrice(product, presetFlavorIdx))}</div>
@@ -2547,22 +2662,22 @@ function showAdditionalsModal(itemId, product, presetFlavorIdx) {
 }
 function confirmAddToCartWithAdditionals(itemId, basePrice) {
     const qty = parseInt(document.getElementById('atc-qty').value)||1;
-    const selected = [...document.querySelectorAll('.add-check:checked')].map(cb=>({
-        id:cb.dataset.id, name:cb.dataset.name, price:parseFloat(cb.dataset.price)||0, isFree:cb.dataset.isFree==='true'
-    }));
-    const addPrice = selected.filter(a=>!a.isFree).reduce((s,a)=>s+a.price, 0);
-    const c = currentCompany;
     const product = (c.menuItems||[]).find(p=>p.id===itemId);
+    const lanches = comboLancheList(product, c.menuItems);
+    const selColl = collectSelectedAdditionals('.add-check', lanches);
+    const selected = selColl.additionals;
+    const addPerLanes = selColl.addPerLanes;
+    const addPrice = selected.filter(a=>!a.isFree).reduce((s,a)=>s+a.price*(a.qty||1), 0);
     const variantInfo = productHasVariants(product) ? getSelectedVariantInfo(product) : { price: basePrice, label:'' };
     const totalPrice = variantInfo.price + addPrice;
     const nameParts = [product.name];
     if (variantInfo.label) nameParts.push(`(${variantInfo.label})`);
-    if (selected.length) nameParts.push(`(+${selected.map(a=>a.name).join(', ')})`);
+    if (selected.length) nameParts.push(`(+${selected.map(a=>((a.qty&&a.qty>1)?a.qty+'x ':'')+a.name).join(', ')})`);
     const cartName = nameParts.join(' ');
-    const sigKey = itemId+'|'+(variantInfo.sizeName||'')+'|'+(variantInfo.bordaName||'')+'|'+(variantInfo.flavor||'')+'|'+selected.map(a=>a.id).sort().join(',');
+    const sigKey = itemId+'|'+(variantInfo.sizeName||'')+'|'+(variantInfo.bordaName||'')+'|'+(variantInfo.flavor||'')+'|'+selected.map(a=>a.id).sort().join(',')+'|'+(addPerLanes ? addPerLanes.map(g=>g.map(a=>a.id).sort().join('+')).join('/') : '');
     const item = cart.find(i=>i._sigKey===sigKey);
     if (item) { item.qty += qty; }
-    else { cart.push({id:itemId, name:cartName, price:totalPrice, qty, additionals:selected, _sigKey:sigKey}); }
+    else { cart.push({id:itemId, name:cartName, price:totalPrice, qty, additionals:selected, addPerLanes, _sigKey:sigKey}); }
     closeModal(); renderCart();
     showToast(`${product.name} adicionado!`,'success');
     openCartDrawer();
@@ -2591,7 +2706,7 @@ function renderCart() {
     if (!cart.length && pendingCartSplit.length===0) {
         el.innerHTML='<div class="cart-empty"><i class="fa-solid fa-cart-shopping" style="font-size:32px;color:var(--border);display:block;margin-bottom:8px"></i>Carrinho vazio</div>';
     } else {
-        let html = cart.map(item=>`<div class="cart-item"><div class="cart-item-name">${item.name}</div><div class="qty-controls"><button class="qty-btn" onclick="updateQty('${item.id}',-1)">−</button><span class="qty-num">${item.qty}</span><button class="qty-btn" onclick="updateQty('${item.id}',1)">+</button></div><div class="cart-item-price">${fmt(item.price*item.qty)}</div></div>`).join('');
+        let html = cart.map(item=>`<div class="cart-item"><div class="cart-item-name">${cartItemNameHtml(item, ((currentCompany && currentCompany.menuItems) || []))}</div><div class="qty-controls"><button class="qty-btn" onclick="updateQty('${item.id}',-1)">−</button><span class="qty-num">${item.qty}</span><button class="qty-btn" onclick="updateQty('${item.id}',1)">+</button></div><div class="cart-item-price">${fmt(item.price*item.qty)}</div></div>`).join('');
         if (pendingCartSplit.length) {
             html += `<div class="alert alert-info mt-2" style="font-size:12px;padding:8px;margin-top:8px"><i class="fa-solid fa-clock"></i> Existem ${pendingCartSplit.reduce((a,b)=>a+b.qty,0)} itens separados. <button class="btn btn-sm btn-primary" onclick="restoreSplitItems()">Recuperar Itens</button></div>`;
         }
@@ -2777,21 +2892,34 @@ function buildOSHtml(data, copyLabel) {
             additionalsText = '+' + adds.join(', +');
         }
         if (item.additionals && item.additionals.length && !additionalsText) {
-            additionalsText = item.additionals.map(a => a.name).join(', ');
+            additionalsText = item.additionals.map(a => ((a.qty&&a.qty>1)? a.qty+'x ' : '') + a.name).join(', ');
         }
         // Se for um combo, mostra cada componente em sua própria linha (ex: 2x X Tudo / 1x Conquista Guaraná 2L)
         let comboLines = '';
+        let perLane = '';
         const menuMatch = ((currentCompany && currentCompany.menuItems) || []).find(mi => (mi.name||'').trim() === baseName && mi.isCombo);
         if (menuMatch && menuMatch.comboItems && menuMatch.comboItems.length) {
-            comboLines = menuMatch.comboItems.map(ci => {
-                const cc = parseComboItem(ci);
-                return (cc && cc.name) ? `<tr><td colspan="3" style="padding:0 4px;font-size:13px;color:#000;font-weight:900">${cc.qty}x ${escHtml(cc.name)}</td></tr>` : '';
-            }).join('');
+            if (item.addPerLanes && item.addPerLanes.length) {
+                // NOVO: cada lanche do combo em sua própria linha, com os adicionais escolhidos logo abaixo
+                // (1º X Tudo / adicionais do 1º / 2º X Tudo / adicionais do 2º / ...)
+                perLane = comboLanesData(item, ((currentCompany && currentCompany.menuItems) || [])).map(r => r.type === 'drink'
+                    ? `<tr><td colspan="3" style="padding:0 4px;font-size:13px;color:#000;font-weight:900">${r.qty}x ${escHtml(r.name)}</td></tr>`
+                    : `<tr><td colspan="3" style="padding:0 4px;font-size:14px;color:#000;font-weight:900">${r.num}º ${escHtml(r.name)}</td></tr>`
+                      + (r.adds.length
+                          ? `<tr><td colspan="3" style="padding:0 4px 0 12px;font-size:12px;color:#000;font-weight:900">${r.adds.map(a => ((a.qty&&a.qty>1)? a.qty+'x ' : '') + a.name).join(', +')}</td></tr>`
+                          : `<tr><td colspan="3" style="padding:0 4px 0 12px;font-size:12px;color:#000;font-weight:900">sem adicional</td></tr>`)
+                ).join('');
+            } else {
+                comboLines = menuMatch.comboItems.map(ci => {
+                    const cc = parseComboItem(ci);
+                    return (cc && cc.name) ? `<tr><td colspan="3" style="padding:0 4px;font-size:13px;color:#000;font-weight:900">${cc.qty}x ${escHtml(cc.name)}</td></tr>` : '';
+                }).join('');
+            }
         }
-        const addDesc = additionalsText
+        const addDesc = (additionalsText && !perLane)
             ? `<tr><td colspan="3" style="font-size:13px;color:#000;padding-left:4px;font-weight:900">${additionalsText}</td></tr>`
             : '';
-        return `<tr><td style="padding:4px 0;font-size:15px;font-weight:900">${item.qty}x ${baseName}</td><td style="text-align:right;padding:4px 4px;white-space:nowrap;font-size:13px;font-weight:900">${fmtPrint(item.price)}</td><td style="text-align:right;padding:4px 0;white-space:nowrap;font-weight:900;font-size:15px">${fmtPrint(item.price*item.qty)}</td></tr>${comboLines}${addDesc}`;
+        return `<tr><td style="padding:4px 0;font-size:15px;font-weight:900">${item.qty}x ${baseName}</td><td style="text-align:right;padding:4px 4px;white-space:nowrap;font-size:13px;font-weight:900">${fmtPrint(item.price)}</td><td style="text-align:right;padding:4px 0;white-space:nowrap;font-weight:900;font-size:15px">${fmtPrint(item.price*item.qty)}</td></tr>${comboLines}${perLane}${addDesc}`;
     }).join('');
     const subtotal = data.subtotal ?? data.total; const delivery = data.deliveryTotal || 0; const discount = data.discountTotal || 0;
     const isDelivery = data.source === 'pub_menu' || !!data.address || !!data.phone;
@@ -4126,7 +4254,17 @@ function renderOrdersFromData(orders) {
         additionalsText = '+' + match[2].split(',').map(a => a.trim()).join(', +');
     }
     if (i.additionals && i.additionals.length && !additionalsText) {
-        additionalsText = i.additionals.map(a => '+' + a.name).join(', ');
+        additionalsText = i.additionals.map(a => '+' + ((a.qty&&a.qty>1)? a.qty+'x ' : '') + a.name).join(', ');
+    }
+    const comboMatch2 = ((currentCompany && currentCompany.menuItems) || []).find(mi => (mi.name||'').trim() === baseName && mi.isCombo);
+    let perLaneText = '';
+    if (comboMatch2 && i.addPerLanes && i.addPerLanes.length) {
+        const lanes2 = comboLancheList(comboMatch2, ((currentCompany && currentCompany.menuItems) || []));
+        perLaneText = i.addPerLanes.map((nl, k) => {
+            const l2 = lanes2[k] || { name: '' };
+            const txt = nl.length ? nl.map(a => ((a.qty&&a.qty>1)? a.qty+'x ' : '') + a.name).join(', + ') : 'sem adicional';
+            return `${k+1}º ${l2.name}: ${txt}`;
+        }).join('<br>');
     }
     return `
     <div style="margin-bottom:8px;padding-bottom:8px;border-bottom:1px solid #f1f5f9">
@@ -4134,7 +4272,7 @@ function renderOrdersFromData(orders) {
             <span style="font-weight:900;font-size:14px">${i.qty}x ${baseName}</span>
             <span style="font-weight:700">${fmt(i.price * i.qty)}</span>
         </div>
-        ${additionalsText ? `<div style="font-size:12px;color:#555;margin-top:4px;font-weight:700">${additionalsText}</div>` : ''}
+        ${perLaneText ? `<div style="font-size:12px;color:#555;margin-top:4px;font-weight:700">${perLaneText}</div>` : (additionalsText ? `<div style="font-size:12px;color:#555;margin-top:4px;font-weight:700">${additionalsText}</div>` : '')}
     </div>`;
 }).join('');
         
@@ -6487,15 +6625,8 @@ if (!isCompanyOpen(pubCompany)) { showToast('Estamos fechados no momento. Não �
 const p = (pubCompany.menuItems || []).find(x => x.id === iid);
 if (!p) return;
 const catAdds = getCategoryAdditionals(pubCompany, p.category);
-const addsHtml = catAdds.map(a => `
-<div class="flex items-center justify-between" style="padding:8px 0;border-bottom:1px solid #f1f5f9">
-<label style="display:flex;align-items:center;gap:8px;cursor:pointer;flex:1">
-<input type="checkbox" class="pub-add-check" data-id="${a.id}" data-name="${a.name}" data-price="${a.price}" data-is-free="${a.isFree||false}" onchange="refreshVariantPrice()" style="width:16px;height:16px">
-<span style="font-size:13px;font-weight:600">${a.name}${a.isFree?' <span style="color:var(--gray);font-size:11px">(sem custo)</span>':''}</span>
-</label>
-<span style="color:${a.isFree?'var(--gray)':'var(--primary)'};font-weight:700;font-size:13px">${a.isFree?'Grátis':'+ '+fmt(a.price)}</span>
-</div>
-`).join('');
+const pubLanches = comboLancheList(p, pubCompany.menuItems);
+const addsHtml = buildAddsRowsHtml(catAdds, pubLanches, 'pub-add-check');
 showModal(`<i class="fa-solid fa-utensils"></i> ${p.name}`,
 `<div id="var-price-display" style="font-size:22px;font-weight:900;color:var(--primary);margin-bottom:12px">${fmt(getInitialVariantPrice(p, presetFlavorIdx))}</div>
 ${p.description ? `<div style="font-size:13px;color:var(--gray);margin-bottom:12px;white-space:pre-line">${p.description}</div>` : ''}
@@ -6513,18 +6644,21 @@ ${catAdds.length ? `<div style="margin-bottom:12px"><div style="font-size:12px;f
 function confirmPubAddCart(iid, basePrice) {
 if (!isCompanyOpen(pubCompany)) { closeModal(); showToast('Estamos fechados no momento. Não é possível adicionar itens fora do horário de funcionamento.', 'warning'); return; }
 const qty = parseInt(document.getElementById('pub-qty').value) || 1;
-const selected = [...document.querySelectorAll('.pub-add-check:checked')].map(cb => ({ id: cb.dataset.id, name: cb.dataset.name, price: parseFloat(cb.dataset.price) || 0, isFree: cb.dataset.isFree==='true' }));
-const addPrice = selected.filter(a=>!a.isFree).reduce((s, a) => s + a.price, 0);
 const p = (pubCompany.menuItems || []).find(x => x.id === iid);
+const pubLanches = comboLancheList(p, pubCompany.menuItems);
+const selColl = collectSelectedAdditionals('.pub-add-check', pubLanches);
+const selected = selColl.additionals;
+const addPerLanes = selColl.addPerLanes;
+const addPrice = selected.filter(a=>!a.isFree).reduce((s, a) => s + a.price * (a.qty||1), 0);
 const variantInfo = productHasVariants(p) ? getSelectedVariantInfo(p) : { price: basePrice, label:'' };
 const nameParts = [p.name];
 if (variantInfo.label) nameParts.push(`(${variantInfo.label})`);
-if (selected.length) nameParts.push(`(+${selected.map(a=>a.name).join(', ')})`);
+if (selected.length) nameParts.push(`(+${selected.map(a=>((a.qty&&a.qty>1)?a.qty+'x ':'')+a.name).join(', ')})`);
 const name = nameParts.join(' ');
-const sigKey = iid + '|' + (variantInfo.sizeName||'') + '|' + (variantInfo.bordaName||'') + '|' + (variantInfo.flavor||'') + '|' + selected.map(a=>a.id).sort().join(',');
+const sigKey = iid + '|' + (variantInfo.sizeName||'') + '|' + (variantInfo.bordaName||'') + '|' + (variantInfo.flavor||'') + '|' + selected.map(a=>a.id).sort().join(',') + '|' + (addPerLanes ? addPerLanes.map(g=>g.map(a=>a.id).sort().join('+')).join('/') : '');
 const existing = pubCart.find(i => i._sigKey === sigKey);
 if (existing) existing.qty += qty;
-else pubCart.push({ id: iid, name, price: variantInfo.price + addPrice, qty, additionals: selected, _sigKey: sigKey });
+else pubCart.push({ id: iid, name, price: variantInfo.price + addPrice, qty, additionals: selected, addPerLanes, _sigKey: sigKey });
 closeModal();
 updatePubCartCount();
 showToast('Adicionado ao carrinho!', 'success');
@@ -6589,7 +6723,7 @@ function showPubCartModal() {
     const html = pubCart.map((item, idx) => `
 <div class="flex items-center gap-2" style="padding:10px 0;border-bottom:1px solid #f1f5f9">
     <div style="flex:1">
-        <div style="font-weight:700;font-size:13px">${item.name}</div>
+        <div style="font-weight:700;font-size:13px">${cartItemNameHtml(item, ((pubCompany && pubCompany.menuItems) || []))}</div>
         <div style="font-size:12px;color:var(--gray)">${fmt(item.price)} un</div>
     </div>
     <div class="qty-controls">
