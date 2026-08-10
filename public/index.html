@@ -3603,18 +3603,43 @@ function loadAdditionalsFromCategory(catName) {
     </div>`).join('');
 }
 let _comboLineSeq = 0;
+function parseComboItem(raw) {
+    if (!raw) return null;
+    if (typeof raw === 'object') return { name: raw.name || '', qty: parseInt(raw.qty) || 1 };
+    const s = String(raw).trim();
+    if (!s) return null;
+    const mm = s.match(/^(\d+)\s*[xX×*]\s*(.+)$/);
+    if (mm) return { name: mm[2].trim(), qty: parseInt(mm[1]) };
+    return { name: s, qty: 1 };
+}
+function comboProductOptions(selectedPid) {
+    const c = currentCompany;
+    const items = (c.menuItems || []).slice().sort((a,b) => a.name.localeCompare(b.name));
+    if (!items.length) return '<option value="">Nenhum produto no cardápio</option>';
+    let h = '<option value="">Selecionar produto...</option>';
+    items.forEach(p => { h += `<option value="${p.id}" ${p.id===selectedPid?'selected':''}>${escHtml(p.name)}</option>`; });
+    return h;
+}
 function comboLineRowHtml(prefix, idx, value) {
-    return `<div class="flex items-center gap-2 mb-2" id="${prefix}-combo-row-${idx}"><input type="text" class="form-control ${prefix}-combo-line" placeholder="Ex: 3x X Salada" value="${(value||'').replace(/"/g,'&quot;')}" style="flex:1"><button type="button" class="btn btn-sm btn-danger" onclick="document.getElementById('${prefix}-combo-row-${idx}').remove()"><i class="fa-solid fa-times"></i></button></div>`;
+    const c = currentCompany;
+    let selectedPid = '', qty = 1;
+    if (value && typeof value === 'object') { selectedPid = value.productId || ''; qty = parseInt(value.qty) || 1; }
+    else if (value) { const p = parseComboItem(value); if (p) { qty = p.qty || 1; const it = (c.menuItems||[]).find(x => String(x.name).toLowerCase() === String(p.name).toLowerCase()); if (it) selectedPid = it.id; } }
+    const opts = comboProductOptions(selectedPid);
+    return `<div class="flex items-center gap-2 mb-2 ${prefix}-combo-row" id="${prefix}-combo-row-${idx}">
+        <select class="form-control ${prefix}-combo-prod" onchange="updateComboCost('${prefix}')" style="flex:2">${opts}</select>
+        <input type="number" class="form-control ${prefix}-combo-qty" value="${qty}" min="1" step="1" onchange="updateComboCost('${prefix}')" style="width:74px" title="Quantidade">
+        <button type="button" class="btn btn-sm btn-danger" onclick="document.getElementById('${prefix}-combo-row-${idx}').remove();updateComboCost('${prefix}')"><i class="fa-solid fa-times"></i></button>
+    </div>`;
 }
 function addComboLineRow(prefix, value) {
     const container = document.getElementById(prefix + '-combo-lines');
     if (!container) return;
     const idx = ++_comboLineSeq;
     const div = document.createElement('div');
-    div.className = 'flex items-center gap-2 mb-2';
-    div.id = `${prefix}-combo-row-${idx}`;
-    div.innerHTML = `<input type="text" class="form-control ${prefix}-combo-line" placeholder="Ex: 3x X Salada" value="${(value||'').replace(/"/g,'&quot;')}" style="flex:1"><button type="button" class="btn btn-sm btn-danger" onclick="document.getElementById('${prefix}-combo-row-${idx}').remove()"><i class="fa-solid fa-times"></i></button>`;
-    container.appendChild(div);
+    div.innerHTML = comboLineRowHtml(prefix, idx, value);
+    container.appendChild(div.firstElementChild);
+    updateComboCost(prefix);
 }
 function toggleComboSection(prefix) {
     const chk = document.getElementById(prefix + '-iscombo');
@@ -3627,8 +3652,56 @@ function toggleComboSection(prefix) {
     }
 }
 function collectComboLines(prefix) {
-    return [...document.querySelectorAll('.' + prefix + '-combo-line')].map(i => i.value.trim()).filter(Boolean);
+    return [...document.querySelectorAll('.' + prefix + '-combo-row')].map(row => {
+        const sel = row.querySelector('.' + prefix + '-combo-prod');
+        const qtyInp = row.querySelector('.' + prefix + '-combo-qty');
+        const pid = sel ? sel.value : '';
+        const item = pid ? (currentCompany.menuItems||[]).find(p => p.id === pid) : null;
+        if (!item) return null;
+        const qty = parseInt(qtyInp?.value) || 1;
+        return { productId: item.id, name: item.name, qty };
+    }).filter(Boolean);
 }
+function comboItemLabel(l) {
+    if (!l) return '';
+    if (typeof l === 'string') return l;
+    return (l.qty || 1) + 'x ' + (l.name || '');
+}
+function updateComboCost(prefix) {
+    const container = document.getElementById(prefix + '-combo-lines');
+    const out = document.getElementById(prefix + '-combo-cost');
+    if (!container || !out) return;
+    const c = currentCompany;
+    let rowsHtml = '', totalCost = 0, vendaRowsHtml = '', totalVenda = 0, hasAny = false;
+    container.querySelectorAll('.' + prefix + '-combo-row').forEach(row => {
+        const sel = row.querySelector('.' + prefix + '-combo-prod');
+        const qtyInp = row.querySelector('.' + prefix + '-combo-qty');
+        const pid = sel ? sel.value : '';
+        const qty = parseInt(qtyInp?.value) || 0;
+        const item = pid ? (c.menuItems||[]).find(p => p.id === pid) : null;
+        if (!item || qty <= 0) return;
+        hasAny = true;
+        const { custo, venda } = getProductUnitEconomics(item);
+        const rowCost = custo * qty;
+        const rowVenda = venda * qty;
+        totalCost += rowCost;
+        totalVenda += rowVenda;
+        rowsHtml += `<div style="display:flex;justify-content:space-between;font-size:12px"><span>${qty} x ${escHtml(item.name)}</span><strong>${fmt(rowCost)}</strong></div>`;
+        vendaRowsHtml += `<div style="display:flex;justify-content:space-between;font-size:12px"><span>${qty} x ${escHtml(item.name)}</span><strong>${fmt(rowVenda)}</strong></div>`;
+    });
+    if (!hasAny) { out.innerHTML = '<div style="font-size:12px;color:var(--gray)">Selecione os produtos e as quantidades para ver o custo e o valor de venda deste combo.</div>'; return; }
+    out.innerHTML = `<div style="background:#f0fdf4;border:1px solid #bbf7d0;border-radius:8px;padding:10px 12px;margin-top:10px">
+        <div style="font-size:11px;font-weight:700;color:var(--success);text-transform:uppercase;margin-bottom:4px"><i class="fa-solid fa-calculator"></i> Custo estimado deste combo</div>
+        ${rowsHtml}
+        <div style="display:flex;justify-content:space-between;margin-top:6px;padding-top:6px;border-top:1px dashed #86efac;font-weight:800;font-size:13px"><span>Custo Total</span><span style="color:var(--danger)">${fmt(totalCost)}</span></div>
+    </div>
+    <div style="background:#eff6ff;border:1px solid #bfdbfe;border-radius:8px;padding:10px 12px;margin-top:10px">
+        <div style="font-size:11px;font-weight:700;color:#1d4ed8;text-transform:uppercase;margin-bottom:4px"><i class="fa-solid fa-tags"></i> Valor de venda deste combo</div>
+        ${vendaRowsHtml}
+        <div style="display:flex;justify-content:space-between;margin-top:6px;padding-top:6px;border-top:1px dashed #93c5fd;font-weight:800;font-size:13px"><span>Total de Venda</span><span style="color:#1d4ed8">${fmt(totalVenda)}</span></div>
+    </div>`;
+}
+
 let _glAddCount = 500;
 function addGlobalAdditionalRow() {
     const id = 'new_'+(++_glAddCount);
@@ -3923,8 +3996,9 @@ showModal(`<i class="fa-solid fa-utensils"></i> ${item?'Editar Item':'Adicionar 
 <div id="mi-combo-section" style="display:${item?.isCombo?'block':'none'};margin-top:12px">
 <label style="font-size:12px;font-weight:600;color:var(--dark3);text-transform:uppercase;margin-bottom:8px;display:block">Itens que compõem o combo</label>
 <div id="mi-combo-lines">${comboLinesHtml}</div>
-<button type="button" class="btn btn-ghost btn-sm w-full mt-2" onclick="addComboLineRow('mi')"><i class="fa-solid fa-plus"></i> Adicionar item ao combo</button>
-<p style="font-size:11px;color:var(--gray);margin-top:8px">Ex: "6x Pastel de Carne (10cm)" ou linhas separadas como "3x X Salada" e "1x Refrigerante Lata". Isso vai aparecer como lista com marcadores no cardápio.</p>
+<button type="button" class="btn btn-ghost btn-sm w-full mt-2" onclick="addComboLineRow('mi')"><i class="fa-solid fa-plus"></i> + Adicionar produto ao combo</button>
+<div id="mi-combo-cost"></div>
+<p style="font-size:11px;color:var(--gray);margin-top:8px">Escolha cada produto do cardápio e a quantidade. O sistema calcula o custo estimado de cada item e o custo total do combo, para você definir um bom valor de venda.</p>
 </div>
 </div>
 <div class="form-group"><label>Controle de Estoque</label><div style="background:#f8fafc;border:2px solid var(--border);border-radius:10px;padding:14px;margin-top:8px"><label style="display:flex;align-items:center;gap:10px;cursor:pointer;margin-bottom:10px"><input type="radio" name="mi-stock-type" value="limited" ${!isUnlimited?'checked':''} onchange="toggleMenuStockInput(true)" style="width:18px;height:18px;cursor:pointer"><div><div style="font-weight:700;color:var(--dark)">Quantidade Limitada</div><div style="font-size:12px;color:var(--gray)">Controlar estoque (ex: bebidas, insumos)</div></div></label><label style="display:flex;align-items:center;gap:10px;cursor:pointer"><input type="radio" name="mi-stock-type" value="unlimited" ${isUnlimited?'checked':''} onchange="toggleMenuStockInput(false)" style="width:18px;height:18px;cursor:pointer"><div><div style="font-weight:700;color:var(--dark)">Estoque Ilimitado</div><div style="font-size:12px;color:var(--gray)">Sem controle de quantidade (ex: lanches sob demanda)</div></div></label></div></div>
@@ -3942,6 +4016,7 @@ ${variantOptionsEditorHtml('mi', item)}`,
 `<button class="btn btn-ghost" onclick="closeModal()">Cancelar</button><button class="btn btn-primary" onclick="saveMenuItem('${iid||''}')"><i class="fa-solid fa-save"></i> Salvar</button>`,
 true
 );
+updateComboCost('mi');
 }
 function toggleMenuStockInput(show) { const wrap = document.getElementById('mi-stock-limited-wrap'); if (wrap) wrap.style.display = show ? 'block' : 'none'; }
 async function saveMenuItem(iid) {
@@ -3952,8 +4027,8 @@ const minStock=stockType==='unlimited'?0:(parseInt(document.getElementById('mi-m
 const variantData = collectVariantData('mi', price);
 const isCombo = document.getElementById('mi-iscombo')?.checked || false;
 const comboItems = isCombo ? collectComboLines('mi') : [];
-if (isCombo && !comboItems.length) { showToast('Adicione ao menos um item ao combo','warning'); return; }
-const desc = isCombo ? (comboItems.map(l=>'• '+l).join('   ') + (customDesc?' — '+customDesc:'')) : customDesc;
+if (isCombo && !comboItems.length) { showToast('Selecione ao menos um produto do combo e sua quantidade','warning'); return; }
+const desc = isCombo ? (comboItems.map(comboItemLabel).join('   ') + (customDesc?' — '+customDesc:'')) : customDesc;
 if (!name||!price) { showToast('Nome e valor são obrigatórios','warning'); return; }
 if (currentCompany.plan === 'trial' && (currentCompany.menuItems || []).length >= 20 && !iid) {
 showToast('Limite de 20 produtos atingido no plano Trial. Faça o upgrade!','warning');
@@ -7984,9 +8059,24 @@ function renderCustoLucroPorProduto(sales, motoboyExpenseTotal, motoboyAppExtraT
             if (m) baseName = m[1].trim();
             const norm = normalizeProductNameForChart(baseName);
             const pid = canonicalMap[norm];
+            const saleQty = (i.qty || 1);
             if (pid) {
-                qtyByProductId[pid] = (qtyByProductId[pid] || 0) + (i.qty || 1);
-                vendaRealByProductId[pid] = (vendaRealByProductId[pid] || 0) + ((parseFloat(i.price) || 0) * (i.qty || 1));
+                const prod = items.find(p => p.id === pid);
+                // Se o item vendido é um combo, soma também as quantidades dos produtos que o compõem
+                // na contagem de vendas de cada produto (busca pelo nome, igual ao gráfico).
+                if (prod && prod.isCombo) {
+                    (prod.comboItems || []).forEach(cc => {
+                        const comp = parseComboItem(cc);
+                        if (!comp || !comp.name) return;
+                        const compNorm = normalizeProductNameForChart(comp.name);
+                        const compPid = canonicalMap[compNorm];
+                        if (compPid) {
+                            qtyByProductId[compPid] = (qtyByProductId[compPid] || 0) + (saleQty * (comp.qty || 1));
+                        }
+                    });
+                }
+                qtyByProductId[pid] = (qtyByProductId[pid] || 0) + saleQty;
+                vendaRealByProductId[pid] = (vendaRealByProductId[pid] || 0) + ((parseFloat(i.price) || 0) * saleQty);
             }
         });
     });
