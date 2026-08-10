@@ -4502,6 +4502,17 @@ if (m) baseName = m[1].trim();
 const norm = normalizeProductNameForChart(baseName);
 const displayName = canonicalMap[norm] || baseName;
 itemsMap[displayName] = (itemsMap[displayName] || 0) + (i.qty || 1);
+            // Conta tambem os lanches que entram DENTRO de um combo no grafico de mais vendidos
+            const _cmp = (currentCompany.menuItems || []).find(p => p.id === (canonicalMap[norm] || ''));
+            if (_cmp && _cmp.isCombo) {
+                (_cmp.comboItems || []).forEach(_cc => {
+                    const _comp = parseComboItem(_cc);
+                    if (!_comp || !_comp.name) return;
+                    const _cn = canonicalMap[normalizeProductNameForChart(_comp.name)] || _comp.name;
+                    itemsMap[_cn] = (itemsMap[_cn] || 0) + ((i.qty || 1) * (_comp.qty || 1));
+                });
+            }
+
 });
 });
 // Produtos vendidos em apps terceiros (iFood, Aiqfome, etc) também contam no gráfico,
@@ -7963,19 +7974,21 @@ function renderLanchesLucro() {
     html += items.map(p => {
         const insumos = getInsumos();
         const isBebida = isBebidaProduct(p);
+        const isCombo = !!p.isCombo;
         const recipe = p.recipe || [];
-        const custo = isBebida ? (parseFloat(p.bebidaCusto) || 0) : computeRecipeCost(p);
+        const custo = isBebida ? (parseFloat(p.bebidaCusto) || 0) : (isCombo ? getComboUnitCost(p) : computeRecipeCost(p));
         const venda = (p.lucroVenda !== undefined && p.lucroVenda !== null && p.lucroVenda !== '') ? parseFloat(p.lucroVenda) : (p.price || 0);
         const lucro = venda - custo;
         totalLucro += lucro;
         const tags = recipe.slice(0, 3).map(r => { const ins = insumos.find(i => i.id === r.insumoId); return ins ? `<span class="insumo-tag">${ins.nome} (${r.porcoes}x ${ins.porcaoTamanho}${ins.tipo==='peso'?'g':'un'})</span>` : ''; }).join('');
         const moreCount = recipe.length > 3 ? recipe.length - 3 : 0;
+        const comboDesc = isCombo ? (p.comboItems || []).map(ci => { const cc = parseComboItem(ci); return cc && cc.name ? `${cc.qty}x ${cc.name}` : ''; }).join('\n') : '';
         return `
         <div class="lanche-lucro-row">
             <div data-label="Produto:" style="font-weight:700">${p.name}${isBebida ? '<div style="font-size:10px;color:var(--info);font-weight:600"><i class="fa-solid fa-bottle-water"></i> Bebida</div>' : ''}</div>
             <div data-label="Receita:">
-                ${isBebida ? '<span style="color:var(--gray);font-size:12px">Custo manual (bebida)</span>' : (recipe.length ? `${tags}${moreCount ? `<span class="insumo-tag">+${moreCount}</span>` : ''}` : '<span style="color:var(--gray);font-size:12px">Sem receita</span>')}
-                ${isBebida ? '' : `<button class="btn btn-sm btn-ghost" style="margin-top:4px" onclick="showRecipeModal('${p.id}')"><i class="fa-solid fa-list-check"></i> ${recipe.length ? 'Editar' : 'Selecionar Insumos'}</button>`}
+                ${isBebida ? '<span style="color:var(--gray);font-size:12px">Custo manual (bebida)</span>' : (isCombo ? `<span style="color:var(--gray);font-size:12px;white-space:pre-line">${escHtml(comboDesc)}</span>` : (recipe.length ? `${tags}${moreCount ? `<span class="insumo-tag">+${moreCount}</span>` : ''}` : '<span style="color:var(--gray);font-size:12px">Sem receita</span>'))}
+                ${(isBebida || isCombo) ? '' : `<button class="btn btn-sm btn-ghost" style="margin-top:4px" onclick="showRecipeModal('${p.id}')"><i class="fa-solid fa-list-check"></i> ${recipe.length ? 'Editar' : 'Selecionar Insumos'}</button>`}
             </div>
             <div data-label="Custo:">
                 ${isBebida ? `<input type="number" class="lanche-lucro-input" value="${custo}" step="0.01" min="0" onchange="updateBebidaCusto('${p.id}', this.value)">` : `<div class="lanche-lucro-valor">${fmt(custo)}</div>`}
@@ -8020,6 +8033,24 @@ function getProductUnitEconomics(p) {
     return { custo, venda, lucro };
 }
 
+// Custo unitário de um combo = soma do custo de cada produto que o compõe (qtd × custo unit do produto).
+// Ex.: combo com 2 X Tudo (custo 14,72 cada) + 1 Conquista 2L (custo 4,69) => custo do combo = 34,13.
+function getComboUnitCost(p) {
+    if (!p || !p.isCombo) return 0;
+    const c = currentCompany;
+    const items = (c && c.menuItems) || [];
+    let cost = 0;
+    (p.comboItems || []).forEach(ci => {
+        const comp = parseComboItem(ci);
+        if (!comp || !comp.name) return;
+        const prod = items.find(x => normalizeProductNameForChart(x.name) === normalizeProductNameForChart(comp.name));
+        if (!prod) return;
+        const { custo: cu } = getProductUnitEconomics(prod);
+        cost += (cu || 0) * (comp.qty || 1);
+    });
+    return cost;
+}
+
 // ---------- CUSTO E LUCRO POR PRODUTO VENDIDO (baseado nas OS pagas / vendas do mês) ----------
 function renderCustoLucroPorProduto(sales, motoboyExpenseTotal, motoboyAppExtraTotal, folhaPagamentoTotal, fiadoFeeReceivedTotal, thirdPartySalesTotal, thirdPartySalesList) {
     motoboyExpenseTotal = motoboyExpenseTotal || 0;
@@ -8052,6 +8083,9 @@ function renderCustoLucroPorProduto(sales, motoboyExpenseTotal, motoboyAppExtraT
     // Receita real por produto = soma do valor efetivamente cobrado em cada OS (i.price * i.qty),
     // e não o preço configurado no cadastro do produto — assim bate com a Receita do Mês do Financeiro.
     const vendaRealByProductId = {};
+    // Quantidade vendida de cada produto que veio ATRAVÉS de combos (o custo dessa parte já é
+    // contabilizado na linha do combo, então não deve ser somado de novo no produto individual).
+    const comboDerivedQty = {};
     (sales || []).forEach(s => {
         (s.items || []).forEach(i => {
             let baseName = (i.name || '').trim();
@@ -8072,6 +8106,7 @@ function renderCustoLucroPorProduto(sales, motoboyExpenseTotal, motoboyAppExtraT
                         const compPid = canonicalMap[compNorm];
                         if (compPid) {
                             qtyByProductId[compPid] = (qtyByProductId[compPid] || 0) + (saleQty * (comp.qty || 1));
+                            comboDerivedQty[compPid] = (comboDerivedQty[compPid] || 0) + (saleQty * (comp.qty || 1));
                         }
                     });
                 }
@@ -8099,11 +8134,17 @@ function renderCustoLucroPorProduto(sales, motoboyExpenseTotal, motoboyAppExtraT
         const qty = qtyByProductId[p.id] || 0;
         const isBebida = isBebidaProduct(p);
         const recipe = p.recipe || [];
-        // Para lanches (não-bebida), só mostramos custo/lucro depois de pelo menos 1 insumo selecionado
+        const isCombo = !!p.isCombo;
+        // Custo do combo = soma do custo dos produtos que o compõem (veja getComboUnitCost).
+        // Para lanches não-bebida (não-combo), só mostramos custo/lucro depois de ao menos 1 insumo
         // na receita (mesma ideia das bebidas, que já têm custo manual sempre definido).
-        const semReceitaAinda = !isBebida && recipe.length === 0;
-        const { custo } = getProductUnitEconomics(p);
-        const custoTotal = semReceitaAinda ? 0 : custo * qty;
+        const semReceitaAinda = !isCombo && !isBebida && recipe.length === 0;
+        const { custo: custoEcon } = getProductUnitEconomics(p);
+        const custo = isCombo ? getComboUnitCost(p) : custoEcon;
+        // A parte da quantidade que veio de combos não é somada aqui de novo (seu custo já está
+        // contabilizado na linha do combo) — evita custo duplicado nos totais.
+        const comboDerived = comboDerivedQty[p.id] || 0;
+        const custoTotal = semReceitaAinda ? 0 : custo * Math.max(0, qty - comboDerived);
         // Valor Total = valor real cobrado nas OS pagas (não o preço configurado no cadastro do produto)
         const vendaTotal = semReceitaAinda ? 0 : (vendaRealByProductId[p.id] || 0);
         const lucroTotal = semReceitaAinda ? 0 : (vendaTotal - custoTotal);
