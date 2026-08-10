@@ -2314,7 +2314,7 @@ function renderMenuRowsTableHtml(rows) {
     </div>`;
     const itemRows = rows.map(r => `<div style="display:contents" onclick="${r.click}">
     <div style="${r.oos?'opacity:.5':'cursor:pointer'}">${r.image ? `<img src="${r.image}" style="width:88px;height:88px;object-fit:cover;border-radius:10px;border:1px solid var(--border);display:block">` : `<div style="width:88px;height:88px;border-radius:10px;border:2px dashed var(--border);display:flex;align-items:center;justify-content:center;color:var(--gray);font-size:11px;text-align:center;font-weight:700">imagem</div>`}</div>
-    <div style="${r.oos?'opacity:.5':'cursor:pointer'}"><div style="font-weight:800;font-size:14px;color:var(--dark)">#${r.num} - ${escHtml(r.name)}</div>${r.desc?`<div style="font-size:11px;color:var(--gray);margin-top:2px">${escHtml(r.desc)}</div>`:''}${r.oos?'<div style="color:var(--danger);font-size:11px;font-weight:700;margin-top:2px">Esgotado</div>':''}</div>
+    <div style="${r.oos?'opacity:.5':'cursor:pointer'}"><div style="font-weight:800;font-size:14px;color:var(--dark)">#${r.num} - ${escHtml(r.name)}</div>${r.desc?`<div style="font-size:11px;color:var(--gray);margin-top:2px;white-space:pre-line">${escHtml(r.desc)}</div>`:''}${r.oos?'<div style="color:var(--danger);font-size:11px;font-weight:700;margin-top:2px">Esgotado</div>':''}</div>
     ${Array.from({length:maxCols}).map((_,j)=>`<div style="text-align:center;${r.oos?'opacity:.5':'cursor:pointer'}">${r.sizes[j]?`<span style="font-weight:800;font-size:15px;color:var(--dark)">${fmt(r.sizes[j].price)}</span>`:''}</div>`).join('')}
     </div>`).join('');
     return `<div style="display:grid;grid-template-columns:${colsTemplate};gap:8px 10px;align-items:center;margin-bottom:22px">${headerRow}${itemRows}</div>`;
@@ -3102,7 +3102,7 @@ document.getElementById('menu-link-text').textContent = url;
 const items = c.menuItems||[];
 const g = document.getElementById('menu-grid');
 if (!items.length) { g.innerHTML='<div style="grid-column:1/-1;text-align:center;padding:60px;color:var(--gray)"><i class="fa-solid fa-utensils" style="font-size:48px;display:block;margin-bottom:12px;color:var(--border)"></i><h3>Nenhum item no cardápio</h3></div>'; return; }
-g.innerHTML = items.map((item,idx)=>`<div class="product-card" style="position:relative"><span style="position:absolute;top:6px;left:6px;background:var(--primary);color:#fff;font-size:11px;font-weight:800;padding:2px 8px;border-radius:10px;z-index:1;cursor:pointer" title="Clique para reordenar" onclick="reorderMenuItem('${item.id}')">#${idx+1} ✏️</span>${item.image?`<img src="${item.image}" class="product-card-img">`:`<div class="product-card-no-img">${getCategoryEmoji(item.category)}</div>`}<div class="product-card-body"><div class="product-card-name">${item.name}</div><div class="product-card-cat">${item.category||'Sem categoria'}</div><div class="product-card-price">${fmt(item.price)}</div>${item.description?`<div style="font-size:12px;color:var(--gray);margin-bottom:8px;line-height:1.4">${item.description}</div>`:''}<div style="font-size:11px;color:var(--gray);margin-bottom:12px"><i class="fa-solid fa-boxes-stacked"></i> Estoque: ${item.stock||0} · Mín: ${item.minStock||5}</div><div class="product-card-actions"><button class="btn btn-sm btn-primary" onclick="showMenuItemModal('${item.id}')"><i class="fa-solid fa-edit"></i> Editar</button><button class="btn btn-sm btn-danger" onclick="deleteMenuItem('${item.id}')"><i class="fa-solid fa-trash"></i></button></div></div></div>`).join('');
+g.innerHTML = items.map((item,idx)=>`<div class="product-card" style="position:relative"><span style="position:absolute;top:6px;left:6px;background:var(--primary);color:#fff;font-size:11px;font-weight:800;padding:2px 8px;border-radius:10px;z-index:1;cursor:pointer" title="Clique para reordenar" onclick="reorderMenuItem('${item.id}')">#${idx+1} ✏️</span>${item.image?`<img src="${item.image}" class="product-card-img">`:`<div class="product-card-no-img">${getCategoryEmoji(item.category)}</div>`}<div class="product-card-body"><div class="product-card-name">${item.name}</div><div class="product-card-cat">${item.category||'Sem categoria'}</div><div class="product-card-price">${fmt(item.price)}</div>${item.description?`<div style="font-size:12px;color:var(--gray);margin-bottom:8px;line-height:1.4;white-space:pre-line">${item.description}</div>`:''}<div style="font-size:11px;color:var(--gray);margin-bottom:12px"><i class="fa-solid fa-boxes-stacked"></i> Estoque: ${item.stock||0} · Mín: ${item.minStock||5}</div><div class="product-card-actions"><button class="btn btn-sm btn-primary" onclick="showMenuItemModal('${item.id}')"><i class="fa-solid fa-edit"></i> Editar</button><button class="btn btn-sm btn-danger" onclick="deleteMenuItem('${item.id}')"><i class="fa-solid fa-trash"></i></button></div></div></div>`).join('');
 }
 function reorderMenuItem(iid) {
     const c = currentCompany;
@@ -4028,7 +4028,7 @@ const variantData = collectVariantData('mi', price);
 const isCombo = document.getElementById('mi-iscombo')?.checked || false;
 const comboItems = isCombo ? collectComboLines('mi') : [];
 if (isCombo && !comboItems.length) { showToast('Selecione ao menos um produto do combo e sua quantidade','warning'); return; }
-const desc = isCombo ? (comboItems.map(comboItemLabel).join('   ') + (customDesc?' — '+customDesc:'')) : customDesc;
+const desc = isCombo ? (comboItems.map(comboItemLabel).join('\n') + (customDesc?' — '+customDesc:'')) : customDesc;
 if (!name||!price) { showToast('Nome e valor são obrigatórios','warning'); return; }
 if (currentCompany.plan === 'trial' && (currentCompany.menuItems || []).length >= 20 && !iid) {
 showToast('Limite de 20 produtos atingido no plano Trial. Faça o upgrade!','warning');
@@ -6433,7 +6433,7 @@ ${Array.from({length:maxCols}).map((_,j)=>`<div style="text-align:center">${head
 </div>`;
 const itemRows = rows.map(r => `<div style="display:contents" onclick="${r.click}">
 <div style="${r.oos?'opacity:.5':'cursor:pointer'}">${r.image ? `<img src="${r.image}" style="width:88px;height:88px;object-fit:cover;border-radius:10px;border:1px solid var(--border);display:block">` : `<div style="width:88px;height:88px;border-radius:10px;border:2px dashed var(--border);display:flex;align-items:center;justify-content:center;color:var(--gray);font-size:11px;text-align:center;font-weight:700">imagem</div>`}</div>
-<div style="${r.oos?'opacity:.5':'cursor:pointer'}"><div style="font-weight:800;font-size:14px;color:var(--dark)">#${r.num} - ${escHtml(r.name)}</div>${r.desc?`<div style="font-size:11px;color:var(--gray);margin-top:2px">${escHtml(r.desc)}</div>`:''}${r.oos?'<div style="color:var(--danger);font-size:11px;font-weight:700;margin-top:2px">Esgotado</div>':''}</div>
+<div style="${r.oos?'opacity:.5':'cursor:pointer'}"><div style="font-weight:800;font-size:14px;color:var(--dark)">#${r.num} - ${escHtml(r.name)}</div>${r.desc?`<div style="font-size:11px;color:var(--gray);margin-top:2px;white-space:pre-line">${escHtml(r.desc)}</div>`:''}${r.oos?'<div style="color:var(--danger);font-size:11px;font-weight:700;margin-top:2px">Esgotado</div>':''}</div>
 ${Array.from({length:maxCols}).map((_,j)=>`<div style="text-align:center;${r.oos?'opacity:.5':'cursor:pointer'}">${r.sizes[j]?`<span style="font-weight:800;font-size:15px;color:var(--dark)">${fmt(r.sizes[j].price)}</span>`:''}</div>`).join('')}
 </div>`).join('');
 return `<div style="display:grid;grid-template-columns:${colsTemplate};gap:8px 10px;align-items:center;margin-bottom:22px">${headerRow}${itemRows}</div>`;
@@ -6478,7 +6478,7 @@ const addsHtml = catAdds.map(a => `
 `).join('');
 showModal(`<i class="fa-solid fa-utensils"></i> ${p.name}`,
 `<div id="var-price-display" style="font-size:22px;font-weight:900;color:var(--primary);margin-bottom:12px">${fmt(getInitialVariantPrice(p, presetFlavorIdx))}</div>
-${p.description ? `<div style="font-size:13px;color:var(--gray);margin-bottom:12px">${p.description}</div>` : ''}
+${p.description ? `<div style="font-size:13px;color:var(--gray);margin-bottom:12px;white-space:pre-line">${p.description}</div>` : ''}
 ${variantPickerHtml(p, presetFlavorIdx)}
 ${catAdds.length ? `<div style="margin-bottom:12px"><div style="font-size:12px;font-weight:700;color:var(--gray);text-transform:uppercase;margin-bottom:8px">Adicionais</div>${addsHtml}</div>` : ''}
 <div class="form-group"><label>Quantidade</label>
