@@ -2779,10 +2779,19 @@ function buildOSHtml(data, copyLabel) {
         if (item.additionals && item.additionals.length && !additionalsText) {
             additionalsText = item.additionals.map(a => a.name).join(', ');
         }
+        // Se for um combo, mostra cada componente em sua própria linha (ex: 2x X Tudo / 1x Conquista Guaraná 2L)
+        let comboLines = '';
+        const menuMatch = ((currentCompany && currentCompany.menuItems) || []).find(mi => (mi.name||'').trim() === baseName && mi.isCombo);
+        if (menuMatch && menuMatch.comboItems && menuMatch.comboItems.length) {
+            comboLines = menuMatch.comboItems.map(ci => {
+                const cc = parseComboItem(ci);
+                return (cc && cc.name) ? `<tr><td colspan="3" style="padding:0 4px;font-size:13px;color:#000;font-weight:900">${cc.qty}x ${escHtml(cc.name)}</td></tr>` : '';
+            }).join('');
+        }
         const addDesc = additionalsText
             ? `<tr><td colspan="3" style="font-size:13px;color:#000;padding-left:4px;font-weight:900">${additionalsText}</td></tr>`
             : '';
-        return `<tr><td style="padding:4px 0;font-size:15px;font-weight:900">${item.qty}x ${baseName}</td><td style="text-align:right;padding:4px 4px;white-space:nowrap;font-size:13px;font-weight:900">${fmtPrint(item.price)}</td><td style="text-align:right;padding:4px 0;white-space:nowrap;font-weight:900;font-size:15px">${fmtPrint(item.price*item.qty)}</td></tr>${addDesc}`;
+        return `<tr><td style="padding:4px 0;font-size:15px;font-weight:900">${item.qty}x ${baseName}</td><td style="text-align:right;padding:4px 4px;white-space:nowrap;font-size:13px;font-weight:900">${fmtPrint(item.price)}</td><td style="text-align:right;padding:4px 0;white-space:nowrap;font-weight:900;font-size:15px">${fmtPrint(item.price*item.qty)}</td></tr>${comboLines}${addDesc}`;
     }).join('');
     const subtotal = data.subtotal ?? data.total; const delivery = data.deliveryTotal || 0; const discount = data.discountTotal || 0;
     const isDelivery = data.source === 'pub_menu' || !!data.address || !!data.phone;
