@@ -2910,20 +2910,17 @@ function buildOSHtml(data, copyLabel) {
         if (item.additionals && item.additionals.length && !additionalsText) {
             additionalsText = item.additionals.map(a => ((a.qty&&a.qty>1)? a.qty+'x ' : '') + a.name).join(', ');
         }
-        // Se for um combo, mostra cada componente em sua própria linha (ex: 2x X Tudo / 1x Conquista Guaraná 2L)
+        // Se for um combo, mostra igual à tela: cada lanche em sua própria linha com os seus adicionais
+        // (1º X Tudo: Bacon, +Mussarela, +Sem Presunto / 2º X Tudo: Calabresa, +Mussarela, +Sem Mostarda, +Sem Milho)
         let comboLines = '';
         let perLane = '';
         const menuMatch = ((currentCompany && currentCompany.menuItems) || []).find(mi => (mi.name||'').trim() === baseName && mi.isCombo);
+        const laneArr = lanesArr(item.addPerLanes);
         if (menuMatch && menuMatch.comboItems && menuMatch.comboItems.length) {
-            if (item.addPerLanes && item.addPerLanes.length) {
-                // NOVO: cada lanche do combo em sua própria linha, com os adicionais escolhidos logo abaixo
-                // (1º X Tudo / adicionais do 1º / 2º X Tudo / adicionais do 2º / ...)
+            if (laneArr && laneArr.length) {
                 perLane = (comboLanesData(item, ((currentCompany && currentCompany.menuItems) || [])) || []).map(r => r.type === 'drink'
                     ? `<tr><td colspan="3" style="padding:0 4px;font-size:13px;color:#000;font-weight:900">${r.qty}x ${escHtml(r.name)}</td></tr>`
-                    : `<tr><td colspan="3" style="padding:0 4px;font-size:14px;color:#000;font-weight:900">${r.num}º ${escHtml(r.name)}</td></tr>`
-                      + (r.adds.length
-                          ? `<tr><td colspan="3" style="padding:0 4px 0 12px;font-size:12px;color:#000;font-weight:900">${r.adds.map(a => ((a.qty&&a.qty>1)? a.qty+'x ' : '') + a.name).join(', +')}</td></tr>`
-                          : `<tr><td colspan="3" style="padding:0 4px 0 12px;font-size:12px;color:#000;font-weight:900">sem adicional</td></tr>`)
+                    : `<tr><td colspan="3" style="padding:0 4px;font-size:13px;color:#000;font-weight:900">${r.num}º ${escHtml(r.name)}: ${r.adds.length ? r.adds.map(a => ((a.qty&&a.qty>1)? a.qty+'x ' : '') + a.name).join(', + ') : 'sem adicional'}</td></tr>`
                 ).join('');
             } else {
                 comboLines = menuMatch.comboItems.map(ci => {
@@ -2935,6 +2932,12 @@ function buildOSHtml(data, copyLabel) {
         const addDesc = (additionalsText && !perLane)
             ? `<tr><td colspan="3" style="font-size:13px;color:#000;padding-left:4px;font-weight:900">${additionalsText}</td></tr>`
             : '';
+        if (menuMatch) {
+            // Combo: o nome em linha própria (não quebra mais com os preços) e os preços à direita logo abaixo
+            return `<tr><td colspan="3" style="padding:4px 0 0;font-size:15px;font-weight:900">${item.qty}x ${baseName}</td></tr>`
+                 + `<tr><td colspan="3" style="text-align:right;padding:0 0 2px;font-size:12px;font-weight:900">${fmtPrint(item.price)} · ${fmtPrint(item.price*item.qty)}</td></tr>`
+                 + comboLines + perLane + addDesc;
+        }
         return `<tr><td style="padding:4px 0;font-size:15px;font-weight:900">${item.qty}x ${baseName}</td><td style="text-align:right;padding:4px 4px;white-space:nowrap;font-size:13px;font-weight:900">${fmtPrint(item.price)}</td><td style="text-align:right;padding:4px 0;white-space:nowrap;font-weight:900;font-size:15px">${fmtPrint(item.price*item.qty)}</td></tr>${comboLines}${perLane}${addDesc}`;
     }).join('');
     const subtotal = data.subtotal ?? data.total; const delivery = data.deliveryTotal || 0; const discount = data.discountTotal || 0;
