@@ -897,6 +897,7 @@ table th,table td{padding:7px 8px;font-size:11px}
 <p style="font-size:13px;opacity:.85">Compartilhe com seus clientes — eles fazem o pedido direto no cardápio</p>
 <div class="menu-link-url"><span id="menu-link-text">Carregando...</span><button class="btn btn-sm" style="background:rgba(255,255,255,.2);color:#fff;flex-shrink:0" onclick="copyMenuLink()"><i class="fa-solid fa-copy"></i> Copiar</button></div>
 <button class="btn btn-sm" style="background:rgba(255,255,255,.2);color:#fff;margin-top:10px" onclick="showBusinessHoursModal()"><i class="fa-solid fa-clock"></i> Horário de Funcionamento</button>
+<button class="btn btn-sm" style="background:rgba(255,255,255,.2);color:#fff;margin-top:10px;margin-left:8px" onclick="showPubPixModal()"><i class="fa-brands fa-pix" style="color:#32bcad"></i> Configurar PIX</button>
 </div>
 </div>
 <div class="flex items-center justify-between mb-4 flex-wrap gap-3">
@@ -3139,6 +3140,28 @@ function downloadChatImage(dataUrl) {
         a.click();
         a.remove();
     } catch(e) { showToast('N\u00e3o foi poss\u00edvel salvar a imagem','danger'); }
+}
+function showPubPixModal() {
+    const c = currentCompany || {};
+    const pixKey = (c.pixKey || '').replace(/"/g,'&quot;');
+    const pixOwner = (c.pixOwner || '').replace(/"/g,'&quot;');
+    showModal('<i class="fa-brands fa-pix" style="color:#32bcad"></i> PIX — Cardápio Online',
+    `<p style="color:var(--gray);margin-bottom:16px;font-size:13px">Cadastre a chave PIX da sua loja. Quando o cliente escolher <b>Pix</b> no cardápio online, a chave aparecerá com botão de copiar, e após o pedido ele poderá enviar o comprovante pelo chat.</p>
+    <div class="form-group"><label>Chave PIX *</label><input type="text" id="px-key" class="form-control" value="${pixKey}" placeholder="Ex: CPF, e-mail, telefone ou aleatória"></div>
+    <div class="form-group"><label>Titular (opcional)</label><input type="text" id="px-owner" class="form-control" value="${pixOwner}" placeholder="Nome de quem recebe"></div>`,
+    `<button class="btn btn-ghost" onclick="closeModal()">Cancelar</button><button class="btn btn-primary" onclick="savePubPix()"><i class="fa-solid fa-save"></i> Salvar PIX</button>`, false);
+}
+async function savePubPix() {
+    const key = document.getElementById('px-key').value.trim();
+    const owner = document.getElementById('px-owner').value.trim();
+    if (!key) { showToast('Informe a chave PIX','warning'); return; }
+    const c = currentCompany;
+    showLoading('Salvando...');
+    try {
+        await db.collection('companies').doc(currentCompanyId).update({ pixKey: key, pixOwner: owner });
+        c.pixKey = key; c.pixOwner = owner;
+        hideLoading(); closeModal(); showToast('PIX salvo!','success');
+    } catch(e) { hideLoading(); showToast('Erro: '+e.message,'danger'); }
 }
 function showSetDeliveryFeeModal() {
 const pdvFee = pdvDeliveryFee || 0;
@@ -6512,6 +6535,56 @@ function sendPubChatMessage() {
     sendPubChatPayload(text, '');
 }
 // Upload de imagem removido — apenas URLs
+// ============================================================
+// PIX CARDÁPIO ONLINE — chave, copiar e comprovante via chat
+// ============================================================
+let pubLastPixOrder = null;
+
+function copyPubPixKey() {
+    const k = (pubCompany && pubCompany.pixKey) || '';
+    if (!k) { showToast('Chave PIX indisponível','warning'); return; }
+    if (navigator.clipboard && navigator.clipboard.writeText) {
+        navigator.clipboard.writeText(k).then(()=>showToast('Chave PIX copiada!','success')).catch(()=>fallbackCopy(k));
+    } else fallbackCopy(k);
+}
+function fallbackCopy(txt) {
+    const ta = document.createElement('textarea'); ta.value = txt; document.body.appendChild(ta); ta.select();
+    try { document.execCommand('copy'); showToast('Chave PIX copiada!','success'); } catch(e) { showToast('Não foi possível copiar','danger'); }
+    ta.remove();
+}
+function showPubPixOrderConfirm(o) {
+    const k = (pubCompany && pubCompany.pixKey) || '';
+    const owner = (pubCompany && pubCompany.pixOwner) || '';
+    showModal('<i class="fa-brands fa-pix" style="color:#32bcad"></i> Pedido ' + (o.orderNumber||'') + ' — Pagamento PIX',
+    `<div class="alert alert-success"><i class="fa-solid fa-check-circle"></i> Pedido <b>${o.orderNumber}</b> enviado! Pague com PIX e envie o comprovante para a loja.</div>
+    <div style="background:#ecfdf5;border:2px solid #32bcad;border-radius:10px;padding:14px">
+        <div style="font-size:14px;font-weight:800;color:#0f766e;margin-bottom:4px"><i class="fa-brands fa-pix" style="color:#32bcad"></i> Pague com PIX</div>
+        <div style="font-size:13px;margin-bottom:6px">Valor total: <b style="color:var(--dark)">${fmt(o.total)}</b></div>
+        ${owner ? `<div style="font-size:12px;color:var(--gray);margin-bottom:6px">Recebedor: ${escHtml(owner)}</div>` : ''}
+        ${k ? `<div style="font-size:12px;color:var(--gray);margin-bottom:6px">Chave PIX da loja:</div>
+        <div style="background:#fff;border:1px solid var(--border);border-radius:8px;padding:10px 12px;display:flex;align-items:center;justify-content:space-between;gap:8px"><span style="font-weight:700;font-size:14px;word-break:break-all">${escHtml(k)}</span><button class="btn btn-sm btn-success" onclick="copyPubPixKey()"><i class="fa-solid fa-copy"></i> Copiar</button></div>`
+        : '<div style="font-size:12px;color:var(--gray)">A loja ainda não cadastrou a chave PIX. Envie o comprovante pelo botão abaixo.</div>'}
+        <div style="font-size:13px;color:var(--gray);margin-top:12px">Depois de pagar, envie o comprovante pelo WhatsApp da loja:</div>
+        <button class="btn btn-success w-full mt-2" style="background:#25d366;border-color:#25d366" onclick="openPixWhatsApp()"><i class="fa-brands fa-whatsapp"></i> Enviar comprovante pelo WhatsApp</button>
+    </div>`,
+    `<button class="btn btn-ghost" onclick="closeModal()">Fechar</button>`, false);
+}
+function openPixWhatsApp() {
+    const o = pubLastPixOrder; if (!o) return;
+    const storePhone = (pubCompany && pubCompany.phone) || '';
+    const phone = waPhone(storePhone);
+    if (!phone) { showToast('A loja ainda não cadastrou o WhatsApp','warning'); return; }
+    const itemsLines = (o.items || []).map(i => '• ' + i.qty + 'x ' + (i.name || '') + ' — ' + fmt(i.price * i.qty)).join('\n');
+    const msg = 'Olá! Fiz um pedido no cardápio online e quero enviar o comprovante do pagamento PIX.\n\n' +
+        'Pedido: ' + (o.orderNumber || '') + '\n' +
+        'Cliente: ' + (o.name || 'novo cliente') + '\n' +
+        'Telefone: ' + (o.phone || '') + '\n\n' +
+        'Itens:\n' + (itemsLines || '—') + '\n\n' +
+        'Total: ' + fmt(o.total) + '\n\n' +
+        'Obrigado!';
+    const url = 'https://wa.me/' + phone + '?text=' + encodeURIComponent(msg);
+    window.open(url, '_blank');
+}
 async function showPublicMenu(cid) {
 pubCompanyId = cid;
 showLoading('Carregando cardápio...');
@@ -6834,6 +6907,13 @@ ${pubAppliedCoupon ? `<button class="btn btn-ghost" onclick="removePubCoupon()">
         <option value="pix">Pix</option>
     </select>
 </div>
+<div class="form-group" id="pub-pix-box" style="display:none">
+    <div style="background:#ecfdf5;border:2px solid #32bcad;border-radius:10px;padding:12px;margin-top:12px">
+        <div style="font-size:13px;font-weight:700;color:#0f766e;margin-bottom:6px"><i class="fa-brands fa-pix" style="color:#32bcad"></i> Pagar com PIX</div>
+        <div style="font-size:12px;color:var(--gray);margin-bottom:6px">Chave PIX da loja:</div>
+        <div style="background:#fff;border:1px solid var(--border);border-radius:8px;padding:10px 12px;display:flex;align-items:center;justify-content:space-between;gap:8px"><span id="pub-pix-key-text" style="font-weight:700;font-size:14px;word-break:break-all">${escHtml((pubCompany&&pubCompany.pixKey)||'')}</span><button class="btn btn-sm btn-success" onclick="copyPubPixKey()"><i class="fa-solid fa-copy"></i> Copiar</button></div>
+    </div>
+</div>
 <div id="pub-troco-box" style="display:none;background:#f0fdf4;border:2px solid #86efac;border-radius:10px;padding:12px;margin-top:12px">
     <div style="font-size:13px;font-weight:700;color:#166534;margin-bottom:8px"><i class="fa-solid fa-money-bill-wave"></i> Calcular Troco</div>
     <div style="font-size:12px;color:var(--gray);margin-bottom:8px">Informe o valor que vai pagar:</div>
@@ -6894,6 +6974,16 @@ function handlePubPaymentChange() {
         calcPubTroco(total); // Recalcula o troco com o novo total (sem taxa se for buscar)
     } else {
         if (trocoBox) trocoBox.style.display = 'none';
+    }
+
+    // 5. Mostrar/Ocultar caixa PIX (chave com copiar) quando selecionar Pix
+    const isPix = pay === 'pix' || (pay === 'vem-buscar' && pickupPayVal === 'pix');
+    const pixBox = document.getElementById('pub-pix-box');
+    if (pixBox) {
+        const hasKey = !!(pubCompany && pubCompany.pixKey);
+        pixBox.style.display = isPix && hasKey ? 'block' : 'none';
+        const keyEl = document.getElementById('pub-pix-key-text');
+        if (keyEl) keyEl.textContent = (pubCompany && pubCompany.pixKey) || '';
     }
 }
 function togglePubTroco() {
@@ -7080,11 +7170,20 @@ async function placePubOrder() {
         } catch(e) { console.error('Erro ao salvar dados do cliente:', e); }
         hideLoading();
         closeModal();
+        const isPixPay = pay === 'pix' || (pay === 'vem-buscar' && pickupPay === 'pix');
+        if (isPixPay) {
+            pubLastPixOrder = { orderId: orderRef.id, orderNumber: osNum, total: total, name: name, phone: phone, items: [...pubCart], pay: pay };
+        }
         pubCart = [];
         pubAppliedCoupon = null;
         updatePubCartCount();
-        showToast('Pedido enviado com sucesso!','success');
-        if (currentCustomer) { showPubTab('orders'); } else { showPubTab('menu'); }
+        if (isPixPay) {
+            showToast('Pedido enviado! Complete o pagamento via PIX','success');
+            showPubPixOrderConfirm(pubLastPixOrder);
+        } else {
+            showToast('Pedido enviado com sucesso!','success');
+            if (currentCustomer) { showPubTab('orders'); } else { showPubTab('menu'); }
+        }
     } catch(e) {
         hideLoading();
         showToast('Erro ao enviar pedido: ' + e.message,'danger');
