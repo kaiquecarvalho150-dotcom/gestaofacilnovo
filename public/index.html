@@ -1423,6 +1423,49 @@ function showPage(id) {
 document.querySelectorAll('[id^="page-"]').forEach(p => p.classList.add('hidden'));
 document.getElementById(id)?.classList.remove('hidden');
 }
+// Busca ativa de pedidos no Firestore a cada 2s, para o pedido chegar sem precisar recarregar a página.
+let ordersFetchBusy = false;
+let lastOrdersFetchAt = 0;
+async function refreshOrdersData() {
+    if (!currentCompanyId) return;
+    const now = Date.now();
+    // Garante no mínimo 2s entre cada busca real, mesmo se o navegador disparar o intervalo atrasado.
+    if (now - lastOrdersFetchAt < 1000) return;
+    lastOrdersFetchAt = now;
+    if (ordersFetchBusy) return;
+    ordersFetchBusy = true;
+    try {
+        const snap = await db.collection('orders').where('companyId','==',currentCompanyId).get();
+        const fetched = snap.docs.map(d => ({ id:d.id, ...d.data() })).sort((a,b) => new Date(b.date)-new Date(a.date));
+        // Novo pedido detectado -> som + impressão automática (quando vier do cardápio online)
+        const knownIds = new Set(allCompanyOrders.map(o => o.id));
+        const hasNew = fetched.some(o => !knownIds.has(o.id));
+        if (hasNew) {
+            fetched.forEach(order => {
+                const prevOrder = allCompanyOrders.find(o => o.id === order.id);
+                if (!prevOrder && order.orderStatus === 'novo') {
+                    playOrderSound();
+                    if (order.source === 'pub_menu') { setTimeout(function(){ autoPrintOrderCopies(order); }, 600); }
+                }
+            });
+            const pendingNow = fetched.filter(o => o.orderStatus === 'novo').length;
+            if (pendingNow > prevPendingCount) playNotificationSound();
+        }
+        allCompanyOrders = fetched;
+        const pending = fetched.filter(o => o.orderStatus === 'novo').length;
+        prevPendingCount = pending;
+        document.getElementById('nb-orders').textContent = pending;
+        const ordSec = document.getElementById('section-orders');
+        if (ordSec?.classList.contains('active')) renderOrdersFromData(allCompanyOrders);
+        const homeSec = document.getElementById('section-home');
+        if (homeSec?.classList.contains('active')) renderHome();
+    } catch(e) {
+        // Se a consulta falhar (ex.: conexão), mantém os dados atuais e tenta de novo no próximo ciclo.
+        if (window.__ordersWarned !== true) { console.error('Erro ao atualizar pedidos:', e); window.__ordersWarned = true; }
+    } finally {
+        ordersFetchBusy = false;
+    }
+}
 function showSection(name) {
 document.querySelectorAll('.section').forEach(s => s.classList.remove('active'));
 document.getElementById('section-'+name)?.classList.add('active');
@@ -1434,13 +1477,7 @@ closeSidebar();
 const renders = {home:renderHome,pos:renderPDV,stock:renderStock,menu:renderMenu,coupons:renderCoupons,employees:renderEmployees,chat:renderAdminChatList,fiados:renderFiadoClients,loyalty:renderLoyalty};
 if (name !== 'home' && homeClockInterval) { clearInterval(homeClockInterval); homeClockInterval = null; }
 if (renders[name]) renders[name]();
-if (name === 'orders') {
-renderOrdersFromData(allCompanyOrders);
-if (ordersRefreshInterval) clearInterval(ordersRefreshInterval);
-ordersRefreshInterval = setInterval(() => { renderOrdersFromData(allCompanyOrders); }, 2000);
-} else {
-if (ordersRefreshInterval) { clearInterval(ordersRefreshInterval); ordersRefreshInterval = null; }
-}
+if (name === 'orders') { refreshOrdersData(); }
 if (name === 'reports') { populateMonthSelector(); loadReports(); }
 }
 function openSidebar() { document.getElementById('sidebar').classList.add('open'); document.getElementById('sidebar-overlay').classList.add('show'); }
@@ -2193,6 +2230,9 @@ if (dashboardInterval) clearInterval(dashboardInterval);
 dashboardInterval = setInterval(() => {
 if (document.getElementById('section-home').classList.contains('active')) renderHome();
 }, 2000);
+// Busca ativa de pedidos em TODO o sistema (a cada 2s), não só na página de Pedidos.
+if (ordersRefreshInterval) clearInterval(ordersRefreshInterval);
+ordersRefreshInterval = setInterval(() => { refreshOrdersData(); }, 2000);
 }
 function playNotificationSound() {
 try {
