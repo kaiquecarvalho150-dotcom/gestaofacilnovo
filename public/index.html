@@ -123,6 +123,9 @@ table tr:hover td{background:#fafbfc}
 .reg-plan-badge{background:linear-gradient(135deg,var(--primary),var(--secondary));color:#fff;padding:8px 20px;border-radius:10px;font-size:13px;font-weight:700;display:inline-block;margin-bottom:16px}
 .reg-plan-badge.trial{background:linear-gradient(135deg,var(--success),#15803d)}
 #page-admin-login{min-height:100vh;background:linear-gradient(135deg,#0f172a 0%,#1e293b 100%);display:flex;align-items:center;justify-content:center;padding:20px}
+#page-motoboy-login{min-height:100vh;background:linear-gradient(135deg,#0f172a 0%,#3a2410 50%,#0f172a 100%);display:flex;align-items:center;justify-content:center;padding:20px;position:relative;overflow:hidden}
+#page-motoboy-login::before{content:'';position:absolute;inset:0;background:radial-gradient(circle at 30% 40%,rgba(245,158,11,.15) 0%,transparent 50%),radial-gradient(circle at 70% 60%,rgba(234,88,12,.15) 0%,transparent 50%)}
+#page-motoboy-login .login-box{position:relative;z-index:1}
 .admin-login-box{background:#fff;border-radius:20px;padding:44px;width:100%;max-width:400px;box-shadow:0 30px 80px rgba(0,0,0,.5)}
 .admin-badge-pill{background:linear-gradient(135deg,var(--dark),var(--dark2));color:#fff;padding:6px 16px;border-radius:8px;font-size:12px;font-weight:700;display:inline-flex;align-items:center;gap:6px;margin-bottom:20px}
 #page-admin{min-height:100vh;background:#f0f2f5}
@@ -589,8 +592,9 @@ table th,table td{padding:7px 8px;font-size:11px}
 </div>
 </div>
 <button class="btn btn-primary w-full btn-lg mt-2" onclick="doLogin()"><i class="fa-solid fa-sign-in-alt"></i> Entrar no Sistema</button>
-<div class="text-center mt-3">
+<div class="text-center mt-3" style="display:flex;gap:8px;justify-content:center;flex-wrap:wrap">
 <button class="btn btn-sm" style="background:transparent;color:var(--gray);font-size:12px" onclick="showPage('page-admin-login')"><i class="fa-solid fa-shield-alt"></i> Painel Administrativo</button>
+<button class="btn btn-sm" style="background:transparent;color:var(--primary);font-size:12px" onclick="showPage('page-motoboy-login')"><i class="fa-solid fa-motorcycle"></i> Sou Entregador</button>
 </div>
 </div>
 </div>
@@ -685,6 +689,56 @@ table th,table td{padding:7px 8px;font-size:11px}
 </div>
 </div>
 
+<!-- ========= PAGE: MOTOBOY LOGIN ========= -->
+<div id="page-motoboy-login" class="hidden">
+<div class="login-box">
+<div class="login-logo">
+<div class="login-logo-icon" style="background:linear-gradient(135deg,#f59e0b,#ea580c)"><i class="fa-solid fa-motorcycle"></i></div>
+<h1>Área do Entregador</h1>
+<p>Acesse para ver as entregas disponíveis</p>
+</div>
+<div class="form-group"><label>E-mail</label><div class="input-group"><i class="fa-solid fa-envelope input-icon"></i><input type="email" id="mtb-login-email" class="form-control" placeholder="seu@email.com" onkeydown="if(event.key==='Enter')doMotoboyLogin()"></div></div>
+<div class="form-group">
+<label>Senha</label>
+<div class="input-group"><i class="fa-solid fa-lock input-icon"></i>
+<input type="password" id="mtb-login-password" class="form-control" style="padding-left:40px;padding-right:42px" placeholder="••••••••" onkeydown="if(event.key==='Enter')doMotoboyLogin()">
+<button class="pwd-toggle" type="button" onclick="togglePwd('mtb-login-password','eye-mtbpwd')"><i class="fa-solid fa-eye" id="eye-mtbpwd"></i></button>
+</div>
+</div>
+<button class="btn btn-primary w-full btn-lg mt-2" style="background:linear-gradient(135deg,#f59e0b,#ea580c)" onclick="doMotoboyLogin()"><i class="fa-solid fa-sign-in-alt"></i> Entrar</button>
+<div class="text-center mt-3"><button class="btn btn-sm" style="background:transparent;color:var(--gray);font-size:12px" onclick="showPage('page-login')"><i class="fa-solid fa-arrow-left"></i> Voltar ao Login</button></div>
+<div style="font-size:11px;color:var(--gray);text-align:center;margin-top:6px">Cadastro feito pelo administrador do sistema.</div>
+</div>
+</div>
+
+<!-- ========= PAGE: MOTOBOY DASHBOARD ========= -->
+<div id="page-motoboy" class="hidden">
+<div class="admin-topbar" style="background:linear-gradient(135deg,#0f172a 0%,#3a2410 100%)">
+<div class="flex items-center gap-3">
+<div style="width:38px;height:38px;background:linear-gradient(135deg,#f59e0b,#ea580c);border-radius:10px;display:flex;align-items:center;justify-content:center;font-size:18px;color:#fff;flex-shrink:0"><i class="fa-solid fa-motorcycle"></i></div>
+<div>
+<h1 style="font-size:16px">Olá, <span id="mtb-name">Entregador</span></h1>
+<div style="font-size:11px;color:#94a3b8">Painel do Entregador</div>
+</div>
+</div>
+<div class="flex gap-2 items-center">
+<div style="background:rgba(255,255,255,.12);border-radius:10px;padding:8px 14px;text-align:center">
+<div style="font-size:10px;color:#cbd5e1">SALDO A RECEBER</div>
+<div style="font-size:16px;font-weight:900;color:#4ade80" id="mtb-balance">R$ 0,00</div>
+</div>
+<button class="btn btn-sm" style="background:rgba(255,255,255,.1);color:#fff" onclick="doMotoboyLogout()"><i class="fa-solid fa-sign-out-alt"></i> Sair</button>
+</div>
+</div>
+<div class="admin-content">
+<div class="flex gap-2 mb-4" style="flex-wrap:wrap">
+<button class="filter-chip active" id="mtb-tab-available" onclick="switchMotoboyTab('available')"><i class="fa-solid fa-bell"></i> Disponíveis <span id="mtb-badge-available" class="badge badge-danger" style="display:none"></span></button>
+<button class="filter-chip" id="mtb-tab-mine" onclick="switchMotoboyTab('mine')"><i class="fa-solid fa-route"></i> Minhas Entregas</button>
+<button class="filter-chip" id="mtb-tab-history" onclick="switchMotoboyTab('history')"><i class="fa-solid fa-clock-rotate-left"></i> Histórico</button>
+</div>
+<div id="mtb-orders-list"></div>
+</div>
+</div>
+
 <!-- ========= PAGE: ADMIN PANEL ========= -->
 <div id="page-admin" class="hidden">
 <div class="admin-topbar">
@@ -717,6 +771,21 @@ table th,table td{padding:7px 8px;font-size:11px}
 </table>
 </div>
 </div>
+<div class="card" style="margin-top:20px">
+<div class="card-header">
+<div class="card-title"><i class="fa-solid fa-motorcycle"></i> Entregadores Cadastrados</div>
+<div class="flex gap-2">
+<input type="text" id="admin-motoboy-search" class="form-control" style="width:220px" placeholder="Buscar entregador..." oninput="renderAdminMotoboyTable()">
+<button class="btn btn-sm btn-primary" onclick="showCreateMotoboyModal()"><i class="fa-solid fa-plus"></i> Novo Entregador</button>
+</div>
+</div>
+<div class="table-wrap">
+<table>
+<thead><tr><th>Nome</th><th>Telefone</th><th>E-mail (login)</th><th>Saldo</th><th>Status</th><th>Senha</th><th>Ações</th></tr></thead>
+<tbody id="admin-motoboy-table-body"></tbody>
+</table>
+</div>
+</div>
 </div>
 </div>
 
@@ -740,6 +809,7 @@ table th,table td{padding:7px 8px;font-size:11px}
 <div class="nav-section-label">Operação</div>
 <div class="nav-item" onclick="showSection('orders')"><span class="nav-ic"><i class="fa-solid fa-receipt"></i></span> Pedidos <span class="nav-badge-dot" id="nb-orders">0</span></div>
 <div class="nav-item" onclick="showSection('chat')"><span class="nav-ic"><i class="fa-solid fa-comments"></i></span> Mensagens <span class="nav-badge-dot" id="nb-chat" style="display:none">0</span></div>
+<div class="nav-item" onclick="showSection('motoboypay')"><span class="nav-ic"><i class="fa-solid fa-motorcycle"></i></span> Pagar Entregadores</div>
 <div class="nav-item" onclick="requireAuth('despesas')"><span class="nav-ic"><i class="fa-solid fa-file-invoice-dollar"></i></span> Despesas</div>
 <div class="nav-item" onclick="requireAuth('reports')"><span class="nav-ic"><i class="fa-solid fa-chart-bar"></i></span> Relatórios</div>
 <div class="nav-item" onclick="requireAuth('fiados')"><span class="nav-ic"><i class="fa-solid fa-hand-holding-dollar"></i></span> Fiados</div>
@@ -940,6 +1010,18 @@ table th,table td{padding:7px 8px;font-size:11px}
 </div>
 </div>
 <div id="orders-list"></div>
+</div>
+
+<!-- MOTOBOY PAYMENTS (EMPRESA) -->
+<div id="section-motoboypay" class="section">
+<div class="flex items-center justify-between mb-4 flex-wrap gap-3">
+<div style="font-size:15px;font-weight:700"><i class="fa-solid fa-motorcycle"></i> Pagamento de Entregadores</div>
+<div class="flex gap-2 flex-wrap items-center">
+<div class="filter-chip active" id="mbp-tab-pending" onclick="switchMotoboyPayTab('pending')">A Pagar</div>
+<div class="filter-chip" id="mbp-tab-history" onclick="switchMotoboyPayTab('history')">Histórico de Pagamentos</div>
+</div>
+</div>
+<div id="motoboypay-list"></div>
 </div>
 
 <!-- REPORTS -->
@@ -1199,6 +1281,17 @@ let sharedAudioCtx = null;
 let homeClockInterval = null;
 let prevOrderStatuses = {};
 let pendingCartSplit = [];
+// ===== ENTREGADOR (MOTOBOY) STATE =====
+let allMotoboys = [];
+let currentMotoboyId = null;
+let currentMotoboy = null;
+let motoboyOrdersUnsubscribe = null;
+let motoboyPollInterval = null;
+let motoboyPayTab = 'pending';
+let companyMotoboyPayments = [];
+let motoboyAvailableIds = new Set();
+let motoboyFetchBusy = false;
+let motoboyActiveTab = 'available';
 
 // ============================================================
 // UTILITY
@@ -1402,6 +1495,8 @@ async function refreshOrdersData() {
         if (ordSec?.classList.contains('active')) renderOrdersFromData(allCompanyOrders);
         const homeSec = document.getElementById('section-home');
         if (homeSec?.classList.contains('active')) renderHome();
+        const mbpSec = document.getElementById('section-motoboypay');
+        if (mbpSec?.classList.contains('active') && motoboyPayTab==='pending') renderMotoboyPayments();
     } catch(e) {
         // Se a consulta falhar (ex.: conexão), mantém os dados atuais e tenta de novo no próximo ciclo.
         if (window.__ordersWarned !== true) { console.error('Erro ao atualizar pedidos:', e); window.__ordersWarned = true; }
@@ -1413,14 +1508,15 @@ function showSection(name) {
 document.querySelectorAll('.section').forEach(s => s.classList.remove('active'));
 document.getElementById('section-'+name)?.classList.add('active');
 document.querySelectorAll('.nav-item').forEach(n => n.classList.remove('active'));
-const labels = {home:'Dashboard',pos:'PDV — Caixa',stock:'Estoque',menu:'Cadastrar Cardápio',coupons:'Cupons de Desconto',orders:'Pedidos',chat:'Mensagens',despesas:'Despesas',reports:'Relatórios',fiados:'Fiados',loyalty:'Fidelidade'};
+const labels = {home:'Dashboard',pos:'PDV — Caixa',stock:'Estoque',menu:'Cadastrar Cardápio',coupons:'Cupons de Desconto',orders:'Pedidos',chat:'Mensagens',motoboypay:'Pagamento de Entregadores',despesas:'Despesas',reports:'Relatórios',fiados:'Fiados',loyalty:'Fidelidade'};
 document.getElementById('topbar-title').textContent = labels[name] || name;
 document.querySelectorAll('.nav-item').forEach(n => { if(n.textContent.trim().startsWith(labels[name]||name)) n.classList.add('active'); });
 closeSidebar();
-const renders = {home:renderHome,pos:renderPDV,stock:renderStock,menu:renderMenu,coupons:renderCoupons,despesas:renderDespesas,chat:renderAdminChatList,fiados:renderFiadoClients,loyalty:renderLoyalty};
+const renders = {home:renderHome,pos:renderPDV,stock:renderStock,menu:renderMenu,coupons:renderCoupons,despesas:renderDespesas,chat:renderAdminChatList,fiados:renderFiadoClients,loyalty:renderLoyalty,motoboypay:renderMotoboyPayments};
 if (name !== 'home' && homeClockInterval) { clearInterval(homeClockInterval); homeClockInterval = null; }
 if (renders[name]) renders[name]();
 if (name === 'orders') { refreshOrdersData(); }
+if (name === 'motoboypay') { motoboyPayTab = 'pending'; document.getElementById('mbp-tab-pending')?.classList.add('active'); document.getElementById('mbp-tab-history')?.classList.remove('active'); refreshOrdersData(); }
 if (name === 'reports') { populateMonthSelector(); loadReports(); }
 }
 function openSidebar() { document.getElementById('sidebar').classList.add('open'); document.getElementById('sidebar-overlay').classList.add('show'); }
@@ -1795,9 +1891,231 @@ function doLogout() {
         showPage('page-login');
     }
 }
+
+// ============================================================
+// ENTREGADOR (MOTOBOY) — LOGIN / LOGOUT / DASHBOARD
+// ============================================================
+async function doMotoboyLogin() {
+    const email = document.getElementById('mtb-login-email').value.trim();
+    const pass = document.getElementById('mtb-login-password').value.trim();
+    if (!email||!pass) { showToast('Preencha e-mail e senha','warning'); return; }
+    showLoading('Verificando credenciais...');
+    try {
+        const snap = await db.collection('motoboys').where('email','==',email).get();
+        if (snap.empty) { hideLoading(); showToast('E-mail ou senha incorretos','danger'); return; }
+        const doc = snap.docs[0];
+        const m = { id: doc.id, ...doc.data() };
+        if (m.password !== pass) { hideLoading(); showToast('E-mail ou senha incorretos','danger'); return; }
+        if (m.blocked) { hideLoading(); showToast('Acesso bloqueado. Fale com o administrador do sistema.','danger'); return; }
+        currentMotoboyId = m.id;
+        currentMotoboy = m;
+        hideLoading();
+        initMotoboyDashboard();
+    } catch(e) { hideLoading(); showToast('Erro de conexão: '+e.message,'danger'); }
+}
+function doMotoboyLogout() {
+    try {
+        if (motoboyPollInterval) { clearInterval(motoboyPollInterval); motoboyPollInterval = null; }
+        currentMotoboyId = null;
+        currentMotoboy = null;
+        motoboyAvailableIds = new Set();
+    } catch(e) {}
+    const le = document.getElementById('mtb-login-email');
+    const lp = document.getElementById('mtb-login-password');
+    if (le) le.value = '';
+    if (lp) lp.value = '';
+    showPage('page-login');
+}
+function initMotoboyDashboard() {
+    document.getElementById('mtb-name').textContent = currentMotoboy.name || 'Entregador';
+    document.getElementById('mtb-balance').textContent = fmt(currentMotoboy.balance || 0);
+    motoboyActiveTab = 'available';
+    showPage('page-motoboy');
+    switchMotoboyTab('available');
+    refreshMotoboyOrders();
+    if (motoboyPollInterval) { clearInterval(motoboyPollInterval); motoboyPollInterval = null; }
+    motoboyPollInterval = setInterval(refreshMotoboyOrders, 4000);
+}
+function switchMotoboyTab(tab) {
+    motoboyActiveTab = tab;
+    ['available','mine','history'].forEach(t => {
+        const el = document.getElementById('mtb-tab-'+t);
+        if (el) el.classList.toggle('active', t===tab);
+    });
+    if (tab === 'history') { loadMotoboyPaymentsHistory().then(renderMotoboyOrders); }
+    renderMotoboyOrders();
+}
+let motoboyAllRelevant = [];
+let motoboyPaymentsHistory = [];
+async function loadMotoboyPaymentsHistory() {
+    if (!currentMotoboyId) return;
+    try {
+        const snap = await db.collection('motoboyPayments').where('motoboyId','==',currentMotoboyId).get();
+        motoboyPaymentsHistory = snap.docs.map(d => ({ id:d.id, ...d.data() })).sort((a,b) => new Date(b.createdAt)-new Date(a.createdAt));
+    } catch(e) { console.error('Erro ao carregar histórico de pagamentos:', e); }
+}
+async function refreshMotoboyOrders() {
+    if (!currentMotoboyId || motoboyFetchBusy) return;
+    motoboyFetchBusy = true;
+    try {
+        const availSnap = await db.collection('orders').where('motoboyStatus','==','disponivel').get();
+        const mineSnap = await db.collection('orders').where('motoboyId','==',currentMotoboyId).get();
+        const available = availSnap.docs.map(d => ({ id:d.id, ...d.data() }));
+        const mine = mineSnap.docs.map(d => ({ id:d.id, ...d.data() }));
+        const map = {};
+        available.forEach(o => map[o.id] = o);
+        mine.forEach(o => map[o.id] = o);
+        motoboyAllRelevant = Object.values(map).sort((a,b) => new Date(b.date||b.calledAt||0) - new Date(a.date||a.calledAt||0));
+        const newIds = new Set(available.map(o=>o.id));
+        const hasNewCall = available.some(o => !motoboyAvailableIds.has(o.id));
+        if (hasNewCall && motoboyAvailableIds.size >= 0) { playMotoboyCallSound(); }
+        motoboyAvailableIds = newIds;
+        const badge = document.getElementById('mtb-badge-available');
+        if (badge) { if (available.length) { badge.style.display='inline-block'; badge.textContent = available.length; } else { badge.style.display='none'; } }
+        try { const mDoc = await db.collection('motoboys').doc(currentMotoboyId).get(); if (mDoc.exists) { currentMotoboy = { id: mDoc.id, ...mDoc.data() }; document.getElementById('mtb-balance').textContent = fmt(currentMotoboy.balance||0); } } catch(e) {}
+        renderMotoboyOrders();
+    } catch(e) { console.error('Erro ao buscar entregas:', e); }
+    finally { motoboyFetchBusy = false; }
+}
+function playMotoboyCallSound() {
+    try {
+        unlockAudio();
+        if ('speechSynthesis' in window) {
+            window.speechSynthesis.cancel();
+            const u = new SpeechSynthesisUtterance('Mais uma entrega disponível');
+            u.lang = 'pt-BR'; u.rate = 0.9; u.pitch = 1; u.volume = 1;
+            window.speechSynthesis.speak(u);
+        }
+        if (sharedAudioCtx) {
+            const osc = sharedAudioCtx.createOscillator();
+            const gn = sharedAudioCtx.createGain();
+            osc.connect(gn); gn.connect(sharedAudioCtx.destination);
+            osc.frequency.setValueAtTime(660, sharedAudioCtx.currentTime);
+            osc.frequency.setValueAtTime(990, sharedAudioCtx.currentTime + 0.15);
+            osc.frequency.setValueAtTime(1200, sharedAudioCtx.currentTime + 0.3);
+            osc.type = 'sine';
+            gn.gain.setValueAtTime(0.5, sharedAudioCtx.currentTime);
+            gn.gain.exponentialRampToValueAtTime(0.001, sharedAudioCtx.currentTime + 0.8);
+            osc.start(sharedAudioCtx.currentTime);
+            osc.stop(sharedAudioCtx.currentTime + 0.8);
+        }
+    } catch(e) {}
+}
+function motoboyOrderAddressText(o) {
+    return `${o.address||''}${o.houseNumber?', '+o.houseNumber:''}${o.complement?' - '+o.complement:''}`.trim();
+}
+function renderMotoboyOrders() {
+    const el = document.getElementById('mtb-orders-list');
+    if (!el) return;
+    let list = [];
+    if (motoboyActiveTab === 'available') {
+        list = motoboyAllRelevant.filter(o => o.motoboyStatus === 'disponivel');
+    } else if (motoboyActiveTab === 'mine') {
+        list = motoboyAllRelevant.filter(o => o.motoboyId === currentMotoboyId && o.motoboyStatus === 'aceito');
+    } else {
+        list = motoboyAllRelevant.filter(o => o.motoboyId === currentMotoboyId && o.motoboyStatus === 'entregue');
+    }
+    let historyExtraHtml = '';
+    if (motoboyActiveTab === 'history') {
+        const byCompany = {};
+        list.forEach(o => {
+            const key = o.companyNameSnapshot || 'Empresa';
+            if (!byCompany[key]) byCompany[key] = { pending:0, paid:0 };
+            const fee = o.motoboyFee != null ? o.motoboyFee : (o.deliveryTotal||0);
+            if (o.motoboyPaid) byCompany[key].paid += fee; else byCompany[key].pending += fee;
+        });
+        const companyRows = Object.entries(byCompany).map(([name,v]) => `<tr><td style="font-weight:700">${name}</td><td style="color:var(--danger)">${fmt(v.pending)}</td><td style="color:var(--success)">${fmt(v.paid)}</td></tr>`).join('');
+        const paymentsRows = motoboyPaymentsHistory.length ? motoboyPaymentsHistory.map(p => `<tr><td>${new Date(p.createdAt).toLocaleString('pt-BR')}</td><td style="font-weight:700">${p.companyName}</td><td style="color:var(--success);font-weight:700">${fmt(p.amount)}</td></tr>`).join('') : '<tr><td colspan="3" class="text-center" style="padding:12px;color:var(--gray)">Nenhum pagamento recebido ainda</td></tr>';
+        historyExtraHtml = `
+        <div class="card" style="padding:16px;margin-bottom:16px">
+            <div style="font-weight:800;margin-bottom:10px"><i class="fa-solid fa-store"></i> Saldo por Empresa</div>
+            <div class="table-wrap"><table><thead><tr><th>Empresa</th><th>Pendente</th><th>Já Pago</th></tr></thead><tbody>${companyRows || '<tr><td colspan="3" class="text-center" style="padding:12px;color:var(--gray)">Sem dados</td></tr>'}</tbody></table></div>
+        </div>
+        <div class="card" style="padding:16px;margin-bottom:16px">
+            <div style="font-weight:800;margin-bottom:10px"><i class="fa-solid fa-file-invoice-dollar"></i> Histórico de Pagamentos Recebidos</div>
+            <div class="table-wrap"><table><thead><tr><th>Data</th><th>Empresa</th><th>Valor</th></tr></thead><tbody>${paymentsRows}</tbody></table></div>
+        </div>`;
+    }
+    if (!list.length) {
+        const msg = motoboyActiveTab==='available' ? 'Nenhuma entrega disponível no momento' : motoboyActiveTab==='mine' ? 'Você não tem entregas em andamento' : 'Nenhuma entrega concluída ainda';
+        el.innerHTML = historyExtraHtml + `<div class="text-center" style="padding:60px;color:var(--gray)"><i class="fa-solid fa-motorcycle" style="font-size:48px;display:block;margin-bottom:12px;color:var(--border)"></i><h3>${msg}</h3></div>`;
+        return;
+    }
+    el.innerHTML = historyExtraHtml + list.map(o => {
+        const addr = motoboyOrderAddressText(o);
+        const mapsUrl = 'https://www.google.com/maps/search/?api=1&query=' + encodeURIComponent(addr);
+        const fee = o.motoboyFee != null ? o.motoboyFee : (o.deliveryTotal||0);
+        let actions = '';
+        if (o.motoboyStatus === 'disponivel') {
+            actions = `<button class="btn btn-success w-full" onclick="acceptMotoboyDelivery('${o.id}')"><i class="fa-solid fa-check"></i> Aceitar Entrega</button>`;
+        } else if (o.motoboyStatus === 'aceito') {
+            actions = `<div class="flex gap-2 flex-wrap">
+                <a class="btn btn-primary" href="${mapsUrl}" target="_blank" rel="noopener"><i class="fa-solid fa-map-location-dot"></i> Abrir no Google Maps</a>
+                <button class="btn btn-success" onclick="finishMotoboyDelivery('${o.id}')"><i class="fa-solid fa-flag-checkered"></i> Finalizar Entrega</button>
+            </div>`;
+        } else if (o.motoboyStatus === 'entregue') {
+            actions = o.motoboyPaid ? `<span class="badge badge-success"><i class="fa-solid fa-circle-check"></i> Entregue — Pago</span>` : `<span class="badge badge-warning"><i class="fa-solid fa-clock"></i> Entregue — Pagamento Pendente</span>`;
+        }
+        return `<div class="order-card">
+            <div class="order-top">
+                <div>
+                    <div class="order-id">${o.orderNumber || o.id}</div>
+                    <div style="margin-top:6px;font-size:13px;color:var(--dark3)"><i class="fa-solid fa-user"></i> <strong>${o.customerName||''}</strong></div>
+                    ${o.phone ? `<div style="font-size:12px;color:var(--gray)"><i class="fa-solid fa-phone"></i> ${o.phone}</div>` : ''}
+                    ${addr ? `<div style="font-size:12px;color:var(--gray)"><i class="fa-solid fa-location-dot"></i> ${addr}</div>` : ''}
+                    ${o.companyNameSnapshot ? `<div style="font-size:12px;color:var(--primary);margin-top:4px"><i class="fa-solid fa-store"></i> ${o.companyNameSnapshot}</div>` : ''}
+                </div>
+            </div>
+            <div class="order-meta">
+                <div>
+                    <div style="font-size:12px;color:var(--gray);margin-bottom:2px">Sua Taxa de Entrega</div>
+                    <div class="order-total-val" style="color:var(--success)">${fmt(fee)}</div>
+                </div>
+                <div>${actions}</div>
+            </div>
+        </div>`;
+    }).join('');
+}
+async function acceptMotoboyDelivery(oid) {
+    showLoading('Aceitando entrega...');
+    try {
+        const ref = db.collection('orders').doc(oid);
+        const doc = await ref.get();
+        if (!doc.exists || doc.data().motoboyStatus !== 'disponivel') { hideLoading(); showToast('Esta entrega já foi aceita por outro entregador','warning'); refreshMotoboyOrders(); return; }
+        await ref.update({ motoboyStatus:'aceito', motoboyId: currentMotoboyId, motoboyName: currentMotoboy.name, acceptedAt: new Date().toISOString() });
+        hideLoading(); showToast('Entrega aceita! Bom trabalho!','success');
+        switchMotoboyTab('mine');
+        refreshMotoboyOrders();
+    } catch(e) { hideLoading(); showToast('Erro: '+e.message,'danger'); }
+}
+async function finishMotoboyDelivery(oid) {
+    if (!confirm('Confirmar que a entrega foi realizada?')) return;
+    showLoading('Finalizando entrega...');
+    try {
+        const ref = db.collection('orders').doc(oid);
+        const doc = await ref.get();
+        if (!doc.exists) { hideLoading(); return; }
+        const o = doc.data();
+        const fee = o.motoboyFee != null ? o.motoboyFee : (o.deliveryTotal||0);
+        await ref.update({ motoboyStatus:'entregue', deliveredAt: new Date().toISOString() });
+        const mRef = db.collection('motoboys').doc(currentMotoboyId);
+        await mRef.update({ balance: firebase.firestore.FieldValue.increment(fee) });
+        currentMotoboy.balance = (currentMotoboy.balance||0) + fee;
+        document.getElementById('mtb-balance').textContent = fmt(currentMotoboy.balance);
+        hideLoading(); showToast(`Entrega finalizada! +${fmt(fee)} adicionados ao seu saldo.`,'success');
+        switchMotoboyTab('history');
+        refreshMotoboyOrders();
+    } catch(e) { hideLoading(); showToast('Erro: '+e.message,'danger'); }
+}
+
 async function loadAdminData() {
 const snap = await db.collection('companies').get();
 allCompanies = snap.docs.map(d => ({ id:d.id, ...d.data() }));
+try {
+const mSnap = await db.collection('motoboys').get();
+allMotoboys = mSnap.docs.map(d => ({ id:d.id, ...d.data() }));
+renderAdminMotoboyTable();
+} catch(e) {}
 await loadMPConfig();
 // Carregar credenciais admin e receita manual
 try {
@@ -1985,6 +2303,151 @@ showModal('<i class="fa-solid fa-key"></i> Credenciais de Acesso',
 }
 
 // ============================================================
+// ADMIN: GERENCIAMENTO DE ENTREGADORES (MOTOBOYS)
+// ============================================================
+function renderAdminMotoboyTable() {
+const tb = document.getElementById('admin-motoboy-table-body');
+if (!tb) return;
+const q = (document.getElementById('admin-motoboy-search')?.value||'').toLowerCase();
+let list = allMotoboys;
+if (q) list = list.filter(m => (m.name||'').toLowerCase().includes(q)||(m.email||'').toLowerCase().includes(q));
+if (!list.length) { tb.innerHTML = '<tr><td colspan="7" class="text-center" style="padding:32px;color:var(--gray)">Nenhum entregador cadastrado</td></tr>'; return; }
+tb.innerHTML = list.map(m => `<tr>
+<td style="font-weight:700">${m.name}</td>
+<td style="font-family:monospace;font-size:12px">${m.phone||'—'}</td>
+<td style="font-size:12px">${m.email}</td>
+<td style="font-weight:700;color:var(--success)">${fmt(m.balance||0)}</td>
+<td>${m.blocked?'<span class="badge badge-danger">Bloqueado</span>':'<span class="badge badge-success">Ativo</span>'}</td>
+<td><button class="btn btn-sm btn-ghost" onclick="showMotoboyPasswordModal('${m.id}')"><i class="fa-solid fa-eye"></i></button></td>
+<td><div class="flex gap-1 flex-wrap">
+<button class="btn btn-sm btn-info" onclick="showMotoboyDeliveriesAdmin('${m.id}')" title="Ver entregas por empresa"><i class="fa-solid fa-truck-fast"></i></button>
+<button class="btn btn-sm btn-primary" onclick="editMotoboyModal('${m.id}')" title="Editar entregador"><i class="fa-solid fa-edit"></i></button>
+<button class="btn btn-sm" style="background:#fef3c7;color:#92400e" onclick="zerarSaldoMotoboy('${m.id}')" title="Zerar saldo do entregador"><i class="fa-solid fa-rotate-left"></i></button>
+<button class="btn btn-sm btn-${m.blocked?'success':'warning'}" onclick="toggleMotoboyBlock('${m.id}')"><i class="fa-solid fa-${m.blocked?'unlock':'lock'}"></i></button>
+<button class="btn btn-sm btn-danger" onclick="deleteMotoboy('${m.id}')"><i class="fa-solid fa-trash"></i></button>
+</div></td>
+</tr>`).join('');
+}
+async function showMotoboyDeliveriesAdmin(motoboyId) {
+const m = allMotoboys.find(x=>x.id===motoboyId); if(!m) return;
+showLoading('Carregando entregas do entregador...');
+try {
+const snap = await db.collection('orders').where('motoboyId','==',motoboyId).get();
+const orders = snap.docs.map(d => ({ id:d.id, ...d.data() })).filter(o => o.motoboyStatus === 'aceito' || o.motoboyStatus === 'entregue');
+const byCompany = {};
+orders.forEach(o => {
+const key = o.companyId || 'desconhecida';
+if (!byCompany[key]) byCompany[key] = { companyName: o.companyNameSnapshot || 'Empresa', pending:0, paid:0, emAndamento:0, orders: [] };
+const fee = o.motoboyFee != null ? o.motoboyFee : (o.deliveryTotal||0);
+if (o.motoboyStatus === 'aceito') byCompany[key].emAndamento += fee;
+else if (o.motoboyStatus === 'entregue' && !o.motoboyPaid) byCompany[key].pending += fee;
+else if (o.motoboyStatus === 'entregue' && o.motoboyPaid) byCompany[key].paid += fee;
+byCompany[key].orders.push(o);
+});
+const companies = Object.values(byCompany);
+const totalPending = companies.reduce((s,c)=>s+c.pending,0);
+const totalEmAndamento = companies.reduce((s,c)=>s+c.emAndamento,0);
+const totalPaid = companies.reduce((s,c)=>s+c.paid,0);
+const rows = companies.length ? companies.map(c => `<tr>
+<td style="font-weight:700">${c.companyName}</td>
+<td>${c.orders.length}</td>
+<td style="color:var(--info)">${fmt(c.emAndamento)}</td>
+<td style="color:var(--danger);font-weight:700">${fmt(c.pending)}</td>
+<td style="color:var(--success)">${fmt(c.paid)}</td>
+</tr>`).join('') : '<tr><td colspan="5" class="text-center" style="padding:16px;color:var(--gray)">Nenhuma entrega registrada ainda</td></tr>';
+hideLoading();
+showModal(`<i class="fa-solid fa-motorcycle" style="color:#f59e0b"></i> ${m.name} — Acompanhamento por Empresa`,
+`<div class="stats-grid" style="margin-bottom:16px">
+<div class="stat-card"><div class="stat-value" style="color:var(--info)">${fmt(totalEmAndamento)}</div><div class="stat-label">Em Andamento</div></div>
+<div class="stat-card"><div class="stat-value" style="color:var(--danger)">${fmt(totalPending)}</div><div class="stat-label">A Receber (Total)</div></div>
+<div class="stat-card"><div class="stat-value" style="color:var(--success)">${fmt(totalPaid)}</div><div class="stat-label">Já Recebido</div></div>
+</div>
+<div style="font-size:12px;color:var(--gray);margin-bottom:10px">Saldo total cadastrado do entregador: <strong>${fmt(m.balance||0)}</strong> (deve corresponder ao total "A Receber" acima)</div>
+<div class="table-wrap"><table><thead><tr><th>Empresa</th><th>Qtd. OS</th><th>Em Andamento</th><th>A Receber</th><th>Já Pago</th></tr></thead><tbody>${rows}</tbody></table></div>`,
+`<button class="btn btn-ghost" onclick="closeModal()">Fechar</button>`, true);
+} catch(e) { hideLoading(); showToast('Erro: '+e.message,'danger'); }
+}
+function showCreateMotoboyModal() {
+showModal('<i class="fa-solid fa-motorcycle"></i> Cadastrar Entregador',
+`<div class="form-group"><label>Nome Completo *</label><input type="text" id="nm-name" class="form-control" placeholder="Nome do entregador"></div>
+<div class="form-group"><label>Telefone</label><input type="text" id="nm-phone" class="form-control" oninput="maskPhone(this)"></div>
+<div class="form-group"><label>E-mail (login) *</label><input type="email" id="nm-email" class="form-control"></div>
+<div class="form-group"><label>Senha *</label><div class="pwd-wrap"><input type="password" id="nm-password" class="form-control"><button class="pwd-toggle" type="button" onclick="togglePwd('nm-password','eye-nmpwd')"><i class="fa-solid fa-eye" id="eye-nmpwd"></i></button></div></div>`,
+`<button class="btn btn-ghost" onclick="closeModal()">Cancelar</button><button class="btn btn-primary" onclick="createMotoboyAdmin()"><i class="fa-solid fa-save"></i> Criar</button>`, false);
+}
+async function createMotoboyAdmin() {
+const name=document.getElementById('nm-name').value.trim(), phone=document.getElementById('nm-phone').value.trim(), email=document.getElementById('nm-email').value.trim(), pass=document.getElementById('nm-password').value.trim();
+if (!name||!email||!pass) { showToast('Preencha os campos obrigatórios','warning'); return; }
+showLoading('Cadastrando entregador...');
+try {
+const snap = await db.collection('motoboys').where('email','==',email).get();
+if (!snap.empty) { hideLoading(); showToast('E-mail já cadastrado','danger'); return; }
+const id = genId();
+const motoboy = { name, phone, email, password: pass, blocked:false, balance:0, createdAt: new Date().toISOString() };
+await db.collection('motoboys').doc(id).set(motoboy);
+allMotoboys.push({ id, ...motoboy });
+hideLoading(); closeModal(); renderAdminMotoboyTable(); showToast('Entregador cadastrado!','success');
+} catch(e) { hideLoading(); showToast('Erro: '+e.message,'danger'); }
+}
+function editMotoboyModal(id) {
+const m = allMotoboys.find(x=>x.id===id); if(!m) return;
+showModal('<i class="fa-solid fa-edit"></i> Editar Entregador',
+`<div class="form-group"><label>Nome</label><input type="text" id="em-name" class="form-control" value="${m.name}"></div>
+<div class="form-group"><label>Telefone</label><input type="text" id="em-phone" class="form-control" value="${m.phone||''}" oninput="maskPhone(this)"></div>
+<div class="form-group"><label>E-mail</label><input type="email" id="em-email" class="form-control" value="${m.email}"></div>
+<div class="form-group"><label>Nova Senha</label><div class="pwd-wrap"><input type="password" id="em-password" class="form-control" placeholder="Em branco = manter"><button class="pwd-toggle" type="button" onclick="togglePwd('em-password','eye-empwd')"><i class="fa-solid fa-eye" id="eye-empwd"></i></button></div></div>
+<div class="form-group"><label>Saldo Atual (R$)</label><input type="number" id="em-balance" class="form-control" value="${m.balance||0}" step="0.01"></div>`,
+`<button class="btn btn-ghost" onclick="closeModal()">Cancelar</button><button class="btn btn-primary" onclick="saveEditMotoboy('${id}')"><i class="fa-solid fa-save"></i> Salvar</button>`, false);
+}
+async function saveEditMotoboy(id) {
+const m = allMotoboys.find(x=>x.id===id); if(!m) return;
+const updates = { name:document.getElementById('em-name').value.trim()||m.name, phone:document.getElementById('em-phone').value.trim(), email:document.getElementById('em-email').value.trim()||m.email, balance: parseFloat(document.getElementById('em-balance').value)||0 };
+const pw = document.getElementById('em-password').value.trim(); if(pw) updates.password = pw;
+showLoading('Salvando...');
+try { await db.collection('motoboys').doc(id).update(updates); Object.assign(m, updates); hideLoading(); closeModal(); renderAdminMotoboyTable(); showToast('Entregador atualizado!','success'); }
+catch(e) { hideLoading(); showToast('Erro: '+e.message,'danger'); }
+}
+function zerarSaldoMotoboy(id) {
+const m = allMotoboys.find(x=>x.id===id); if(!m) return;
+showModal('<i class="fa-solid fa-rotate-left" style="color:var(--warning)"></i> Zerar Saldo do Entregador',
+`<div class="alert alert-warning"><i class="fa-solid fa-exclamation-triangle"></i> Esta ação zera o saldo a receber de <strong>${m.name}</strong>, atualmente em <strong>${fmt(m.balance||0)}</strong>. Não afeta o histórico de entregas ou pagamentos já registrados, apenas o saldo acumulado.</div>`,
+`<button class="btn btn-ghost" onclick="closeModal()">Cancelar</button><button class="btn btn-warning" onclick="confirmZerarSaldoMotoboy('${id}')"><i class="fa-solid fa-rotate-left"></i> Zerar Saldo</button>`, false);
+}
+async function confirmZerarSaldoMotoboy(id) {
+const m = allMotoboys.find(x=>x.id===id); if(!m) return;
+showLoading('Zerando saldo...');
+try { await db.collection('motoboys').doc(id).update({ balance: 0 }); m.balance = 0; hideLoading(); closeModal(); renderAdminMotoboyTable(); showToast('Saldo do entregador zerado!','success'); }
+catch(e) { hideLoading(); showToast('Erro: '+e.message,'danger'); }
+}
+async function toggleMotoboyBlock(id) {
+const m = allMotoboys.find(x=>x.id===id); if(!m) return;
+const blocked = !m.blocked;
+showLoading(blocked?'Bloqueando...':'Desbloqueando...');
+try { await db.collection('motoboys').doc(id).update({ blocked }); m.blocked=blocked; hideLoading(); renderAdminMotoboyTable(); showToast(blocked?'Entregador bloqueado!':'Entregador desbloqueado!',blocked?'warning':'success'); }
+catch(e) { hideLoading(); showToast('Erro: '+e.message,'danger'); }
+}
+function deleteMotoboy(id) {
+const m = allMotoboys.find(x=>x.id===id); if(!m) return;
+showModal('<i class="fa-solid fa-trash" style="color:var(--danger)"></i> Excluir Entregador',
+`<div class="alert alert-danger"><i class="fa-solid fa-exclamation-triangle"></i> Esta ação é irreversível!</div><p>Excluir <strong>${m.name}</strong>?</p>`,
+`<button class="btn btn-ghost" onclick="closeModal()">Cancelar</button><button class="btn btn-danger" onclick="confirmDeleteMotoboy('${id}')"><i class="fa-solid fa-trash"></i> Excluir</button>`, false);
+}
+async function confirmDeleteMotoboy(id) {
+showLoading('Excluindo...');
+try { await db.collection('motoboys').doc(id).delete(); allMotoboys = allMotoboys.filter(m=>m.id!==id); hideLoading(); closeModal(); renderAdminMotoboyTable(); showToast('Entregador excluído!','success'); }
+catch(e) { hideLoading(); showToast('Erro: '+e.message,'danger'); }
+}
+function showMotoboyPasswordModal(id) {
+const m = allMotoboys.find(x=>x.id===id); if(!m) return;
+showModal('<i class="fa-solid fa-key"></i> Credenciais de Acesso',
+`<div class="alert alert-warning"><i class="fa-solid fa-shield-alt"></i> Informação confidencial</div>
+<div class="form-group"><label>Entregador</label><input class="form-control" value="${m.name}" disabled></div>
+<div class="form-group"><label>E-mail de Login</label><input class="form-control" value="${m.email}" id="pvm-email" readonly></div>
+<div class="form-group"><label>Senha</label><div class="pwd-wrap"><input class="form-control" type="password" value="${m.password}" id="pvm-pwd" readonly><button class="pwd-toggle" type="button" onclick="togglePwd('pvm-pwd','eye-pvmpwd')"><i class="fa-solid fa-eye" id="eye-pvmpwd"></i></button></div></div>`,
+`<button class="btn btn-ghost" onclick="closeModal()">Fechar</button><button class="btn btn-primary" onclick="navigator.clipboard.writeText('Email: '+document.getElementById('pvm-email').value+' | Senha: '+document.getElementById('pvm-pwd').value);showToast('Copiado!','success')"><i class="fa-solid fa-copy"></i> Copiar Credenciais</button>`, false);
+}
+
+// ============================================================
 // ADMIN CONFIG & ZERAR RECEITAS
 // ============================================================
 function showAdminConfigModal() {
@@ -2166,6 +2629,8 @@ document.getElementById('nb-orders').textContent = pending;
         if (ordSec?.classList.contains('active')) renderOrdersFromData(allCompanyOrders);
         const homeSec = document.getElementById('section-home');
         if (homeSec?.classList.contains('active')) renderHome();
+        const mbpSec = document.getElementById('section-motoboypay');
+        if (mbpSec?.classList.contains('active') && motoboyPayTab==='pending') renderMotoboyPayments();
     });
 showPage('page-dashboard');
 showSection('home');
@@ -4346,9 +4811,12 @@ function renderOrdersFromData(orders) {
                         ${o.address ? `<div style="font-size:12px;color:var(--gray)"><i class="fa-solid fa-location-dot"></i> ${o.address}, nº ${o.houseNumber || ''} ${o.complement ? '- ' + o.complement : ''}</div>` : ''}
                     ` : ''}
                 </div>
-                <div style="display:flex;gap:6px;align-items:center">
+                <div style="display:flex;gap:6px;align-items:center;flex-wrap:wrap">
                     ${statusBadge}
                     <span class="badge badge-${sColor[o.status]}">${sLabel[o.status]}</span>
+                    ${o.motoboyStatus === 'disponivel' ? '<span class="badge badge-warning"><i class="fa-solid fa-motorcycle"></i> Aguardando Entregador</span>' : ''}
+                    ${o.motoboyStatus === 'aceito' ? `<span class="badge badge-info"><i class="fa-solid fa-motorcycle"></i> ${o.motoboyName||'Entregador'} a caminho</span>` : ''}
+                    ${o.motoboyStatus === 'entregue' ? `<span class="badge badge-success"><i class="fa-solid fa-circle-check"></i> Entregue por ${o.motoboyName||'Entregador'}</span>` : ''}
                 </div>
             </div>
             <div class="order-items-list" style="background:#f8fafc;border-radius:8px;padding:12px;margin:10px 0">
@@ -4392,6 +4860,8 @@ function renderOrdersFromData(orders) {
                 <div class="flex gap-2 flex-wrap">
                     ${statusButtons}
                     ${paymentButton}
+                    ${(o.status !== 'cancelled' && o.orderStatus !== 'finalizado' && !o.motoboyStatus) ? `<button class="btn btn-sm" style="background:linear-gradient(135deg,#f59e0b,#ea580c);color:#fff" onclick="chamarEntregadorModal('${o.id}')"><i class="fa-solid fa-motorcycle"></i> Chamar Entregador</button>` : ''}
+                    ${o.motoboyStatus === 'disponivel' ? `<button class="btn btn-sm btn-ghost" onclick="cancelarChamadoEntregador('${o.id}')"><i class="fa-solid fa-xmark"></i> Cancelar Chamado</button>` : ''}
                     ${o.status === 'cancelled' ? `<button class="btn btn-sm btn-danger" onclick="deleteOrder('${o.id}')"><i class="fa-solid fa-trash"></i> Excluir OS</button>` : ''}
                 </div>
             </div>
@@ -4405,6 +4875,155 @@ async function confirmDeleteAllOrders() { closeModal(); showLoading('Excluindo t
 function deleteCancelledOrders() { const cancelled = allCompanyOrders.filter(o => o.status === 'cancelled'); if (!cancelled.length) { showToast('Nenhuma OS cancelada para excluir','warning'); return; } showModal('<i class="fa-solid fa-broom" style="color:var(--warning)"></i> Excluir OS Canceladas', `<div class="alert alert-danger"><i class="fa-solid fa-exclamation-triangle"></i> Ação irreversível!</div><p>Isso excluirá permanentemente <strong>${cancelled.length} OS cancelada(s)</strong>.</p>`, `<button class="btn btn-ghost" onclick="closeModal()">Cancelar</button><button class="btn btn-danger" onclick="confirmDeleteCancelledOrders()"><i class="fa-solid fa-trash"></i> Excluir Canceladas</button>`, false); }
 async function confirmDeleteCancelledOrders() { closeModal(); const cancelled = allCompanyOrders.filter(o => o.status === 'cancelled'); if (!cancelled.length) return; showLoading('Excluindo OS canceladas...'); try { const batchSize = 500; for (let i=0; i<cancelled.length; i+=batchSize) { const batch = db.batch(); cancelled.slice(i, i+batchSize).forEach(o => batch.delete(db.collection('orders').doc(o.id))); await batch.commit(); } hideLoading(); showToast(`${cancelled.length} OS cancelada(s) excluída(s)!`,'success'); } catch(e) { hideLoading(); showToast('Erro: '+e.message,'danger'); } }
 async function updateOrderStatus(oid, status) { try { await db.collection('orders').doc(oid).update({ status, updatedAt: new Date().toISOString() }); showToast(status==='cancelled'?'Pedido cancelado':'Status atualizado',status==='cancelled'?'warning':'success'); } catch(e) { showToast('Erro: '+e.message,'danger'); } }
+
+// ============================================================
+// EMPRESA: CHAMAR ENTREGADOR PARA UMA OS
+// ============================================================
+function chamarEntregadorModal(oid) {
+    const o = allCompanyOrders.find(x => x.id === oid); if (!o) return;
+    const addr = `${o.address||''}${o.houseNumber?', '+o.houseNumber:''}${o.complement?' - '+o.complement:''}`.trim();
+    const suggestedFee = o.deliveryTotal || 0;
+    showModal('<i class="fa-solid fa-motorcycle" style="color:#f59e0b"></i> Chamar Entregador',
+        `<div class="alert alert-info" style="margin-bottom:14px"><i class="fa-solid fa-circle-info"></i> A entrega ficará disponível para todos os entregadores cadastrados no sistema, já com os dados do pedido.</div>
+        <div class="form-group"><label>Cliente</label><input class="form-control" value="${o.customerName||''}" disabled></div>
+        <div class="form-group"><label>Endereço de Entrega</label><input class="form-control" value="${addr||'Não informado'}" disabled></div>
+        <div class="form-group"><label>Taxa de Entrega para o Entregador (R$)</label><input type="number" id="ce-fee" class="form-control" value="${suggestedFee}" step="0.01" min="0"></div>`,
+        `<button class="btn btn-ghost" onclick="closeModal()">Cancelar</button><button class="btn btn-primary" style="background:linear-gradient(135deg,#f59e0b,#ea580c)" onclick="confirmChamarEntregador('${oid}')"><i class="fa-solid fa-motorcycle"></i> Chamar Entregador</button>`, false);
+}
+async function confirmChamarEntregador(oid) {
+    const fee = parseFloat(document.getElementById('ce-fee').value) || 0;
+    showLoading('Chamando entregador...');
+    try {
+        await db.collection('orders').doc(oid).update({
+            motoboyStatus: 'disponivel',
+            motoboyFee: fee,
+            motoboyId: null,
+            motoboyName: null,
+            calledAt: new Date().toISOString(),
+            companyNameSnapshot: (currentCompany && currentCompany.companyName) || ''
+        });
+        const o = allCompanyOrders.find(x => x.id === oid); if (o) { o.motoboyStatus='disponivel'; o.motoboyFee=fee; }
+        hideLoading(); closeModal(); showToast('Entrega disponível para os entregadores!','success');
+        renderOrdersFromData(allCompanyOrders);
+    } catch(e) { hideLoading(); showToast('Erro: '+e.message,'danger'); }
+}
+async function cancelarChamadoEntregador(oid) {
+    if (!confirm('Cancelar o chamado do entregador para esta OS?')) return;
+    showLoading('Cancelando...');
+    try {
+        await db.collection('orders').doc(oid).update({ motoboyStatus: firebase.firestore.FieldValue.delete(), motoboyFee: firebase.firestore.FieldValue.delete() });
+        const o = allCompanyOrders.find(x => x.id === oid); if (o) { delete o.motoboyStatus; delete o.motoboyFee; }
+        hideLoading(); showToast('Chamado cancelado','warning');
+        renderOrdersFromData(allCompanyOrders);
+    } catch(e) { hideLoading(); showToast('Erro: '+e.message,'danger'); }
+}
+
+// ============================================================
+// EMPRESA: PAGAMENTO DE ENTREGADORES (por entregador, só desta empresa)
+// ============================================================
+function switchMotoboyPayTab(tab) {
+    motoboyPayTab = tab;
+    document.getElementById('mbp-tab-pending')?.classList.toggle('active', tab==='pending');
+    document.getElementById('mbp-tab-history')?.classList.toggle('active', tab==='history');
+    renderMotoboyPayments();
+}
+function getCompanyDeliveredOrders() {
+    return allCompanyOrders.filter(o => o.motoboyStatus === 'entregue' && o.motoboyId);
+}
+async function loadCompanyMotoboyPayments() {
+    if (!currentCompanyId) return;
+    try {
+        const snap = await db.collection('motoboyPayments').where('companyId','==',currentCompanyId).get();
+        companyMotoboyPayments = snap.docs.map(d => ({ id:d.id, ...d.data() })).sort((a,b) => new Date(b.createdAt)-new Date(a.createdAt));
+    } catch(e) { console.error('Erro ao carregar pagamentos:', e); }
+}
+async function renderMotoboyPayments() {
+    const el = document.getElementById('motoboypay-list');
+    if (!el) return;
+    if (motoboyPayTab === 'history') {
+        await loadCompanyMotoboyPayments();
+        if (!companyMotoboyPayments.length) {
+            el.innerHTML = `<div class="text-center" style="padding:60px;color:var(--gray)"><i class="fa-solid fa-file-invoice-dollar" style="font-size:48px;display:block;margin-bottom:12px;color:var(--border)"></i><h3>Nenhum pagamento registrado ainda</h3></div>`;
+            return;
+        }
+        el.innerHTML = `<div class="card"><div class="table-wrap"><table><thead><tr><th>Data</th><th>Entregador</th><th>Qtd. OS</th><th>Valor Pago</th></tr></thead><tbody>${companyMotoboyPayments.map(p => `<tr><td>${new Date(p.createdAt).toLocaleString('pt-BR')}</td><td style="font-weight:700">${p.motoboyName}</td><td>${(p.orderIds||[]).length}</td><td style="font-weight:700;color:var(--success)">${fmt(p.amount)}</td></tr>`).join('')}</tbody></table></div></div>`;
+        return;
+    }
+    const delivered = getCompanyDeliveredOrders();
+    const byMotoboy = {};
+    delivered.forEach(o => {
+        const key = o.motoboyId;
+        if (!byMotoboy[key]) byMotoboy[key] = { motoboyId:key, motoboyName:o.motoboyName||'Entregador', pending:0, paid:0, pendingCount:0, paidCount:0 };
+        const fee = o.motoboyFee != null ? o.motoboyFee : (o.deliveryTotal||0);
+        if (o.motoboyPaid) { byMotoboy[key].paid += fee; byMotoboy[key].paidCount++; }
+        else { byMotoboy[key].pending += fee; byMotoboy[key].pendingCount++; }
+    });
+    const list = Object.values(byMotoboy);
+    if (!list.length) {
+        el.innerHTML = `<div class="text-center" style="padding:60px;color:var(--gray)"><i class="fa-solid fa-motorcycle" style="font-size:48px;display:block;margin-bottom:12px;color:var(--border)"></i><h3>Nenhuma entrega finalizada por entregadores ainda</h3></div>`;
+        return;
+    }
+    el.innerHTML = `<div class="stats-grid">${list.map(m => `
+        <div class="card" style="padding:18px">
+            <div style="display:flex;align-items:center;gap:10px;margin-bottom:10px">
+                <div style="width:40px;height:40px;background:linear-gradient(135deg,#f59e0b,#ea580c);border-radius:10px;display:flex;align-items:center;justify-content:center;color:#fff"><i class="fa-solid fa-motorcycle"></i></div>
+                <div><div style="font-weight:800">${m.motoboyName}</div><div style="font-size:11px;color:var(--gray)">${m.pendingCount} OS pendente(s) · ${m.paidCount} paga(s)</div></div>
+            </div>
+            <div style="font-size:12px;color:var(--gray)">Saldo a Pagar (suas OS)</div>
+            <div style="font-size:22px;font-weight:900;color:${m.pending>0?'var(--danger)':'var(--success)'};margin-bottom:12px">${fmt(m.pending)}</div>
+            <button class="btn btn-primary w-full" onclick="showMotoboyPayDetail('${m.motoboyId}')"><i class="fa-solid fa-eye"></i> Ver Detalhes e Pagar</button>
+        </div>`).join('')}</div>`;
+}
+function showMotoboyPayDetail(motoboyId) {
+    const delivered = getCompanyDeliveredOrders().filter(o => o.motoboyId === motoboyId);
+    const pending = delivered.filter(o => !o.motoboyPaid);
+    const paid = delivered.filter(o => o.motoboyPaid);
+    const motoboyName = delivered[0]?.motoboyName || 'Entregador';
+    const totalPending = pending.reduce((s,o) => s + (o.motoboyFee != null ? o.motoboyFee : (o.deliveryTotal||0)), 0);
+    const rowsHtml = (arr, paidFlag) => arr.map(o => `<tr>
+        <td>${o.orderNumber||o.id}</td>
+        <td>${o.customerName||''}</td>
+        <td>${o.deliveredAt ? new Date(o.deliveredAt).toLocaleDateString('pt-BR') : '—'}</td>
+        <td style="font-weight:700">${fmt(o.motoboyFee != null ? o.motoboyFee : (o.deliveryTotal||0))}</td>
+        <td>${paidFlag ? `<span class="badge badge-success">Pago em ${o.motoboyPaidAt?new Date(o.motoboyPaidAt).toLocaleDateString('pt-BR'):''}</span>` : '<span class="badge badge-warning">Pendente</span>'}</td>
+    </tr>`).join('');
+    showModal(`<i class="fa-solid fa-motorcycle" style="color:#f59e0b"></i> ${motoboyName} — Entregas desta Empresa`,
+        `<div class="alert alert-warning" style="margin-bottom:14px"><i class="fa-solid fa-circle-info"></i> Este saldo refere-se apenas às entregas realizadas para a <strong>sua empresa</strong>. O entregador pode ter saldo adicional de outras empresas.</div>
+        <div class="text-center mb-3"><div style="font-size:12px;color:var(--gray)">Total Pendente</div><div style="font-size:26px;font-weight:900;color:var(--danger)">${fmt(totalPending)}</div></div>
+        <div style="font-weight:700;font-size:13px;margin-bottom:6px">OS Pendentes (${pending.length})</div>
+        <div class="table-wrap" style="max-height:220px;overflow:auto;margin-bottom:14px"><table><thead><tr><th>OS</th><th>Cliente</th><th>Data</th><th>Valor</th><th>Status</th></tr></thead><tbody>${rowsHtml(pending,false) || '<tr><td colspan="5" class="text-center" style="padding:16px;color:var(--gray)">Nenhuma pendência</td></tr>'}</tbody></table></div>
+        ${paid.length ? `<div style="font-weight:700;font-size:13px;margin-bottom:6px">Já Pagas (${paid.length})</div><div class="table-wrap" style="max-height:180px;overflow:auto"><table><thead><tr><th>OS</th><th>Cliente</th><th>Data</th><th>Valor</th><th>Status</th></tr></thead><tbody>${rowsHtml(paid,true)}</tbody></table></div>` : ''}`,
+        `<button class="btn btn-ghost" onclick="closeModal()">Fechar</button>${totalPending>0 ? `<button class="btn btn-primary" style="background:linear-gradient(135deg,#16a34a,#15803d)" onclick="confirmPagarMotoboy('${motoboyId}')"><i class="fa-solid fa-money-bill-wave"></i> Confirmar Pagamento de ${fmt(totalPending)}</button>` : ''}`, true);
+}
+async function confirmPagarMotoboy(motoboyId) {
+    const delivered = getCompanyDeliveredOrders().filter(o => o.motoboyId === motoboyId && !o.motoboyPaid);
+    if (!delivered.length) { closeModal(); return; }
+    const motoboyName = delivered[0].motoboyName || 'Entregador';
+    const total = delivered.reduce((s,o) => s + (o.motoboyFee != null ? o.motoboyFee : (o.deliveryTotal||0)), 0);
+    if (!confirm(`Confirmar pagamento de ${fmt(total)} para ${motoboyName}?`)) return;
+    showLoading('Registrando pagamento...');
+    try {
+        const now = new Date().toISOString();
+        const batch = db.batch();
+        delivered.forEach(o => {
+            batch.update(db.collection('orders').doc(o.id), { motoboyPaid: true, motoboyPaidAt: now });
+        });
+        await batch.commit();
+        await db.collection('motoboyPayments').add({
+            motoboyId, motoboyName,
+            companyId: currentCompanyId,
+            companyName: (currentCompany && currentCompany.companyName) || '',
+            amount: total,
+            orderIds: delivered.map(o => o.id),
+            createdAt: now
+        });
+        await db.collection('motoboys').doc(motoboyId).update({ balance: firebase.firestore.FieldValue.increment(-total) });
+        delivered.forEach(o => { const found = allCompanyOrders.find(x => x.id === o.id); if (found) { found.motoboyPaid = true; found.motoboyPaidAt = now; } });
+        hideLoading(); closeModal(); showToast(`Pagamento de ${fmt(total)} registrado para ${motoboyName}!`,'success');
+        renderMotoboyPayments();
+    } catch(e) { hideLoading(); showToast('Erro: '+e.message,'danger'); }
+}
+
 async function finalizePendingPayment(orderId) {
 const order = allCompanyOrders.find(o=>o.id===orderId);
 if (!order || order.status !== 'pending') return;
@@ -7426,17 +8045,50 @@ async function saveEditedHistoryOrder() {
     }
 }
 
-async function cancelHistoryOrder(orderId) {
+function cancelHistoryOrder(orderId) {
     const order = allCompanyOrders.find(o => o.id === orderId);
     if (!order) { showToast('OS não encontrada', 'warning'); return; }
+    // Se a OS foi entregue por um entregador, pergunta se deve remover o histórico dele também
+    if (order.motoboyStatus === 'entregue' && order.motoboyId) {
+        showModal('<i class="fa-solid fa-triangle-exclamation" style="color:var(--warning)"></i> Cancelar OS Entregue por Entregador',
+            `<p style="margin-bottom:10px">A OS <strong>${order.orderNumber || orderId}</strong> foi entregue pelo entregador <strong>${order.motoboyName||'Entregador'}</strong>.</p>
+            <p style="margin-bottom:10px">Deseja também <strong>remover o histórico e o saldo</strong> desta entrega para o entregador?</p>
+            <div class="alert alert-warning"><i class="fa-solid fa-circle-info"></i> Se marcar "Sim", o registro desta entrega some do painel do entregador${!order.motoboyPaid ? ' e o valor pendente é descontado do saldo dele' : ''}. Se marcar "Não", a OS é cancelada normalmente mas o entregador mantém o registro e o valor da entrega.</p>`,
+            `<button class="btn btn-ghost" onclick="closeModal()">Voltar</button>
+             <button class="btn btn-primary" onclick="confirmCancelHistoryOrder('${orderId}', false)"><i class="fa-solid fa-clock-rotate-left"></i> Não, manter histórico</button>
+             <button class="btn btn-danger" onclick="confirmCancelHistoryOrder('${orderId}', true)"><i class="fa-solid fa-trash"></i> Sim, remover histórico</button>`, false);
+        return;
+    }
     if (!confirm(`Cancelar a OS ${order.orderNumber || orderId}? Esta venda será removida dos relatórios.`)) return;
+    confirmCancelHistoryOrder(orderId, false);
+}
+async function confirmCancelHistoryOrder(orderId, wipeMotoboyHistory) {
+    const order = allCompanyOrders.find(o => o.id === orderId);
+    if (!order) { closeModal(); showToast('OS não encontrada', 'warning'); return; }
+    closeModal();
     showLoading('Cancelando OS...');
     try {
-        await db.collection('orders').doc(orderId).update({
+        const updateData = {
             status: 'cancelled',
             orderStatus: 'cancelado',
             cancelledAt: new Date().toISOString()
-        });
+        };
+        if (wipeMotoboyHistory && order.motoboyId) {
+            const fee = order.motoboyFee != null ? order.motoboyFee : (order.deliveryTotal||0);
+            if (!order.motoboyPaid && fee > 0) {
+                try { await db.collection('motoboys').doc(order.motoboyId).update({ balance: firebase.firestore.FieldValue.increment(-fee) }); } catch(e) {}
+            }
+            updateData.motoboyStatus = firebase.firestore.FieldValue.delete();
+            updateData.motoboyId = firebase.firestore.FieldValue.delete();
+            updateData.motoboyName = firebase.firestore.FieldValue.delete();
+            updateData.motoboyFee = firebase.firestore.FieldValue.delete();
+            updateData.motoboyPaid = firebase.firestore.FieldValue.delete();
+            updateData.motoboyPaidAt = firebase.firestore.FieldValue.delete();
+            updateData.calledAt = firebase.firestore.FieldValue.delete();
+            updateData.acceptedAt = firebase.firestore.FieldValue.delete();
+            updateData.deliveredAt = firebase.firestore.FieldValue.delete();
+        }
+        await db.collection('orders').doc(orderId).update(updateData);
         const salesSnap = await db.collection('sales')
             .where('companyId', '==', currentCompanyId)
             .where('orderNumber', '==', order.orderNumber)
@@ -7446,7 +8098,7 @@ async function cancelHistoryOrder(orderId) {
             await db.collection('sales').doc(salesSnap.docs[0].id).delete();
         }
         hideLoading();
-        showToast('OS cancelada! Os relatórios foram atualizados.', 'success');
+        showToast(wipeMotoboyHistory ? 'OS cancelada e histórico do entregador removido!' : 'OS cancelada! Os relatórios foram atualizados.', 'success');
         loadOrderHistory();
     } catch(e) {
         hideLoading();
