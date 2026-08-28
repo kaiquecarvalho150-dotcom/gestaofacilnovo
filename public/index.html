@@ -2323,6 +2323,7 @@ tb.innerHTML = list.map(m => `<tr>
 <button class="btn btn-sm btn-info" onclick="showMotoboyDeliveriesAdmin('${m.id}')" title="Ver entregas por empresa"><i class="fa-solid fa-truck-fast"></i></button>
 <button class="btn btn-sm btn-primary" onclick="editMotoboyModal('${m.id}')" title="Editar entregador"><i class="fa-solid fa-edit"></i></button>
 <button class="btn btn-sm" style="background:#fef3c7;color:#92400e" onclick="zerarSaldoMotoboy('${m.id}')" title="Zerar saldo do entregador"><i class="fa-solid fa-rotate-left"></i></button>
+<button class="btn btn-sm" style="background:#e0e7ff;color:#3730a3" onclick="limparHistoricoMotoboyModal('${m.id}')" title="Limpar histórico de entregas e pagamentos (libera espaço no Firebase)"><i class="fa-solid fa-broom"></i></button>
 <button class="btn btn-sm btn-${m.blocked?'success':'warning'}" onclick="toggleMotoboyBlock('${m.id}')"><i class="fa-solid fa-${m.blocked?'unlock':'lock'}"></i></button>
 <button class="btn btn-sm btn-danger" onclick="deleteMotoboy('${m.id}')"><i class="fa-solid fa-trash"></i></button>
 </div></td>
@@ -2418,6 +2419,54 @@ const m = allMotoboys.find(x=>x.id===id); if(!m) return;
 showLoading('Zerando saldo...');
 try { await db.collection('motoboys').doc(id).update({ balance: 0 }); m.balance = 0; hideLoading(); closeModal(); renderAdminMotoboyTable(); showToast('Saldo do entregador zerado!','success'); }
 catch(e) { hideLoading(); showToast('Erro: '+e.message,'danger'); }
+}
+function limparHistoricoMotoboyModal(id) {
+const m = allMotoboys.find(x=>x.id===id); if(!m) return;
+showModal('<i class="fa-solid fa-broom" style="color:#3730a3"></i> Limpar Histórico do Entregador',
+`<div class="alert alert-warning"><i class="fa-solid fa-exclamation-triangle"></i> Esta ação é irreversível!</div>
+<p style="margin-bottom:10px">Isso vai apagar permanentemente, apenas para <strong>${m.name}</strong>:</p>
+<ul style="margin:0 0 10px 18px;font-size:13px;line-height:1.7">
+<li>O vínculo desse entregador com as entregas já finalizadas (histórico de entregas)</li>
+<li>Todo o histórico de pagamentos já recebidos por ele</li>
+</ul>
+<div class="alert alert-info" style="margin-bottom:0"><i class="fa-solid fa-circle-info"></i> As entregas <strong>em andamento</strong> (ainda não finalizadas) e as OS/vendas da empresa <strong>não são afetadas</strong>. O saldo atual dele também não é alterado. Use isso apenas para liberar espaço no banco de dados.</div>`,
+`<button class="btn btn-ghost" onclick="closeModal()">Cancelar</button><button class="btn btn-danger" onclick="confirmLimparHistoricoMotoboy('${id}')"><i class="fa-solid fa-broom"></i> Limpar Histórico</button>`, false);
+}
+async function confirmLimparHistoricoMotoboy(id) {
+const m = allMotoboys.find(x=>x.id===id); if(!m) return;
+showLoading('Limpando histórico do entregador...');
+try {
+const ordersSnap = await db.collection('orders').where('motoboyId','==',id).where('motoboyStatus','==','entregue').get();
+const batchSize = 400;
+const docs = ordersSnap.docs;
+for (let i=0; i<docs.length; i+=batchSize) {
+const batch = db.batch();
+docs.slice(i, i+batchSize).forEach(d => {
+batch.update(d.ref, {
+motoboyStatus: firebase.firestore.FieldValue.delete(),
+motoboyId: firebase.firestore.FieldValue.delete(),
+motoboyName: firebase.firestore.FieldValue.delete(),
+motoboyFee: firebase.firestore.FieldValue.delete(),
+motoboyPaid: firebase.firestore.FieldValue.delete(),
+motoboyPaidAt: firebase.firestore.FieldValue.delete(),
+calledAt: firebase.firestore.FieldValue.delete(),
+acceptedAt: firebase.firestore.FieldValue.delete(),
+deliveredAt: firebase.firestore.FieldValue.delete(),
+companyNameSnapshot: firebase.firestore.FieldValue.delete()
+});
+});
+await batch.commit();
+}
+const paymentsSnap = await db.collection('motoboyPayments').where('motoboyId','==',id).get();
+const payDocs = paymentsSnap.docs;
+for (let i=0; i<payDocs.length; i+=batchSize) {
+const batch = db.batch();
+payDocs.slice(i, i+batchSize).forEach(d => batch.delete(d.ref));
+await batch.commit();
+}
+hideLoading(); closeModal();
+showToast(`Histórico limpo! ${docs.length} entrega(s) e ${payDocs.length} pagamento(s) removidos de ${m.name}.`,'success');
+} catch(e) { hideLoading(); showToast('Erro: '+e.message,'danger'); }
 }
 async function toggleMotoboyBlock(id) {
 const m = allMotoboys.find(x=>x.id===id); if(!m) return;
