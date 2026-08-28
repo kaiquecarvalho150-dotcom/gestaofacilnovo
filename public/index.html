@@ -302,6 +302,11 @@ table tr:hover td{background:#fafbfc}
 .exp-row .g-val{font-weight:800;color:var(--danger);white-space:nowrap}
 .desp-empty{text-align:center;padding:26px;color:var(--gray);font-size:13px}
 .employees-grid{display:grid;grid-template-columns:repeat(auto-fill,minmax(280px,1fr));gap:16px}
+.emp-card{background:#fff;border-radius:12px;padding:20px;border:1px solid var(--border);display:flex;gap:14px;align-items:flex-start;min-width:0}
+.emp-avatar{width:50px;height:50px;background:linear-gradient(135deg,var(--primary),var(--secondary));border-radius:50%;display:flex;align-items:center;justify-content:center;color:#fff;font-size:20px;font-weight:800;flex-shrink:0}
+.emp-name{font-size:15px;font-weight:700;color:var(--dark);margin-bottom:4px}
+.emp-role{font-size:12px;color:var(--gray);margin-bottom:6px}
+.emp-details{font-size:12px;color:var(--dark3);line-height:1.8}
 #page-public-menu{min-height:100vh;background:#f8fafc}
 .pub-header{background:linear-gradient(135deg,var(--primary),var(--secondary));color:#fff;padding:24px 20px;text-align:center}
 .pub-header h1{font-size:28px;font-weight:900;margin-bottom:4px}
@@ -956,23 +961,6 @@ table th,table td{padding:7px 8px;font-size:11px}
 </div>
 </div>
 </div>
-
-<!-- CONTROLE DE LUCROS POR LANCHE -->
-     <div class="card mt-4">
-         <div class="card-header">
-		 <div class="card-title"><i class="fa-solid fa-hamburger"></i> Lucro por Lanche</div>
-             <button class="btn btn-primary btn-sm" onclick="showInsumosModal()">
-                 <i class="fa-solid fa-carrot"></i> Gerenciar Insumos
-             </button>
-         </div>
-         <div id="lucro-lanches-list">
-             <div class="text-center" style="padding:40px;color:var(--gray)">
-                 <i class="fa-solid fa-hamburger" style="font-size:48px;display:block;margin-bottom:12px;opacity:0.3"></i>
-                 <p>Nenhum lanche cadastrado</p>
-                 <p style="font-size:13px;margin-top:8px">Adicione seus lanches para controlar o lucro</p>
-             </div>
-         </div>
-		 </div>
 
 <!-- VENDAS EM APPS TERCEIROS (IFOOD, AIQFOME, ETC) -->
      <div class="card mt-4">
@@ -4523,7 +4511,6 @@ renderReportData(sales, expenses, totalSalary, totalMotoboyExpense, totalMotoboy
 showToast('Erro ao carregar relatórios: ' + e.message, 'danger');
 }
 hideLoading();
-renderLanchesLucro();
 }
 async function clearReportData() {
     if (!confirm('Limpar todas as vendas e despesas deste mês? Esta ação não pode ser desfeita.')) return;
