@@ -2698,19 +2698,35 @@ async function purgeEmployeesAndMotoboys() {
 if (!currentCompanyId) return;
 try {
 if (localStorage.getItem('gf_purge_emp') === '1') return;
-const c = currentCompany;
-const cEmployees = c.employees || [];
-const cMotoboys = c.motoboys || [];
-const cExpenses = c.expenses || [];
+// IMPORTANTE: usa uma transação lendo os dados MAIS RECENTES do servidor no momento da escrita,
+// em vez do objeto currentCompany (que pode estar desatualizado, ex: se o usuãrio salvar uma
+// despesa nova logo após o login). Isso evita que esta limpeza única sobrescreva/apague
+// despesas recém-cadastradas por engano (bug corrigido).
+const companyRef = db.collection('companies').doc(currentCompanyId);
+let cleanExpensesResult = null;
+let hadDataToClean = false;
+await db.runTransaction(async (tx) => {
+const freshDoc = await tx.get(companyRef);
+if (!freshDoc.exists) return;
+const freshData = freshDoc.data();
+const cEmployees = freshData.employees || [];
+const cMotoboys = freshData.motoboys || [];
+const cExpenses = freshData.expenses || [];
 const cleanExpenses = cExpenses.filter(e => e.category !== 'Salário' && e.category !== 'Motoboy');
 const hasEmpData = cEmployees.length > 0 || cMotoboys.length > 0;
 const hasExpData = cleanExpenses.length !== cExpenses.length;
 if (hasEmpData || hasExpData) {
+hadDataToClean = true;
+cleanExpensesResult = cleanExpenses;
 const updateData = { expenses: cleanExpenses };
 if (hasEmpData) { updateData.employees = []; updateData.motoboys = []; }
-await db.collection('companies').doc(currentCompanyId).update(updateData);
-c.expenses = cleanExpenses;
-if (hasEmpData) { c.employees = []; c.motoboys = []; }
+tx.update(companyRef, updateData);
+}
+});
+if (hadDataToClean && currentCompany && cleanExpensesResult) {
+currentCompany.expenses = cleanExpensesResult;
+currentCompany.employees = [];
+currentCompany.motoboys = [];
 }
 localStorage.setItem('gf_purge_emp', '1');
 } catch(e) { console.error('Erro ao limpar registros de funcionários:', e); }
@@ -5127,8 +5143,10 @@ showToast('Pagamento registrado com sucesso!','success');
 // REPORTS & EMPLOYEES
 // ============================================================
 function requireAuth(section) {
-showModal('<i class="fa-solid fa-lock"></i> Acesso Restrito — Relatórios',
-`<p style="color:var(--gray);margin-bottom:14px">Digite sua senha para acessar os relatórios.</p>
+const authLabels = {despesas:'Despesas', reports:'Relatórios', fiados:'Fiados', loyalty:'Fidelidade'};
+const sectionLabel = authLabels[section] || 'Relatórios';
+showModal(`<i class="fa-solid fa-lock"></i> Acesso Restrito — ${sectionLabel}`,
+`<p style="color:var(--gray);margin-bottom:14px">Digite sua senha para acessar ${sectionLabel.toLowerCase()==='fidelidade'?'a':'o'} ${sectionLabel.toLowerCase()}.</p>
 <div class="form-group"><label>Senha</label><div class="pwd-wrap"><input type="password" id="auth-pw" class="form-control" placeholder="••••••••" onkeydown="if(event.key==='Enter')checkReportAuth('${section}')"><button class="pwd-toggle" type="button" onclick="togglePwd('auth-pw','eye-authpw')"><i class="fa-solid fa-eye" id="eye-authpw"></i></button></div></div>`,
 `<button class="btn btn-ghost" onclick="closeModal()">Cancelar</button><button class="btn btn-primary" onclick="checkReportAuth('${section}')"><i class="fa-solid fa-unlock"></i> Entrar</button>`, false);
 }
