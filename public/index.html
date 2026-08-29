@@ -2692,18 +2692,19 @@ if (ordersRefreshInterval) clearInterval(ordersRefreshInterval);
 ordersRefreshInterval = setInterval(() => { refreshOrdersData(); }, 2000);
 purgeEmployeesAndMotoboys();
 }
-// Remove, uma única vez, os registros gerados pela antiga área de Funcionários/Motoboys
-// (funcionários, motoboys e as despesas de Salário/Motoboy lançadas nos Relatórios).
+// Remove, uma única vez, os registros antigos e não usados gerados pela antiga área de
+// Funcionários/Motoboys (arrays legados 'employees' e 'motoboys' no documento da empresa).
+// IMPORTANTE: NÃO apaga mais despesas pela categoria "Salário"/"Motoboy" — isso causava um
+// bug grave em que despesas legítimas cadastradas pelo usuário (ex: "salário amor") eram
+// apagadas automaticamente logo após serem registradas. Essas categorias de despesa são
+// normais e não devem ser removidas.
 async function purgeEmployeesAndMotoboys() {
 if (!currentCompanyId) return;
 try {
 if (localStorage.getItem('gf_purge_emp') === '1') return;
-// IMPORTANTE: usa uma transação lendo os dados MAIS RECENTES do servidor no momento da escrita,
-// em vez do objeto currentCompany (que pode estar desatualizado, ex: se o usuãrio salvar uma
-// despesa nova logo após o login). Isso evita que esta limpeza única sobrescreva/apague
-// despesas recém-cadastradas por engano (bug corrigido).
+// Usa uma transação lendo os dados MAIS RECENTES do servidor no momento da escrita,
+// em vez do objeto currentCompany (que pode estar desatualizado).
 const companyRef = db.collection('companies').doc(currentCompanyId);
-let cleanExpensesResult = null;
 let hadDataToClean = false;
 await db.runTransaction(async (tx) => {
 const freshDoc = await tx.get(companyRef);
@@ -2711,20 +2712,13 @@ if (!freshDoc.exists) return;
 const freshData = freshDoc.data();
 const cEmployees = freshData.employees || [];
 const cMotoboys = freshData.motoboys || [];
-const cExpenses = freshData.expenses || [];
-const cleanExpenses = cExpenses.filter(e => e.category !== 'Salário' && e.category !== 'Motoboy');
 const hasEmpData = cEmployees.length > 0 || cMotoboys.length > 0;
-const hasExpData = cleanExpenses.length !== cExpenses.length;
-if (hasEmpData || hasExpData) {
+if (hasEmpData) {
 hadDataToClean = true;
-cleanExpensesResult = cleanExpenses;
-const updateData = { expenses: cleanExpenses };
-if (hasEmpData) { updateData.employees = []; updateData.motoboys = []; }
-tx.update(companyRef, updateData);
+tx.update(companyRef, { employees: [], motoboys: [] });
 }
 });
-if (hadDataToClean && currentCompany && cleanExpensesResult) {
-currentCompany.expenses = cleanExpensesResult;
+if (hadDataToClean && currentCompany) {
 currentCompany.employees = [];
 currentCompany.motoboys = [];
 }
