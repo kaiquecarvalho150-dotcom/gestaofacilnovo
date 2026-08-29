@@ -1480,12 +1480,10 @@ async function refreshOrdersData() {
             fetched.forEach(order => {
                 const prevOrder = allCompanyOrders.find(o => o.id === order.id);
                 if (!prevOrder && order.orderStatus === 'novo') {
-                    playOrderSound();
+                    playNotificationSound();
                     if (order.source === 'pub_menu') { setTimeout(function(){ autoPrintOrderCopies(order); }, 600); }
                 }
             });
-            const pendingNow = fetched.filter(o => o.orderStatus === 'novo').length;
-            if (pendingNow > prevPendingCount) playNotificationSound();
         }
         allCompanyOrders = fetched;
         const pending = fetched.filter(o => o.orderStatus === 'novo').length;
@@ -1936,6 +1934,7 @@ async function tryRestoreMotoboySession() {
 function doMotoboyLogout() {
     try {
         if (motoboyPollInterval) { clearInterval(motoboyPollInterval); motoboyPollInterval = null; }
+        if (motoboyOrdersUnsubscribe) { motoboyOrdersUnsubscribe(); motoboyOrdersUnsubscribe = null; }
         releaseMotoboyWakeLock();
         currentMotoboyId = null;
         currentMotoboy = null;
@@ -1958,6 +1957,16 @@ function initMotoboyDashboard() {
     if (motoboyPollInterval) { clearInterval(motoboyPollInterval); motoboyPollInterval = null; }
     // Atualiza a cada 2 segundos para as entregas chegarem o mais rápido possível para o entregador aceitar.
     motoboyPollInterval = setInterval(refreshMotoboyOrders, 2000);
+    // Listener em tempo real do Firestore: faz a entrega chegar na hora, sem depender do
+    // intervalo (que o navegador SUSPENDE quando o app/Chrome fica em segundo plano).
+    // Isso corrige: (1) sem som/notificação em segundo plano e (2) precisar atualizar a
+    // página manualmente depois de aceitar um pedido.
+    if (motoboyOrdersUnsubscribe) { motoboyOrdersUnsubscribe(); motoboyOrdersUnsubscribe = null; }
+    motoboyOrdersUnsubscribe = db.collection('orders')
+        .where('motoboyStatus', '==', 'disponivel')
+        .onSnapshot(() => {
+            refreshMotoboyOrders();
+        }, (err) => { console.error('Erro no listener de entregas:', err); });
     // Pede permissão de notificação do navegador (ajuda a avisar mesmo com a aba em segundo plano,
     // desde que o Chrome/app não tenha sido totalmente fechado pelo sistema).
     requestMotoboyNotificationPermission();
@@ -2732,11 +2741,11 @@ ordersUnsubscribe = db.collection('orders')
     .onSnapshot(snap => {
         const newOrders = snap.docs.map(d => ({ id:d.id, ...d.data() })).sort((a,b) => new Date(b.date)-new Date(a.date));
         
-        // Verificar se há novos pedidos e tocar som
+        // Verificar se há novos pedidos e tocar som "Mais um pedido"
         newOrders.forEach(order => {
             const prevOrder = allCompanyOrders.find(o => o.id === order.id);
             if (!prevOrder && order.orderStatus === 'novo') {
-                playOrderSound();
+                playNotificationSound();
                 // Impressão automática de 2 vias para pedidos vindos do cardápio online (entrega/retirada)
                 if (order.source === 'pub_menu') {
                     setTimeout(function() { autoPrintOrderCopies(order); }, 600);
@@ -2746,9 +2755,6 @@ ordersUnsubscribe = db.collection('orders')
         
         allCompanyOrders = newOrders;
         const pending = allCompanyOrders.filter(o => o.orderStatus === 'novo').length;
-if (pending > prevPendingCount) {
-    playNotificationSound();
-}
 prevPendingCount = pending;
 document.getElementById('nb-orders').textContent = pending;
         const ordSec = document.getElementById('section-orders');
@@ -2760,6 +2766,9 @@ document.getElementById('nb-orders').textContent = pending;
     });
 showPage('page-dashboard');
 showSection('home');
+// Pede permissão de notificação nativa do navegador para o som "Mais um pedido"
+// ser ouvido mesmo com o sistema em segundo plano.
+requestNotificationPermission();
 if (dashboardInterval) clearInterval(dashboardInterval);
 dashboardInterval = setInterval(() => {
 if (document.getElementById('section-home').classList.contains('active')) renderHome();
@@ -2802,28 +2811,51 @@ currentCompany.motoboys = [];
 localStorage.setItem('gf_purge_emp', '1');
 } catch(e) { console.error('Erro ao limpar registros de funcionários:', e); }
 }
+function requestNotificationPermission() {
+    try {
+        if ('Notification' in window && Notification.permission === 'default') {
+            Notification.requestPermission();
+        }
+    } catch(e) {}
+}
 function playNotificationSound() {
-try {
-unlockAudio();
-if ('speechSynthesis' in window) {
-window.speechSynthesis.cancel();
-const u = new SpeechSynthesisUtterance('Mais um pedido');
-u.lang = 'pt-BR'; u.rate = 0.88; u.pitch = 1.1; u.volume = 1;
-window.speechSynthesis.speak(u);
-}
-if (sharedAudioCtx) {
-const osc = sharedAudioCtx.createOscillator();
-const gn = sharedAudioCtx.createGain();
-osc.connect(gn); gn.connect(sharedAudioCtx.destination);
-osc.frequency.setValueAtTime(880, sharedAudioCtx.currentTime);
-osc.frequency.setValueAtTime(1100, sharedAudioCtx.currentTime + 0.15);
-osc.type = 'sine';
-gn.gain.setValueAtTime(0.5, sharedAudioCtx.currentTime);
-gn.gain.exponentialRampToValueAtTime(0.001, sharedAudioCtx.currentTime + 0.6);
-osc.start(sharedAudioCtx.currentTime);
-osc.stop(sharedAudioCtx.currentTime + 0.6);
-}
-} catch(e) {}
+    try {
+        unlockAudio();
+        // Voz "Mais um pedido"
+        if ('speechSynthesis' in window) {
+            window.speechSynthesis.cancel();
+            const u = new SpeechSynthesisUtterance('Mais um pedido');
+            u.lang = 'pt-BR'; u.rate = 0.88; u.pitch = 1.1; u.volume = 1;
+            window.speechSynthesis.speak(u);
+        }
+        // Beep de reforço via Web Audio (toca mesmo sem voz disponível)
+        if (sharedAudioCtx) {
+            try {
+                const osc = sharedAudioCtx.createOscillator();
+                const gn = sharedAudioCtx.createGain();
+                osc.connect(gn); gn.connect(sharedAudioCtx.destination);
+                osc.frequency.setValueAtTime(880, sharedAudioCtx.currentTime);
+                osc.frequency.setValueAtTime(1100, sharedAudioCtx.currentTime + 0.15);
+                osc.type = 'sine';
+                gn.gain.setValueAtTime(0.5, sharedAudioCtx.currentTime);
+                gn.gain.exponentialRampToValueAtTime(0.001, sharedAudioCtx.currentTime + 0.6);
+                osc.start(sharedAudioCtx.currentTime);
+                osc.stop(sharedAudioCtx.currentTime + 0.6);
+            } catch(e) {}
+        }
+        // Notificação nativa (funciona mesmo com a aba em segundo plano)
+        if ('Notification' in window && Notification.permission === 'granted') {
+            try {
+                const n = new Notification('🛎️ Novo pedido!', {
+                    body: 'Você tem um novo pedido para processar.',
+                    tag: 'gf-new-order',
+                    renotify: true,
+                    requireInteraction: true
+                });
+                n.onclick = () => { try { window.focus(); } catch(e){} n.close(); };
+            } catch(e) {}
+        }
+    } catch(e) {}
 }
 
 // Tocar som de novo pedido
