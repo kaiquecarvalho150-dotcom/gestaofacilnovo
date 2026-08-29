@@ -1366,25 +1366,61 @@ async function getNextOSNumber(companyId, companyObj) {
     const counterRef = db.collection('companies').doc(companyId);
     let next;
     try {
-        // Transação atômica: lê o último número da OS direto do Firestore e incrementa em uma única operação.
-        // Isso impede a duplicação quando dois pedidos (com ou sem cadastro) chegam quase ao mesmo tempo,
-        // pois o Firestore serializa todas as transações concorrentes e garante um número único por vez.
+        // Busca os números de OS já em uso por pedidos ATIVOS (não cancelados), para REUTILIZAR
+        // um número liberado por uma OS cancelada (ex.: cancelou a OS 0002 e a próxima volta a ser 0002).
+        const active = new Set();
+        try {
+            const ordersSnap = await db.collection('orders').where('companyId','==',companyId).get();
+            ordersSnap.docs.forEach(d => {
+                const od = d.data();
+                if (od.status !== 'cancelled') {
+                    const m = String(od.orderNumber||'').match(/(\d+)\s*$/);
+                    if (m) active.add(parseInt(m[1]));
+                }
+            });
+        } catch(e) { console.error('Erro ao buscar OS ativas:', e); }
+
+        // Transação atômica: reserva o número escolhido no documento da empresa (campo osReserved).
+        // Assim, dois pedidos online que chegam AO MESMO TEMPO e competem pelo mesmo número livre
+        // NÃO conseguem pegar o mesmo número: o Firestore serializa as transações concorrentes e
+        // o segundo, ao ver o número já reservado, pega o próximo livre. (Impossível duplicar.)
         next = await db.runTransaction(async (transaction) => {
             const doc = await transaction.get(counterRef);
-            const currentSeq = parseInt(doc.data()?.osSeq) || 0;
-            const newSeq = currentSeq + 1;
-            transaction.update(counterRef, { osSeq: newSeq });
-            return newSeq;
+            const data = doc.exists ? (doc.data()||{}) : {};
+            let seq = parseInt(data.osSeq) || 0;
+            let reserved = Array.isArray(data.osReserved) ? data.osReserved.slice() : [];
+
+            // Limpa reservas que já viraram pedido real (evita acúmulo de números em osReserved).
+            reserved = reserved.filter(n => !active.has(n));
+            const used = new Set(active);
+            reserved.forEach(n => used.add(n)); // reservas também bloqueiam o número enquanto não viram pedido
+
+            // Menor número livre entre 1 e o contador atual (pedido cancelado ou lacuna).
+            let reuse = null;
+            for (let i = 1; i <= seq; i++) { if (!used.has(i)) { reuse = i; break; } }
+
+            let assigned;
+            let updateData = {};
+            if (reuse != null) {
+                assigned = reuse;
+                reserved = reserved.concat([reuse]); // reserva atomicamente o número reutilizado
+                updateData = { osSeq: seq, osReserved: reserved };
+            } else {
+                assigned = seq + 1;
+                updateData = { osSeq: assigned, osReserved: reserved };
+            }
+            transaction.set(counterRef, updateData, { merge: true });
+            return assigned;
         });
     } catch (e) {
         console.error('Erro na transação ao gerar número sequencial da OS:', e);
-        // Fallback caso a transação falhe: usa o valor local em memória somando +1 e tenta atualizar o Firestore.
+        // Fallback caso a consulta/transação falhe: usa o valor local em memória somando +1 e tenta atualizar o Firestore.
         next = (parseInt(companyObj?.osSeq) || 0) + 1;
         try { await counterRef.update({ osSeq: next }); } catch(e2) { console.error('Erro no fallback ao atualizar osSeq:', e2); }
     }
-    // Sincroniza o objeto em memória com o número que foi efetivamente persistido,
-    // para que chamadas subsequentes na mesma sessão partam do número correto.
-    if (companyObj) companyObj.osSeq = next;
+    // Mantém o objeto em memória apontando para o MAIOR número já usado, para o fallback
+    // não regredir o contador quando um número é reutilizado.
+    if (companyObj) companyObj.osSeq = Math.max(parseInt(companyObj.osSeq) || 0, next);
     return `OS - ${dd}/${mm}/${yyyy} - ${String(next).padStart(5,'0')}`;
 }
 function fmt(v) { return 'R$ ' + Number(v||0).toLocaleString('pt-BR',{minimumFractionDigits:2,maximumFractionDigits:2}); }
