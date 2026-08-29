@@ -1909,16 +1909,38 @@ async function doMotoboyLogin() {
         if (m.blocked) { hideLoading(); showToast('Acesso bloqueado. Fale com o administrador do sistema.','danger'); return; }
         currentMotoboyId = m.id;
         currentMotoboy = m;
+        // Mantém o entregador logado mesmo se o app for minimizado/atualizar a página.
+        // Só desloga de verdade quando ele clicar em "Sair".
+        try { localStorage.setItem('gf_motoboy_id', m.id); } catch(e) {}
         hideLoading();
         initMotoboyDashboard();
     } catch(e) { hideLoading(); showToast('Erro de conexão: '+e.message,'danger'); }
 }
+// Tenta restaurar a sessão do entregador automaticamente (ex: quando o app/webview
+// recarrega a página ao voltar do segundo plano), sem pedir login novamente.
+async function tryRestoreMotoboySession() {
+    let savedId = null;
+    try { savedId = localStorage.getItem('gf_motoboy_id'); } catch(e) {}
+    if (!savedId) return false;
+    try {
+        const doc = await db.collection('motoboys').doc(savedId).get();
+        if (!doc.exists) { try { localStorage.removeItem('gf_motoboy_id'); } catch(e) {} return false; }
+        const m = { id: doc.id, ...doc.data() };
+        if (m.blocked) { try { localStorage.removeItem('gf_motoboy_id'); } catch(e) {} return false; }
+        currentMotoboyId = m.id;
+        currentMotoboy = m;
+        initMotoboyDashboard();
+        return true;
+    } catch(e) { return false; }
+}
 function doMotoboyLogout() {
     try {
         if (motoboyPollInterval) { clearInterval(motoboyPollInterval); motoboyPollInterval = null; }
+        releaseMotoboyWakeLock();
         currentMotoboyId = null;
         currentMotoboy = null;
         motoboyAvailableIds = new Set();
+        localStorage.removeItem('gf_motoboy_id');
     } catch(e) {}
     const le = document.getElementById('mtb-login-email');
     const lp = document.getElementById('mtb-login-password');
@@ -1934,7 +1956,61 @@ function initMotoboyDashboard() {
     switchMotoboyTab('available');
     refreshMotoboyOrders();
     if (motoboyPollInterval) { clearInterval(motoboyPollInterval); motoboyPollInterval = null; }
-    motoboyPollInterval = setInterval(refreshMotoboyOrders, 4000);
+    // Atualiza a cada 2 segundos para as entregas chegarem o mais rápido possível para o entregador aceitar.
+    motoboyPollInterval = setInterval(refreshMotoboyOrders, 2000);
+    // Pede permissão de notificação do navegador (ajuda a avisar mesmo com a aba em segundo plano,
+    // desde que o Chrome/app não tenha sido totalmente fechado pelo sistema).
+    requestMotoboyNotificationPermission();
+    // Mantém a tela do entregador acesa enquanto ele estiver com a página aberta, para reduzir
+    // a chance do celular suspender a aba e travar o som/atualização em segundo plano.
+    acquireMotoboyWakeLock();
+    // Quando o app volta do segundo plano/minimizado, atualiza na hora (não espera o próximo ciclo de 2s).
+    if (!window.__mtbVisibilityHandlerSet) {
+        window.__mtbVisibilityHandlerSet = true;
+        document.addEventListener('visibilitychange', () => {
+            if (document.visibilityState === 'visible' && currentMotoboyId && document.getElementById('page-motoboy') && !document.getElementById('page-motoboy').classList.contains('hidden')) {
+                refreshMotoboyOrders();
+                acquireMotoboyWakeLock();
+            }
+        });
+        window.addEventListener('focus', () => {
+            if (currentMotoboyId && document.getElementById('page-motoboy') && !document.getElementById('page-motoboy').classList.contains('hidden')) {
+                refreshMotoboyOrders();
+            }
+        });
+    }
+}
+let motoboyWakeLockObj = null;
+async function acquireMotoboyWakeLock() {
+    try {
+        if ('wakeLock' in navigator) {
+            motoboyWakeLockObj = await navigator.wakeLock.request('screen');
+        }
+    } catch(e) { /* Alguns navegadores/situações não permitem; segue sem travar a tela. */ }
+}
+function releaseMotoboyWakeLock() {
+    try { if (motoboyWakeLockObj) { motoboyWakeLockObj.release(); motoboyWakeLockObj = null; } } catch(e) {}
+}
+function requestMotoboyNotificationPermission() {
+    try {
+        if ('Notification' in window && Notification.permission === 'default') {
+            Notification.requestPermission();
+        }
+    } catch(e) {}
+}
+function notifyMotoboyNewDelivery(count) {
+    try {
+        if ('Notification' in window && Notification.permission === 'granted') {
+            const n = new Notification('🛺 Nova entrega disponível!', {
+                body: count > 1 ? `${count} entregas esperando para serem aceitas.` : 'Uma entrega está esperando para ser aceita.',
+                tag: 'gf-motoboy-delivery',
+                renotify: true,
+                requireInteraction: true
+            });
+            n.onclick = () => { try { window.focus(); } catch(e) {} n.close(); };
+        }
+        if ('vibrate' in navigator) { navigator.vibrate([300,150,300]); }
+    } catch(e) {}
 }
 function switchMotoboyTab(tab) {
     motoboyActiveTab = tab;
@@ -1967,8 +2043,9 @@ async function refreshMotoboyOrders() {
         mine.forEach(o => map[o.id] = o);
         motoboyAllRelevant = Object.values(map).sort((a,b) => new Date(b.date||b.calledAt||0) - new Date(a.date||a.calledAt||0));
         const newIds = new Set(available.map(o=>o.id));
-        const hasNewCall = available.some(o => !motoboyAvailableIds.has(o.id));
-        if (hasNewCall && motoboyAvailableIds.size >= 0) { playMotoboyCallSound(); }
+        const newOnes = available.filter(o => !motoboyAvailableIds.has(o.id));
+        const hasNewCall = newOnes.length > 0;
+        if (hasNewCall && motoboyAvailableIds.size >= 0) { playMotoboyCallSound(); notifyMotoboyNewDelivery(newOnes.length); }
         motoboyAvailableIds = newIds;
         const badge = document.getElementById('mtb-badge-available');
         if (badge) { if (available.length) { badge.style.display='inline-block'; badge.textContent = available.length; } else { badge.style.display='none'; } }
@@ -8877,7 +8954,12 @@ window.addEventListener('DOMContentLoaded', async () => {
     const params = new URLSearchParams(window.location.search);
     const cardapioId = params.get('cardapio');
     if (cardapioId) { showPublicMenu(cardapioId); }
-    else { showPage('page-login'); }
+    else {
+        // Se o entregador estava logado (ex: app minimizado/atualizou a página sozinho),
+        // restaura a sessão dele automaticamente sem pedir login de novo.
+        const restored = await tryRestoreMotoboySession();
+        if (!restored) { showPage('page-login'); }
+    }
 });
 </script>
 </body>
