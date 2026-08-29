@@ -5425,7 +5425,11 @@ async function buildAnnualChartAsync(year) {
             .where('companyId', '==', currentCompanyId)
             .get();
         
-        const allSales = allSalesSnap.docs.map(d => d.data());
+        const c = currentCompany || {};
+        // Mesmo critério usado no card "Receita do Mês": OS marcadas como fiado e ainda não
+        // recebidas não contam na receita (só passam a contar quando o dono dá baixa).
+        const fiadoPendingIds = getFiadoPendingSaleIds(c);
+        const allSales = allSalesSnap.docs.map(d => ({ id: d.id, ...d.data() })).filter(s => !fiadoPendingIds.has(s.id));
         console.log(`Total de vendas carregadas: ${allSales.length}`);
         
         // Filtrar apenas as do ano desejado no cliente
@@ -5444,6 +5448,17 @@ async function buildAnnualChartAsync(year) {
                 const m = parseInt(s.yearMonth.split('-')[1]) - 1;
                 if (m >= 0 && m <= 11) {
                     monthlyData[m] += (s.total || 0);
+                }
+            }
+        });
+        // Somar também as vendas de apps terceiros (iFood, Aiqfome etc) do ano, do mesmo jeito
+        // que o card "Receita do Mês" já faz, para o gráfico bater com o relatório.
+        (c.thirdPartySales || []).forEach(t => {
+            if (t.yearMonth) {
+                const tYear = parseInt(t.yearMonth.split('-')[0]);
+                const m = parseInt(t.yearMonth.split('-')[1]) - 1;
+                if (tYear === year && m >= 0 && m <= 11) {
+                    monthlyData[m] += (t.valorRecebido || 0);
                 }
             }
         });
