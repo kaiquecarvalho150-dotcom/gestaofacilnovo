@@ -2068,7 +2068,7 @@ function playMotoboyCallSound() {
         unlockAudio();
         if ('speechSynthesis' in window) {
             window.speechSynthesis.cancel();
-            const u = new SpeechSynthesisUtterance('Mais uma entrega disponível');
+            const u = new SpeechSynthesisUtterance('Mais uma entrega');
             u.lang = 'pt-BR'; u.rate = 0.9; u.pitch = 1; u.volume = 1;
             window.speechSynthesis.speak(u);
         }
@@ -2821,26 +2821,29 @@ function requestNotificationPermission() {
 function playNotificationSound() {
     try {
         unlockAudio();
-        // Voz "Mais um pedido"
+        // Voz "Mais um pedido" — falada bem alto
         if ('speechSynthesis' in window) {
             window.speechSynthesis.cancel();
             const u = new SpeechSynthesisUtterance('Mais um pedido');
-            u.lang = 'pt-BR'; u.rate = 0.88; u.pitch = 1.1; u.volume = 1;
+            u.lang = 'pt-BR'; u.rate = 0.85; u.pitch = 1; u.volume = 1;
             window.speechSynthesis.speak(u);
         }
-        // Beep de reforço via Web Audio (toca mesmo sem voz disponível)
+        // Beep de reforço via Web Audio (alto e bem audível)
         if (sharedAudioCtx) {
             try {
+                const t = sharedAudioCtx.currentTime;
                 const osc = sharedAudioCtx.createOscillator();
                 const gn = sharedAudioCtx.createGain();
                 osc.connect(gn); gn.connect(sharedAudioCtx.destination);
-                osc.frequency.setValueAtTime(880, sharedAudioCtx.currentTime);
-                osc.frequency.setValueAtTime(1100, sharedAudioCtx.currentTime + 0.15);
                 osc.type = 'sine';
-                gn.gain.setValueAtTime(0.5, sharedAudioCtx.currentTime);
-                gn.gain.exponentialRampToValueAtTime(0.001, sharedAudioCtx.currentTime + 0.6);
-                osc.start(sharedAudioCtx.currentTime);
-                osc.stop(sharedAudioCtx.currentTime + 0.6);
+                osc.frequency.setValueAtTime(880, t);
+                osc.frequency.setValueAtTime(1100, t + 0.15);
+                osc.frequency.setValueAtTime(880, t + 0.3);
+                osc.frequency.setValueAtTime(1320, t + 0.45);
+                gn.gain.setValueAtTime(0.9, t);
+                gn.gain.exponentialRampToValueAtTime(0.001, t + 1);
+                osc.start(t);
+                osc.stop(t + 1);
             } catch(e) {}
         }
         // Notificação nativa (funciona mesmo com a aba em segundo plano)
