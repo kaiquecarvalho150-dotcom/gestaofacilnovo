@@ -1248,6 +1248,7 @@ let pubSearchTerm = '';
 let selectedReportYM = '';
 let chartInstances = {};
 let ordersUnsubscribe = null;
+let companyUnsubscribe = null;
 let customerOrdersUnsubscribe = null;
 let pubChatUnsubscribe = null;
 let pubChatData = null;
@@ -1395,15 +1396,16 @@ async function getNextOSNumber(companyId, companyObj) {
             const used = new Set(active);
             reserved.forEach(n => used.add(n)); // reservas também bloqueiam o número enquanto não viram pedido
 
-            // Menor número livre entre 1 e o contador atual (pedido cancelado ou lacuna).
-            let reuse = null;
-            for (let i = 1; i <= seq; i++) { if (!used.has(i)) { reuse = i; break; } }
-
+            // Reutiliza APENAS o número do topo (o último emitido) quando ele está livre —
+            // o que acontece quando a última OS foi cancelada. Isso mantém os números sequenciais
+            // e sem "pulos": emitiu 0001 e 0002, cancelou a 0002 -> a próxima volta a ser 0002,
+            // depois 0003. (Antes reutilizava o menor número livre, o que fazia os números saltarem
+            // de forma aleatória, ex.: depois da 00152 vinha a 00054.)
             let assigned;
             let updateData = {};
-            if (reuse != null) {
-                assigned = reuse;
-                reserved = reserved.concat([reuse]); // reserva atomicamente o número reutilizado
+            if (seq > 0 && !used.has(seq)) {
+                assigned = seq;
+                reserved = reserved.concat([seq]); // reserva atomicamente o número reutilizado
                 updateData = { osSeq: seq, osReserved: reserved };
             } else {
                 assigned = seq + 1;
@@ -1893,6 +1895,7 @@ function doAdminLogout() { allCompanies=[]; showPage('page-login'); }
 function doLogout() {
     try {
         if (ordersUnsubscribe) { ordersUnsubscribe(); ordersUnsubscribe = null; }
+        if (companyUnsubscribe) { companyUnsubscribe(); companyUnsubscribe = null; }
         if (customerOrdersUnsubscribe) { customerOrdersUnsubscribe(); customerOrdersUnsubscribe = null; }
         if (adminChatsUnsubscribe) { adminChatsUnsubscribe(); adminChatsUnsubscribe = null; }
         if (dashboardInterval) { clearInterval(dashboardInterval); dashboardInterval = null; }
@@ -2724,6 +2727,23 @@ hideLoading(); closeModal(); showToast('Receitas zeradas! Nova contagem iniciada
 // ============================================================
 async function initDashboard() {  // ← Adicionar 'async' aqui
 const c = currentCompany; if(!c) return;
+// Sincroniza TODOS os dados da empresa (despesas, fornecedores, cardápio, etc.) em TEMPO REAL,
+// independentemente de onde/quantos dispositivos estiverem logados. Quando você registra uma
+// despesa no celular, ela aparece na hora no computador (e vice-versa) — sem precisar recarregar.
+if (companyUnsubscribe) companyUnsubscribe();
+companyUnsubscribe = db.collection('companies').doc(currentCompanyId).onSnapshot(cd => {
+    if (!cd.exists) return;
+    currentCompany = { id: cd.id, ...cd.data() };
+    pdvDeliveryFee = parseFloat(currentCompany.pdvDeliveryFee)||0;
+    pubDeliveryFee = parseFloat(currentCompany.pubDeliveryFee)||0;
+    // Re-renderiza a seção ativa para refletir as mudanças na hora.
+    const active = document.querySelector('.section.active');
+    if (active) {
+        const id = active.id.replace('section-','');
+        const renders = {home:renderHome,pos:renderPDV,stock:renderStock,menu:renderMenu,coupons:renderCoupons,despesas:renderDespesas,fiados:renderFiadoClients,loyalty:renderLoyalty,motoboypay:renderMotoboyPayments};
+        if (renders[id]) { try { renders[id](); } catch(e){} }
+    }
+}, error => { console.error('Erro no listener da empresa:', error); });
 pdvDeliveryFee = parseFloat(c.pdvDeliveryFee)||0;
 await loadLanchesLucro();
 renderLanchesLucro();
