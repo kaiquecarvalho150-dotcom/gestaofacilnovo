@@ -4440,7 +4440,7 @@ function showGlobalAdditionalsModal() {
     const ca = c.categoryAdditionals || {};
     // Categoria-fonte: a primeira que tiver adicionais cadastrados, ou a primeira da lista
     const sourceCat = foodCats.find(cat => ca[cat] && ca[cat].length) || foodCats[0];
-    const adds = (ca[sourceCat] || []).slice();
+    const adds = (getCategoryAdditionals(c, sourceCat) || []).slice();
     const addsHtml = adds.map((a,idx)=>`
     <div class="flex items-center gap-2 mb-2" id="gl-add-row-${a.id}">
         <input type="text" class="form-control" id="gl-add-name-${a.id}" value="${a.name}" placeholder="Ex: Bacon extra ou SEM ALFACE" style="flex:2">
@@ -4490,7 +4490,7 @@ function showGlobalAdditionalsModal() {
 function loadAdditionalsFromCategory(catName) {
     const c = currentCompany;
     const ca = c.categoryAdditionals || {};
-    const adds = (ca[catName] || []);
+    const adds = (getCategoryAdditionals(c, catName) || []);
     const container = document.getElementById('gl-adds-container');
     if (!container) return;
     if (!adds.length) {
