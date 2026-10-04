@@ -959,6 +959,7 @@ table th,table td{padding:7px 8px;font-size:11px}
 <div class="flex items-center justify-between mb-4 flex-wrap gap-3">
 <div style="font-size:15px;font-weight:700">Itens do Cardápio</div>
 <button class="btn btn-ghost" onclick="showGlobalAdditionalsModal()"><i class="fa-solid fa-list-check"></i> Adicionais por Categoria</button>
+<button class="btn btn-ghost" onclick="showBlockCategoryModal()"><i class="fa-solid fa-layer-group"></i> Bloquear Categorias</button>
 <button class="btn btn-ghost" onclick="showGlobalBordasModal()"><i class="fa-solid fa-pizza-slice"></i> Gerenciar Bordas</button>
 <button class="btn btn-ghost" onclick="showBase64ImagesManager()"><i class="fa-solid fa-image"></i> Gerenciar Imagens Base64</button>
 <button class="btn btn-primary" onclick="showMenuItemModal()"><i class="fa-solid fa-plus"></i> Adicionar Item</button>
@@ -4094,7 +4095,7 @@ document.getElementById('menu-link-text').textContent = url;
 const items = c.menuItems||[];
 const g = document.getElementById('menu-grid');
 if (!items.length) { g.innerHTML='<div style="grid-column:1/-1;text-align:center;padding:60px;color:var(--gray)"><i class="fa-solid fa-utensils" style="font-size:48px;display:block;margin-bottom:12px;color:var(--border)"></i><h3>Nenhum item no cardápio</h3></div>'; return; }
-g.innerHTML = items.map((item,idx)=>`<div class="product-card" style="position:relative"><span style="position:absolute;top:6px;left:6px;background:var(--primary);color:#fff;font-size:11px;font-weight:800;padding:2px 8px;border-radius:10px;z-index:1;cursor:pointer" title="Clique para reordenar" onclick="reorderMenuItem('${item.id}')">#${idx+1} ✏️</span>${item.image?`<img src="${item.image}" class="product-card-img">`:`<div class="product-card-no-img">${getCategoryEmoji(item.category)}</div>`}<div class="product-card-body"><div class="product-card-name">${item.name}</div><div class="product-card-cat">${item.category||'Sem categoria'}</div><div class="product-card-price">${fmt(item.price)}</div>${item.description?`<div style="font-size:12px;color:var(--gray);margin-bottom:8px;line-height:1.4;white-space:pre-line">${item.description}</div>`:''}<div style="font-size:11px;color:var(--gray);margin-bottom:12px"><i class="fa-solid fa-boxes-stacked"></i> Estoque: ${item.stock||0} · Mín: ${item.minStock||5}</div><div class="product-card-actions"><button class="btn btn-sm btn-primary" onclick="showMenuItemModal('${item.id}')"><i class="fa-solid fa-edit"></i> Editar</button><button class="btn btn-sm btn-danger" onclick="deleteMenuItem('${item.id}')"><i class="fa-solid fa-trash"></i></button></div></div></div>`).join('');
+g.innerHTML = items.map((item,idx)=>`<div class="product-card" style="position:relative"><span style="position:absolute;top:6px;left:6px;background:var(--primary);color:#fff;font-size:11px;font-weight:800;padding:2px 8px;border-radius:10px;z-index:1;cursor:pointer" title="Clique para reordenar" onclick="reorderMenuItem('${item.id}')">#${idx+1} ✏️</span>${item.image?`<img src="${item.image}" class="product-card-img">`:`<div class="product-card-no-img">${getCategoryEmoji(item.category)}</div>`}<div class="product-card-body"><div class="product-card-name">${item.name}</div><div class="product-card-cat">${item.category||'Sem categoria'}</div>${productPubBlocked(item)?`<div style="background:#fee2e2;color:#b91c1c;font-size:11px;font-weight:800;padding:3px 8px;border-radius:8px;margin-bottom:8px;display:inline-block"><i class="fa-solid fa-ban"></i> Bloqueado no cardápio online</div>`:''}<div class="product-card-price">${fmt(item.price)}</div>${item.description?`<div style="font-size:12px;color:var(--gray);margin-bottom:8px;line-height:1.4;white-space:pre-line">${item.description}</div>`:''}<div style="font-size:11px;color:var(--gray);margin-bottom:12px"><i class="fa-solid fa-boxes-stacked"></i> Estoque: ${item.stock||0} · Mín: ${item.minStock||5}</div><div class="product-card-actions"><button class="btn btn-sm btn-primary" onclick="showMenuItemModal('${item.id}')"><i class="fa-solid fa-edit"></i> Editar</button><button class="btn btn-sm" style="${productPubBlocked(item)?'background:#dcfce7;color:#166534':'background:#fee2e2;color:#b91c1c'}" onclick="showBlockProductModal('${item.id}')"><i class="fa-solid fa-ban"></i> ${productPubBlocked(item)?'Desbloquear':'Bloquear'}</button><button class="btn btn-sm btn-danger" onclick="deleteMenuItem('${item.id}')"><i class="fa-solid fa-trash"></i></button></div></div></div>`).join('');
 }
 function reorderMenuItem(iid) {
     const c = currentCompany;
@@ -5056,6 +5057,92 @@ try { await db.collection('companies').doc(currentCompanyId).update({menuItems:c
 catch(e) { hideLoading(); showToast('Erro: '+e.message,'danger'); }
 }
 async function deleteMenuItem(iid) { const c = currentCompany; const item = (c.menuItems||[]).find(i=>i.id===iid); if (!item||!confirm(`Remover "${item.name}" do cardápio?`)) return; c.menuItems = c.menuItems.filter(i=>i.id!==iid); showLoading('Removendo...'); try { await db.collection('companies').doc(currentCompanyId).update({menuItems:c.menuItems}); hideLoading(); renderMenu(); renderPDV(); renderStock(); showToast('Item removido!','success'); } catch(e) { hideLoading(); showToast('Erro: '+e.message,'danger'); } }
+
+// ============================================================
+// BLOQUEIO DE PRODUTOS E CATEGORIAS (cardápio online)
+// ============================================================
+function productPubBlocked(p) {
+  if (!p) return false;
+  if (p.blocked === true) return true;
+  if (p.blockedUntil) { const t = new Date(p.blockedUntil).getTime(); if (!isNaN(t) && t > Date.now()) return true; }
+  return false;
+}
+function productPubBlockInfo(p) {
+  if (!p) return { blocked:false, label:'' };
+  if (p.blocked === true) return { blocked:true, label:'Bloqueado (até você desbloquear)' };
+  if (p.blockedUntil) { const t = new Date(p.blockedUntil).getTime(); if (!isNaN(t) && t > Date.now()) return { blocked:true, label:'Bloqueado até ' + new Date(p.blockedUntil).toLocaleString('pt-BR') }; }
+  return { blocked:false, label:'' };
+}
+function showBlockProductModal(iid) {
+  const item = (currentCompany.menuItems||[]).find(i=>i.id===iid);
+  if (!item) return;
+  const info = productPubBlockInfo(item);
+  showModal(`<i class="fa-solid fa-ban"></i> Bloquear — ${item.name}`,
+    `<div style="background:#f8fafc;border:2px solid var(--border);border-radius:10px;padding:12px;margin-bottom:14px"><div style="font-size:13px;color:var(--gray)">Status no cardápio online:</div><div style="font-weight:800;color:${info.blocked?'var(--danger)':'var(--success)'}">${info.blocked?info.label:'Disponível para o cliente'}</div></div>
+     <p style="margin-bottom:14px;font-size:13px;color:var(--gray)">Produto bloqueado <strong>não aparece</strong> para o cliente no cardápio online, mas continua visível e editável aqui no sistema.</p>
+     <div style="display:flex;flex-direction:column;gap:10px">
+       <button class="btn btn-danger" onclick="blockProduct('${iid}','indef')"><i class="fa-solid fa-ban"></i> Bloquear (até eu desbloquear)</button>
+       <button class="btn btn-warning" onclick="blockProduct('${iid}','24h')"><i class="fa-solid fa-clock"></i> Bloquear por 24 horas (desbloqueia automático)</button>
+       <button class="btn btn-success" onclick="blockProduct('${iid}','unblock')"><i class="fa-solid fa-lock-open"></i> Desbloquear agora</button>
+     </div>`,
+    `<button class="btn btn-ghost" onclick="closeModal()">Fechar</button>`, false);
+}
+async function blockProduct(iid, mode) {
+  const c = currentCompany; const item = (c.menuItems||[]).find(i=>i.id===iid);
+  if (!item) return;
+  if (mode === 'indef') { item.blocked = true; item.blockedUntil = null; }
+  else if (mode === '24h') { item.blocked = false; item.blockedUntil = new Date(Date.now()+24*3600000).toISOString(); }
+  else { item.blocked = false; item.blockedUntil = null; }
+  showLoading('Salvando...');
+  try {
+    await db.collection('companies').doc(currentCompanyId).update({ menuItems: c.menuItems });
+    hideLoading(); closeModal(); renderMenu(); renderStock(); renderPDV();
+    showToast(mode==='unblock'?'Produto desbloqueado!':(mode==='24h'?'Produto bloqueado por 24 horas!':'Produto bloqueado!'), 'success');
+  } catch(e) { hideLoading(); showToast('Erro: '+e.message, 'danger'); }
+}
+function categoryPubBlocked(cat) {
+  const b = (currentCompany.pubBlockedCats||{})[cat];
+  if (!b) return false;
+  if (b.blocked === true) return true;
+  if (b.until) { const t = new Date(b.until).getTime(); if (!isNaN(t) && t > Date.now()) return true; }
+  return false;
+}
+function showBlockCategoryModal() {
+  const c = currentCompany;
+  const cats = [...new Set((c.menuItems||[]).map(p=>p.category).filter(Boolean))];
+  if (!cats.length) { showToast('Nenhuma categoria cadastrada','warning'); return; }
+  const bc = c.pubBlockedCats || {};
+  const rows = cats.map(cat => {
+    const b = bc[cat] || {};
+    const blocked = categoryPubBlocked(cat);
+    let st = 'Liberada';
+    if (blocked) st = (b.blocked === true) ? 'Bloqueada (até você liberar)' : ('Bloqueada até ' + new Date(b.until).toLocaleString('pt-BR'));
+    const attr = String(cat).replace(/&/g,'&amp;').replace(/"/g,'&quot;').replace(/</g,'&lt;').replace(/>/g,'&gt;');
+    return `<div style="display:flex;align-items:center;justify-content:space-between;gap:8px;padding:10px;border:1px solid var(--border);border-radius:10px;margin-bottom:8px;flex-wrap:wrap">
+      <div><div style="font-weight:700">${attr}</div><div style="font-size:12px;color:${blocked?'var(--danger)':'var(--success)'}">${st}</div></div>
+      <div style="display:flex;gap:6px">
+        <button class="btn btn-sm btn-danger" data-cat="${attr}" onclick="blockCategory(this.dataset.cat,'indef')">Bloquear</button>
+        <button class="btn btn-sm btn-warning" data-cat="${attr}" onclick="blockCategory(this.dataset.cat,'24h')">24h</button>
+        <button class="btn btn-sm btn-success" data-cat="${attr}" onclick="blockCategory(this.dataset.cat,'unblock')">Liberar</button>
+      </div></div>`;
+  }).join('');
+  showModal(`<i class="fa-solid fa-layer-group"></i> Bloquear Categorias`,
+    `<p style="font-size:13px;color:var(--gray);margin-bottom:14px">Categoria bloqueada oculta <strong>todos os produtos</strong> dela no cardápio online. No sistema eles continuam visíveis e editáveis.</p>${rows}`,
+    `<button class="btn btn-ghost" onclick="closeModal()">Fechar</button>`, false);
+}
+async function blockCategory(cat, mode) {
+  const c = currentCompany;
+  c.pubBlockedCats = c.pubBlockedCats || {};
+  if (mode === 'indef') c.pubBlockedCats[cat] = { blocked: true, until: null };
+  else if (mode === '24h') c.pubBlockedCats[cat] = { blocked: false, until: new Date(Date.now()+24*3600000).toISOString() };
+  else delete c.pubBlockedCats[cat];
+  showLoading('Salvando...');
+  try {
+    await db.collection('companies').doc(currentCompanyId).update({ pubBlockedCats: c.pubBlockedCats });
+    hideLoading(); closeModal(); renderMenu(); renderStock(); renderPDV();
+    showToast('Categoria atualizada!','success');
+  } catch(e) { hideLoading(); showToast('Erro: '+e.message, 'danger'); }
+}
 
 // ============================================================
 // ORDERS
@@ -7307,7 +7394,11 @@ function renderPublicMenu() {
 renderPubBanners();
 renderPubHoursBanner();
 const rawItems = pubCompany.menuItems || [];
-const items = rawItems.map((p,idx)=>({...p, _num: idx+1}));
+const _nowMs = Date.now();
+const _bc = pubCompany.pubBlockedCats || {};
+const _catBlocked = (cat) => { const b = _bc[cat]; return !!(b && (b.blocked === true || (b.until && new Date(b.until).getTime() > _nowMs))); };
+const _prodBlocked = (p) => (p.blocked === true) || (p.blockedUntil && new Date(p.blockedUntil).getTime() > _nowMs);
+const items = rawItems.filter(p => !_prodBlocked(p) && !_catBlocked(p.category)).map((p,idx)=>({...p, _num: idx+1}));
 const cats = ['Todos', ...new Set(items.map(p=>p.category).filter(Boolean))];
 document.getElementById('pub-cats').innerHTML = cats.map(c => `<div class="pub-cat ${c===pubActiveCat?'active':''}" onclick="setPubCat('${c}')">${c}</div>`).join('');
 let filtered = pubActiveCat === 'Todos' ? items : items.filter(p => p.category === pubActiveCat);
