@@ -156,6 +156,12 @@ table tr:hover td{background:#fafbfc}
 .main-content{margin-left:var(--sidebar-w);flex:1;min-height:100vh;display:flex;flex-direction:column}
 .topbar{background:#fff;padding:0 24px;height:64px;display:flex;align-items:center;justify-content:space-between;border-bottom:1px solid var(--border);position:sticky;top:0;z-index:40;box-shadow:0 1px 3px rgba(0,0,0,.06)}
 .topbar-title{font-size:19px;font-weight:800;color:var(--dark)}
+.store-status-btn{display:inline-flex;align-items:center;gap:6px;border:1px solid transparent;border-radius:20px;padding:5px 12px;font-size:12px;font-weight:800;cursor:pointer;white-space:nowrap}
+.store-status-open{background:#dcfce7;color:#166534;border-color:#86efac}
+.store-status-short{background:#fee2e2;color:#b91c1c;border-color:#fca5a5}
+.store-status-off{background:#f1f5f9;color:#475569;border-color:#cbd5e1}
+.store-menu-item{display:flex;align-items:center;gap:10px;width:100%;text-align:left;background:transparent;border:0;padding:10px 12px;border-radius:8px;font-size:13px;font-weight:600;color:var(--dark);cursor:pointer}
+.store-menu-item:hover{background:#f1f5f9}
 .user-avatar{width:38px;height:38px;background:linear-gradient(135deg,var(--primary),var(--secondary));border-radius:50%;display:flex;align-items:center;justify-content:center;color:#fff;font-weight:800;font-size:15px}
 .content-area{padding:24px;flex:1}
 .section{display:none}.section.active{display:block}
@@ -837,6 +843,15 @@ table th,table td{padding:7px 8px;font-size:11px}
 </div>
 <div class="flex items-center gap-3">
 <button id="btn-upgrade-topbar" class="btn btn-sm btn-warning hidden" onclick="showUpgradeModal()"><i class="fa-solid fa-crown"></i> Fazer Upgrade</button>
+<div style="position:relative">
+<button id="store-status-btn" class="store-status-btn store-status-off" onclick="toggleStoreStatusMenu(event)" style="display:none"><i class="fa-solid fa-clock"></i> <span>Status</span> <i class="fa-solid fa-chevron-down" style="font-size:10px"></i></button>
+<div id="store-status-menu" style="display:none;position:absolute;right:0;top:calc(100% + 8px);background:#fff;border:1px solid var(--border);border-radius:12px;box-shadow:0 8px 24px rgba(0,0,0,.15);padding:8px;min-width:230px;z-index:130">
+<div style="font-size:11px;color:var(--gray);padding:6px 10px;font-weight:800;text-transform:uppercase">Controle da loja</div>
+<button class="store-menu-item" onclick="setStoreOverride('open')"><i class="fa-solid fa-lock-open" style="color:var(--success);width:16px"></i> Abrir loja</button>
+<button class="store-menu-item" onclick="setStoreOverride('closed')"><i class="fa-solid fa-lock" style="color:var(--danger);width:16px"></i> Fechar loja</button>
+<button class="store-menu-item" onclick="setStoreOverride(null)"><i class="fa-solid fa-clock" style="color:var(--gray);width:16px"></i> Seguir horário automático</button>
+</div>
+</div>
 <div id="topbar-days" style="font-size:12px;color:var(--gray);font-weight:600"></div>
 <div class="user-avatar" id="topbar-avatar">?</div>
 </div>
@@ -2857,6 +2872,8 @@ const days = getDaysRemaining(c);
 document.getElementById('sb-plan-info').innerHTML = `<i class="fa-solid fa-calendar-alt"></i> ${c.plan==='trial'?'Trial':(c.plan==='starter'?'Starter':'Professional')} · ${days} dias`;
 document.getElementById('topbar-avatar').textContent = c.companyName.charAt(0).toUpperCase();
 document.getElementById('topbar-days').innerHTML = `<span class="badge badge-${getDayColor(days)}" style="font-size:11px"><i class="fa-solid fa-calendar"></i> ${days} dias</span>`;
+renderStoreStatus();
+if (!window._storeStatusTimer) window._storeStatusTimer = setInterval(renderStoreStatus, 30000);
 const upgradeBtn = document.getElementById('btn-upgrade-topbar');
 const trialBanner = document.getElementById('trial-banner-home');
 if (c.plan === 'trial') {
@@ -3857,19 +3874,118 @@ const payIcons = {dinheiro:'💵',cartao:'',pix:'📱'};
 showModal('<i class="fa-solid fa-clock-rotate-left"></i> Histórico de Vendas — Hoje', `<div style="max-height:65vh;overflow-y:auto"><div style="font-size:13px;color:var(--gray);margin-bottom:10px">${sales.length} venda(s) hoje · Total: <strong style="color:var(--success)">${fmt(sales.reduce((s,x)=>s+x.total,0))}</strong></div>${sales.map((s,i) => { const t = new Date(s.date); const timeStr = t.toLocaleTimeString('pt-BR',{hour:'2-digit',minute:'2-digit'}); return `<div style="background:#f8fafc;border-radius:10px;padding:12px;margin-bottom:8px;border:1px solid var(--border)"><div style="display:flex;align-items:center;justify-content:space-between;margin-bottom:6px"><div><div style="font-size:11px;font-family:monospace;font-weight:700;color:var(--primary)">${s.orderNumber||s.id}</div><div style="font-size:11px;color:var(--gray)">${timeStr}${s.customerName?' · '+s.customerName:''}</div></div><div style="text-align:right"><div style="font-size:15px;font-weight:900;color:var(--success)">${fmt(s.total)}</div><div style="font-size:11px;color:var(--gray)">${payIcons[s.paymentMethod]||''} ${s.paymentMethod||''}</div></div></div><div style="font-size:11px;color:var(--dark3);margin-bottom:8px">${(s.items||[]).map(i=>`${i.qty}x ${i.name}`).join(', ')}</div><button class="btn btn-sm btn-ghost w-full" onclick="printOS(${osJsonAttr(s)})"><i class="fa-solid fa-print"></i> Reimprimir OS</button></div>`; }).join('')}</div>`, `<button class="btn btn-primary w-full" onclick="closeModal()">Fechar</button>`, false);
 } catch(e) { hideLoading(); showToast('Erro: '+e.message,'danger'); }
 }
-function isCompanyOpen(company) {
+function scheduleIsOpenAt(company, dt) {
     const bh = company && company.businessHours;
     if (!bh) return true;
-    const now = new Date();
-    const cfg = bh[now.getDay()];
+    const cfg = bh[dt.getDay()];
     if (!cfg || cfg.closed) return false;
     if (!cfg.open || !cfg.close) return true;
-    const cur = now.getHours()*60 + now.getMinutes();
+    const cur = dt.getHours()*60 + dt.getMinutes();
     const [oh,om] = cfg.open.split(':').map(Number);
     const [ch,cm] = cfg.close.split(':').map(Number);
     const openMin = oh*60+om, closeMin = ch*60+cm;
     if (closeMin > openMin) return cur >= openMin && cur < closeMin;
     return cur >= openMin || cur < closeMin;
+}
+function isCompanyOpen(company) {
+    const ov = company && company.storeOverride;
+    if (ov && ov.mode && ov.expiresAt) {
+        const exp = new Date(ov.expiresAt).getTime();
+        if (!isNaN(exp) && exp > Date.now()) return ov.mode === 'open';
+    }
+    return scheduleIsOpenAt(company, new Date());
+}
+function nextScheduleOpening(company, fromDt) {
+    const bh = company && company.businessHours;
+    if (!bh) return null;
+    for (let i = 0; i <= 8; i++) {
+        const d = new Date(fromDt.getFullYear(), fromDt.getMonth(), fromDt.getDate() + i);
+        const cfg = bh[d.getDay()];
+        if (!cfg || cfg.closed || !cfg.open) continue;
+        const [oh,om] = cfg.open.split(':').map(Number);
+        const cand = new Date(d.getFullYear(), d.getMonth(), d.getDate(), oh, om, 0, 0);
+        if (cand.getTime() > fromDt.getTime()) return cand;
+    }
+    return null;
+}
+function nextScheduleClosing(company, fromDt) {
+    const bh = company && company.businessHours;
+    if (!bh) return null;
+    for (let i = 0; i <= 8; i++) {
+        const d = new Date(fromDt.getFullYear(), fromDt.getMonth(), fromDt.getDate() + i);
+        const cfg = bh[d.getDay()];
+        if (!cfg || cfg.closed || !cfg.open || !cfg.close) continue;
+        const [oh,om] = cfg.open.split(':').map(Number);
+        const [ch,cm] = cfg.close.split(':').map(Number);
+        const openMin = oh*60+om, closeMin = ch*60+cm;
+        const closeDate = new Date(d.getFullYear(), d.getMonth(), d.getDate(), ch, cm, 0, 0);
+        if (closeMin <= openMin) closeDate.setDate(closeDate.getDate() + 1);
+        if (closeDate.getTime() > fromDt.getTime()) return closeDate;
+    }
+    return null;
+}
+function fmtHM(dt) { return String(dt.getHours()).padStart(2,'0') + ':' + String(dt.getMinutes()).padStart(2,'0'); }
+function relDayLabel(from, dt) {
+    const a = new Date(from.getFullYear(), from.getMonth(), from.getDate());
+    const b = new Date(dt.getFullYear(), dt.getMonth(), dt.getDate());
+    const diff = Math.round((b - a) / 86400000);
+    if (diff === 0) return '';
+    if (diff === 1) return 'amanhã';
+    return ['domingo','segunda-feira','terça-feira','quarta-feira','quinta-feira','sexta-feira','sábado'][dt.getDay()];
+}
+function getStoreStatusInfo(company) {
+    const now = new Date();
+    const bh = company && company.businessHours;
+    const ov = company && company.storeOverride;
+    const ovActive = ov && ov.mode && ov.expiresAt && new Date(ov.expiresAt).getTime() > now.getTime();
+    if (isCompanyOpen(company)) return { state:'open', label:'Aberto agora' };
+    if (ovActive && ov.mode === 'closed') {
+        const nxt = nextScheduleOpening(company, now);
+        if (nxt) { const lbl = relDayLabel(now, nxt); return { state:'off', label: lbl ? ('Abre ' + lbl + ' às ' + fmtHM(nxt)) : ('Abre às ' + fmtHM(nxt)) }; }
+        return { state:'off', label:'Fechado no momento' };
+    }
+    const cfg = bh ? bh[now.getDay()] : null;
+    if (cfg && !cfg.closed && cfg.open) {
+        const [oh,om] = cfg.open.split(':').map(Number);
+        const todayOpen = new Date(now.getFullYear(), now.getMonth(), now.getDate(), oh, om, 0, 0);
+        if (todayOpen.getTime() > now.getTime()) return { state:'short', label:'Abre às ' + cfg.open };
+    }
+    const nxt = nextScheduleOpening(company, now);
+    if (nxt) { const lbl = relDayLabel(now, nxt); return { state:'off', label: lbl ? ('Abre ' + lbl + ' às ' + fmtHM(nxt)) : ('Abre às ' + fmtHM(nxt)) }; }
+    return { state:'off', label:'Fechado no momento' };
+}
+function renderStoreStatus() {
+    const btn = document.getElementById('store-status-btn');
+    if (!btn) return;
+    const c = currentCompany;
+    if (!c || !c.businessHours) { btn.style.display = 'none'; return; }
+    const info = getStoreStatusInfo(c);
+    btn.style.display = 'inline-flex';
+    btn.className = 'store-status-btn store-status-' + (info.state === 'open' ? 'open' : (info.state === 'short' ? 'short' : 'off'));
+    btn.innerHTML = `<i class="fa-solid fa-clock"></i> <span>${info.label}</span> <i class="fa-solid fa-chevron-down" style="font-size:10px"></i>`;
+}
+function toggleStoreStatusMenu(e) {
+    if (e) e.stopPropagation();
+    const m = document.getElementById('store-status-menu');
+    if (!m) return;
+    m.style.display = (m.style.display === 'block') ? 'none' : 'block';
+}
+function closeStoreStatusMenu() { const m = document.getElementById('store-status-menu'); if (m) m.style.display = 'none'; }
+document.addEventListener('click', function(){ closeStoreStatusMenu(); });
+async function setStoreOverride(mode) {
+    const c = currentCompany; if (!c) return;
+    const now = new Date();
+    const far = new Date(now.getTime() + 100*365*86400000).toISOString();
+    let storeOverride = null;
+    if (mode === 'open') { const exp = nextScheduleClosing(c, now); storeOverride = { mode:'open', at: now.toISOString(), expiresAt: exp ? exp.toISOString() : far }; }
+    else if (mode === 'closed') { const exp = nextScheduleOpening(c, now); storeOverride = { mode:'closed', at: now.toISOString(), expiresAt: exp ? exp.toISOString() : far }; }
+    showLoading('Atualizando...');
+    try {
+        await db.collection('companies').doc(currentCompanyId).update({ storeOverride });
+        c.storeOverride = storeOverride;
+        hideLoading(); closeStoreStatusMenu(); renderStoreStatus();
+        showToast(mode==='open'?'Loja aberta para o público!':(mode==='closed'?'Loja fechada! O cardápio não aceitará pedidos.':'Seguindo o horário de funcionamento cadastrado.'),'success');
+    } catch(e) { hideLoading(); showToast('Erro: '+e.message,'danger'); }
 }
 // Retorna o horário de funciona/fecha de hoje formatado, para exibir ao cliente quando o cardápio estiver fechado.
 function getTodayHoursLabel(company) {
@@ -3885,37 +4001,10 @@ function getTodayHoursLabel(company) {
 function renderPubHoursBanner() {
     const el = document.getElementById('pub-hours-banner');
     if (!el) return;
-    if (!pubCompany) { el.innerHTML = ''; return; }
-    const bh = pubCompany.businessHours;
-    if (!bh) { el.innerHTML = ''; return; }
-    const now = new Date();
-    const today = now.getDay();
-    const cfg = bh[today];
-    // Loja aberta agora
-    if (isCompanyOpen(pubCompany)) {
-        el.innerHTML = `<div class="pub-hours-open"><i class="fa-solid fa-clock"></i><div>Aberto agora</div></div>`;
-        return;
-    }
-    // Hoje é dia de funcionamento, mas fora do horário → abre hoje mesmo
-    if (cfg && !cfg.closed && cfg.open) {
-        el.innerHTML = `<div class="pub-hours-short"><i class="fa-solid fa-clock"></i><div>Abre às ${cfg.open}</div></div>`;
-        return;
-    }
-    // Dia de folga → procura o próximo dia em que a loja abre
-    const WEEKDAY = ['domingo','segunda-feira','terça-feira','quarta-feira','quinta-feira','sexta-feira','sábado'];
-    let nextIdx = -1;
-    for (let i = 1; i <= 7; i++) {
-        const d = (today + i) % 7;
-        const c2 = bh[d];
-        if (c2 && !c2.closed && c2.open) { nextIdx = d; break; }
-    }
-    if (nextIdx === -1) {
-        el.innerHTML = `<div class="pub-hours-off"><i class="fa-solid fa-clock"></i><div>Fechado no momento</div></div>`;
-        return;
-    }
-    const nc = bh[nextIdx];
-    const when = (nextIdx === (today + 1) % 7) ? 'amanhã' : WEEKDAY[nextIdx];
-    el.innerHTML = `<div class="pub-hours-off"><i class="fa-solid fa-clock"></i><div>Abre ${when} às ${nc.open}</div></div>`;
+    if (!pubCompany || !pubCompany.businessHours) { el.innerHTML = ''; return; }
+    const info = getStoreStatusInfo(pubCompany);
+    const cls = info.state === 'open' ? 'pub-hours-open' : (info.state === 'short' ? 'pub-hours-short' : 'pub-hours-off');
+    el.innerHTML = `<div class="${cls}"><i class="fa-solid fa-clock"></i><div>${info.label}</div></div>`;
 }
 function showBusinessHoursModal() {
     const c = currentCompany;
