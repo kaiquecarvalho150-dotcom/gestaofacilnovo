@@ -9138,6 +9138,14 @@ function computeFichaItemCost(insumo, qtd) {
 function computeFichaCost(ficha) {
     if (!ficha) return 0;
     if (ficha.tipo === 'bebida') return parseFloat(ficha.custoCompra) || 0;
+    if (ficha.tipo === 'combo') {
+        const all = getFichas();
+        return (ficha.comboItens || []).reduce((sum, it) => {
+            const sub = all.find(x => x.id === it.fichaId);
+            if (!sub || sub.tipo === 'combo') return sum;
+            return sum + computeFichaCost(sub) * (parseFloat(it.qtd) || 0);
+        }, 0);
+    }
     const insumos = getInsumos();
     return (ficha.itens || []).reduce((sum, it) => {
         const ins = insumos.find(i => i.id === it.insumoId);
@@ -9152,20 +9160,37 @@ function comboFichaOptions(selectedId) {
     return h;
 }
 let _ftItens = [];
+let _ftComboItens = [];
 let _ftEditingId = null;
+function ftTipoSelecionado() { return document.querySelector('input[name="ft-tipo"]:checked')?.value || 'produto'; }
+function ftNomeLabel(tipo) { return tipo === 'bebida' ? 'Nome da bebida *' : (tipo === 'combo' ? 'Nome do combo *' : 'Nome do produto *'); }
+function ftNomePlaceholder(tipo) { return tipo === 'bebida' ? 'Ex: Coca-Cola Lata' : (tipo === 'combo' ? 'Ex: Combo X-Burguer + Batata' : 'Ex: X Burguer'); }
+function ftComboFichaOptions() {
+    const fichas = getFichas().filter(f => f.tipo !== 'combo');
+    if (!fichas.length) return '<option value="">Nenhuma ficha de produto/bebida cadastrada</option>';
+    return fichas.map(f => `<option value="${f.id}">${escHtml(f.nome)} (${f.tipo==='bebida'?'bebida':'produto'}) — ${fmt(computeFichaCost(f))}</option>`).join('');
+}
 function showFichaModal(id) {
     const ficha = id ? getFichas().find(f => f.id === id) : null;
     _ftEditingId = id || null;
     _ftItens = ficha ? JSON.parse(JSON.stringify(ficha.itens || [])) : [];
-    const isBebida = ficha ? ficha.tipo === 'bebida' : false;
+    _ftComboItens = ficha ? JSON.parse(JSON.stringify(ficha.comboItens || [])) : [];
+    const tipo = ficha ? (ficha.tipo || 'produto') : 'produto';
+    const isBebida = tipo === 'bebida';
+    const isCombo = tipo === 'combo';
     const insumos = getInsumos();
     const insumosOpts = insumos.length ? insumos.map(i => `<option value="${i.id}">${escHtml(i.nome)} (${insumoUnitLabel(i)})</option>`).join('') : '<option value="">Nenhum insumo cadastrado</option>';
     showModal(`<i class="fa-solid fa-clipboard-list"></i> ${ficha ? 'Editar Ficha Técnica' : 'Nova Ficha Técnica'}`,
-    `<div class="form-group"><label>Nome do produto *</label><input type="text" id="ft-nome" class="form-control" value="${ficha?escHtml(ficha.nome):''}" placeholder="Ex: X Burguer"></div>
+    `<div class="form-group"><label id="ft-nome-label">${ftNomeLabel(tipo)}</label><input type="text" id="ft-nome" class="form-control" value="${ficha?escHtml(ficha.nome):''}" placeholder="${ftNomePlaceholder(tipo)}"></div>
     <div style="background:#f0f9ff;border:2px solid #bae6fd;border-radius:10px;padding:12px;margin-bottom:14px">
-        <label style="display:flex;align-items:center;gap:10px;cursor:pointer;font-weight:700;color:#075985"><input type="checkbox" id="ft-isbebida" ${isBebida?'checked':''} onchange="ftToggleTipo()" style="width:18px;height:18px;cursor:pointer"> É uma bebida (registrar só valor de compra e de venda)</label>
+        <div style="font-size:12px;font-weight:700;color:#075985;text-transform:uppercase;margin-bottom:8px">Tipo de ficha</div>
+        <div style="display:flex;gap:16px;flex-wrap:wrap">
+            <label style="display:flex;align-items:center;gap:8px;cursor:pointer;font-weight:700;color:#075985"><input type="radio" name="ft-tipo" value="produto" ${tipo==='produto'?'checked':''} onchange="ftToggleTipo()" style="width:18px;height:18px;cursor:pointer"> Produto</label>
+            <label style="display:flex;align-items:center;gap:8px;cursor:pointer;font-weight:700;color:#075985"><input type="radio" name="ft-tipo" value="bebida" ${isBebida?'checked':''} onchange="ftToggleTipo()" style="width:18px;height:18px;cursor:pointer"> Bebida</label>
+            <label style="display:flex;align-items:center;gap:8px;cursor:pointer;font-weight:700;color:#075985"><input type="radio" name="ft-tipo" value="combo" ${isCombo?'checked':''} onchange="ftToggleTipo()" style="width:18px;height:18px;cursor:pointer"> Combo</label>
+        </div>
     </div>
-    <div id="ft-insumos-box" style="display:${isBebida?'none':'block'};background:#f8fafc;border:2px solid var(--border);border-radius:10px;padding:14px;margin-bottom:14px">
+    <div id="ft-insumos-box" style="display:${tipo==='produto'?'block':'none'};background:#f8fafc;border:2px solid var(--border);border-radius:10px;padding:14px;margin-bottom:14px">
         <label style="font-size:12px;font-weight:700;color:var(--dark3);text-transform:uppercase;margin-bottom:8px;display:block">Composição (insumos)</label>
         ${insumos.length ? `<div class="flex items-center gap-2 mb-2 flex-wrap">
             <select id="ft-insumo-select" class="form-control" style="flex:2;min-width:150px">${insumosOpts}</select>
@@ -9177,18 +9202,62 @@ function showFichaModal(id) {
     <div id="ft-bebida-box" style="display:${isBebida?'block':'none'};background:#f0fdf4;border:2px solid #bbf7d0;border-radius:10px;padding:14px;margin-bottom:14px">
         <div class="form-group" style="margin:0"><label>Valor de compra da bebida (R$) *</label><input type="number" id="ft-custo-compra" class="form-control" step="0.01" min="0" value="${ficha && ficha.custoCompra!=null ? ficha.custoCompra : ''}" placeholder="Ex: 4,50" oninput="ftRecalc()"></div>
     </div>
+    <div id="ft-combo-box" style="display:${isCombo?'block':'none'};background:#f5f3ff;border:2px solid #ddd6fe;border-radius:10px;padding:14px;margin-bottom:14px">
+        <label style="font-size:12px;font-weight:700;color:#5b21b6;text-transform:uppercase;margin-bottom:8px;display:block">Composição do combo (fichas técnicas)</label>
+        <div class="flex items-center gap-2 mb-2 flex-wrap">
+            <select id="ft-combo-select" class="form-control" style="flex:2;min-width:170px">${ftComboFichaOptions()}</select>
+            <input type="number" id="ft-combo-qty" class="form-control" step="1" min="1" placeholder="Qtd" style="width:90px">
+            <button type="button" class="btn btn-primary" onclick="ftAddComboFicha()"><i class="fa-solid fa-plus"></i> Adicionar</button>
+        </div>
+        <div id="ft-combo-list"></div>
+    </div>
     <div class="form-group"><label>Preço de venda (R$)</label><input type="number" id="ft-preco" class="form-control" step="0.01" min="0" value="${ficha && ficha.precoVenda!=null ? ficha.precoVenda : ''}" placeholder="0,00" oninput="ftRecalc()"></div>
     <div id="ft-resumo"></div>`,
     `<button class="btn btn-ghost" onclick="closeModal()">Cancelar</button><button class="btn btn-primary" onclick="saveFicha()"><i class="fa-solid fa-save"></i> Salvar Ficha</button>`, true);
-    setTimeout(() => { ftRenderRows(); ftRecalc(); }, 30);
+    setTimeout(() => { ftRenderRows(); ftRenderComboList(); ftRecalc(); }, 30);
 }
 function ftToggleTipo() {
-    const isBebida = document.getElementById('ft-isbebida')?.checked;
+    const tipo = ftTipoSelecionado();
     const ib = document.getElementById('ft-insumos-box');
     const bb = document.getElementById('ft-bebida-box');
-    if (ib) ib.style.display = isBebida ? 'none' : 'block';
-    if (bb) bb.style.display = isBebida ? 'block' : 'none';
+    const cb = document.getElementById('ft-combo-box');
+    if (ib) ib.style.display = tipo === 'produto' ? 'block' : 'none';
+    if (bb) bb.style.display = tipo === 'bebida' ? 'block' : 'none';
+    if (cb) cb.style.display = tipo === 'combo' ? 'block' : 'none';
+    const lbl = document.getElementById('ft-nome-label'); if (lbl) lbl.textContent = ftNomeLabel(tipo);
+    const inp = document.getElementById('ft-nome'); if (inp) inp.placeholder = ftNomePlaceholder(tipo);
     ftRecalc();
+}
+function ftAddComboFicha() {
+    const sel = document.getElementById('ft-combo-select');
+    const qty = parseInt(document.getElementById('ft-combo-qty')?.value) || 0;
+    if (!sel || !sel.value) { showToast('Selecione uma ficha técnica','warning'); return; }
+    if (qty <= 0) { showToast('Informe a quantidade','warning'); return; }
+    const existing = _ftComboItens.find(i => i.fichaId === sel.value);
+    if (existing) existing.qtd = (parseInt(existing.qtd) || 0) + qty;
+    else _ftComboItens.push({ fichaId: sel.value, qtd: qty });
+    const q = document.getElementById('ft-combo-qty'); if (q) q.value = '';
+    ftRenderComboList(); ftRecalc();
+}
+function ftRemoveComboFicha(idx) { _ftComboItens.splice(idx, 1); ftRenderComboList(); ftRecalc(); }
+function ftUpdateComboQty(idx, val) { if (_ftComboItens[idx]) { _ftComboItens[idx].qtd = parseInt(val) || 0; ftRecalc(); } }
+function ftRenderComboList() {
+    const el = document.getElementById('ft-combo-list');
+    if (!el) return;
+    if (!_ftComboItens.length) { el.innerHTML = '<div style="font-size:12px;color:var(--gray);padding:6px 0">Nenhuma ficha adicionada ainda.</div>'; return; }
+    const all = getFichas();
+    el.innerHTML = _ftComboItens.map((it, idx) => {
+        const sub = all.find(x => x.id === it.fichaId);
+        const nome = sub ? sub.nome : '(ficha removida)';
+        const tag = sub ? (sub.tipo === 'bebida' ? 'bebida' : 'produto') : '';
+        const cost = (sub ? computeFichaCost(sub) : 0) * (parseFloat(it.qtd) || 0);
+        return `<div style="display:flex;align-items:center;gap:8px;padding:6px 0;border-bottom:1px solid #ede9fe">
+            <div style="flex:1;min-width:0;font-size:13px;font-weight:600">${escHtml(nome)} <span style="font-size:10px;color:var(--gray)">(${tag})</span></div>
+            <input type="number" class="form-control" style="width:78px" step="1" min="1" value="${it.qtd}" oninput="ftUpdateComboQty(${idx}, this.value)">
+            <div style="width:80px;text-align:right;font-weight:700;color:#5b21b6;font-size:13px">${fmt(cost)}</div>
+            <button type="button" class="btn btn-sm btn-danger" onclick="ftRemoveComboFicha(${idx})"><i class="fa-solid fa-times"></i></button>
+        </div>`;
+    }).join('');
 }
 function ftAddInsumo() {
     const sel = document.getElementById('ft-insumo-select');
@@ -9225,13 +9294,15 @@ function ftRenderRows() {
 function ftRecalc() {
     const el = document.getElementById('ft-resumo');
     if (!el) return;
-    const isBebida = document.getElementById('ft-isbebida')?.checked;
-    const custo = isBebida ? (parseFloat(document.getElementById('ft-custo-compra')?.value) || 0) : computeFichaCost({ itens: _ftItens });
+    const tipo = ftTipoSelecionado();
+    const custo = tipo === 'bebida' ? (parseFloat(document.getElementById('ft-custo-compra')?.value) || 0)
+                : tipo === 'combo' ? computeFichaCost({ tipo: 'combo', comboItens: _ftComboItens })
+                : computeFichaCost({ itens: _ftItens });
     const preco = parseFloat(document.getElementById('ft-preco')?.value) || 0;
     const lucro = preco - custo;
     const margem = preco > 0 ? (lucro / preco) * 100 : 0;
     el.innerHTML = `<div style="display:flex;gap:10px;flex-wrap:wrap">
-        <div style="flex:1;min-width:120px;background:#fef2f2;border:1px solid #fecaca;border-radius:10px;padding:10px 12px"><div style="font-size:11px;font-weight:700;color:var(--danger);text-transform:uppercase">${isBebida ? 'Valor de compra' : 'Custo do produto'}</div><div style="font-size:18px;font-weight:900;color:var(--danger)">${fmt(custo)}</div></div>
+        <div style="flex:1;min-width:120px;background:#fef2f2;border:1px solid #fecaca;border-radius:10px;padding:10px 12px"><div style="font-size:11px;font-weight:700;color:var(--danger);text-transform:uppercase">${tipo === 'bebida' ? 'Valor de compra' : (tipo === 'combo' ? 'Custo do combo' : 'Custo do produto')}</div><div style="font-size:18px;font-weight:900;color:var(--danger)">${fmt(custo)}</div></div>
         <div style="flex:1;min-width:120px;background:#eff6ff;border:1px solid #bfdbfe;border-radius:10px;padding:10px 12px"><div style="font-size:11px;font-weight:700;color:#1d4ed8;text-transform:uppercase">Preço de venda</div><div style="font-size:18px;font-weight:900;color:#1d4ed8">${fmt(preco)}</div></div>
         <div style="flex:1;min-width:120px;background:#f0fdf4;border:1px solid #bbf7d0;border-radius:10px;padding:10px 12px"><div style="font-size:11px;font-weight:700;color:var(--success);text-transform:uppercase">Lucro</div><div style="font-size:18px;font-weight:900;color:${lucro>=0?'var(--success)':'var(--danger)'}">${fmt(lucro)}</div><div style="font-size:11px;color:var(--gray)">Margem: ${margem.toFixed(1)}%</div></div>
     </div>`;
@@ -9239,14 +9310,16 @@ function ftRecalc() {
 async function saveFicha() {
     const nome = document.getElementById('ft-nome')?.value.trim();
     if (!nome) { showToast('Informe o nome do produto','warning'); return; }
-    const isBebida = document.getElementById('ft-isbebida')?.checked || false;
+    const tipo = ftTipoSelecionado();
     const precoVenda = parseFloat(document.getElementById('ft-preco')?.value) || 0;
-    const base = { nome, tipo: isBebida ? 'bebida' : 'produto', precoVenda };
-    if (isBebida) {
+    const base = { nome, tipo, precoVenda, itens: [], comboItens: [] };
+    if (tipo === 'bebida') {
         const custoCompra = parseFloat(document.getElementById('ft-custo-compra')?.value) || 0;
         if (custoCompra <= 0) { showToast('Informe o valor de compra da bebida','warning'); return; }
         base.custoCompra = custoCompra;
-        base.itens = [];
+    } else if (tipo === 'combo') {
+        if (!_ftComboItens.length) { showToast('Adicione ao menos uma ficha ao combo','warning'); return; }
+        base.comboItens = JSON.parse(JSON.stringify(_ftComboItens));
     } else {
         if (!_ftItens.length) { showToast('Adicione ao menos um insumo','warning'); return; }
         base.itens = JSON.parse(JSON.stringify(_ftItens));
@@ -9289,15 +9362,18 @@ function renderFichas() {
         const lucro = preco - custo;
         const margem = preco > 0 ? (lucro / preco) * 100 : 0;
         const isBebida = f.tipo === 'bebida';
-        const itensHtml = isBebida ? '<div style="font-size:12px;color:var(--gray)"><i class="fa-solid fa-bottle-water"></i> Bebida — valor de compra informado diretamente</div>' : (f.itens||[]).map(it => { const ins = insumos.find(i => i.id === it.insumoId); if (!ins) return ''; return `<div style="display:flex;justify-content:space-between;font-size:12px;color:var(--dark3)"><span>${escHtml(ins.nome)} — ${it.qtd}${insumoUnitLabel(ins)}</span><span>${fmt(computeFichaItemCost(ins, it.qtd))}</span></div>`; }).join('');
+        const isCombo = f.tipo === 'combo';
+        const itensHtml = isBebida ? '<div style="font-size:12px;color:var(--gray)"><i class="fa-solid fa-bottle-water"></i> Bebida — valor de compra informado diretamente</div>'
+            : isCombo ? (f.comboItens||[]).map(it => { const sub = fichas.find(x => x.id === it.fichaId); if (!sub) return ''; return `<div style="display:flex;justify-content:space-between;font-size:12px;color:var(--dark3)"><span>${it.qtd}x ${escHtml(sub.nome)} <span style="color:var(--gray)">(${sub.tipo==='bebida'?'bebida':'produto'})</span></span><span>${fmt(computeFichaCost(sub)*(parseFloat(it.qtd)||0))}</span></div>`; }).join('')
+            : (f.itens||[]).map(it => { const ins = insumos.find(i => i.id === it.insumoId); if (!ins) return ''; return `<div style="display:flex;justify-content:space-between;font-size:12px;color:var(--dark3)"><span>${escHtml(ins.nome)} — ${it.qtd}${insumoUnitLabel(ins)}</span><span>${fmt(computeFichaItemCost(ins, it.qtd))}</span></div>`; }).join('');
         return `<div style="background:#fff;border:1px solid var(--border);border-radius:12px;padding:16px;margin-bottom:14px">
             <div class="flex items-center justify-between flex-wrap gap-2 mb-2">
-                <div style="font-size:16px;font-weight:800;color:var(--dark)">${escHtml(f.nome)} ${isBebida?'<span style="font-size:10px;background:#e0f2fe;color:#075985;padding:2px 8px;border-radius:10px;font-weight:800;vertical-align:middle">BEBIDA</span>':''}</div>
+                <div style="font-size:16px;font-weight:800;color:var(--dark)">${escHtml(f.nome)} ${isBebida?'<span style="font-size:10px;background:#e0f2fe;color:#075985;padding:2px 8px;border-radius:10px;font-weight:800;vertical-align:middle">BEBIDA</span>':''}${isCombo?'<span style="font-size:10px;background:#ede9fe;color:#5b21b6;padding:2px 8px;border-radius:10px;font-weight:800;vertical-align:middle">COMBO</span>':''}</div>
                 <div class="flex gap-1"><button class="btn btn-sm btn-ghost" onclick="showFichaModal('${f.id}')"><i class="fa-solid fa-edit"></i> Editar</button><button class="btn btn-sm btn-danger" onclick="deleteFicha('${f.id}')"><i class="fa-solid fa-trash"></i></button></div>
             </div>
             <div style="background:#f8fafc;border-radius:8px;padding:10px 12px;margin-bottom:10px">${itensHtml || '<div style="font-size:12px;color:var(--gray)">Sem itens</div>'}</div>
             <div style="display:flex;gap:10px;flex-wrap:wrap">
-                <div style="flex:1;min-width:100px"><div style="font-size:10px;font-weight:700;color:var(--gray);text-transform:uppercase">${isBebida?'Compra':'Custo'}</div><div style="font-size:16px;font-weight:900;color:var(--danger)">${fmt(custo)}</div></div>
+                <div style="flex:1;min-width:100px"><div style="font-size:10px;font-weight:700;color:var(--gray);text-transform:uppercase">${isBebida?'Compra':(isCombo?'Custo do combo':'Custo')}</div><div style="font-size:16px;font-weight:900;color:var(--danger)">${fmt(custo)}</div></div>
                 <div style="flex:1;min-width:100px"><div style="font-size:10px;font-weight:700;color:var(--gray);text-transform:uppercase">Venda</div><div style="font-size:16px;font-weight:900;color:#1d4ed8">${fmt(preco)}</div></div>
                 <div style="flex:1;min-width:100px"><div style="font-size:10px;font-weight:700;color:var(--gray);text-transform:uppercase">Lucro</div><div style="font-size:16px;font-weight:900;color:${lucro>=0?'var(--success)':'var(--danger)'}">${fmt(lucro)} <span style="font-size:11px;font-weight:600;color:var(--gray)">(${margem.toFixed(1)}%)</span></div></div>
             </div>
