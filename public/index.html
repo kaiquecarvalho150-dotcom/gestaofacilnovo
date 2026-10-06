@@ -4295,7 +4295,7 @@ function renderStockPurchases() {
         ${rows.map(r=>`<div style="display:flex;align-items:center;gap:10px;padding:10px 14px;border-bottom:1px solid var(--border)">
             <div style="flex:1;min-width:0"><div style="font-weight:700;font-size:13px">${escHtml(r.p.name)}</div><div style="font-size:11px;color:var(--gray)">${fmtDateShort(r.pu.createdAt)} · ${r.pu.qty} ${escHtml(r.pu.unitLabel||'unidade')}${(parseFloat(r.pu.qty)||0)>1?'s':''}${(parseFloat(r.pu.unitsPerPack)||1)>1?` (${(r.pu.units!=null?r.pu.units:(parseFloat(r.pu.qty)||0)*(parseFloat(r.pu.unitsPerPack)||1))} un)`:''} · un. ${fmt(r.pu.unitCost||0)}</div></div>
             <div style="font-weight:800;color:#b91c1c;font-size:14px">${fmt(r.pu.totalPaid||0)}</div>
-            <button class="btn btn-sm btn-danger" onclick="deletePurchase('${r.p.id}','${r.pu.id}')"><i class="fa-solid fa-trash"></i></button>
+            <button class="btn btn-sm btn-danger" title="Remover esta compra" onclick="deletePurchase('${r.p.id}','${r.pu.id}')"><i class="fa-solid fa-trash"></i> Remover</button>
         </div>`).join('')}
         <div style="display:flex;align-items:center;gap:10px;padding:12px 14px;background:#f8fafc;font-weight:900">
             <div style="flex:1">Total investido em compras</div>
@@ -4359,14 +4359,14 @@ async function doRegisterPurchase() {
     } catch(e) { hideLoading(); showToast('Erro: '+e.message,'danger'); }
 }
 async function deletePurchase(pid, purchaseId) {
-    if (!confirm('Excluir esta compra? A quantidade será removida do estoque.')) return;
     const c = currentCompany;
     const p = (c.menuItems||[]).find(x=>x.id===pid);
     if (!p || !p.purchases) return;
     const pu = p.purchases.find(x=>x.id===purchaseId);
     if (!pu) return;
-    p.purchases = p.purchases.filter(x=>x.id!==purchaseId);
     const _rem = parseFloat(pu.units!=null?pu.units:pu.qty)||0;
+    if (!confirm(`Remover esta compra de ${pu.qty} ${pu.unitLabel||'unidade'}(s) de "${p.name}" no valor de ${fmt(pu.totalPaid||0)}?\n\nSerão removidas ${_rem} unidade(s) do estoque e o total será recalculado.`)) return;
+    p.purchases = p.purchases.filter(x=>x.id!==purchaseId);
     if (p.stockUnlimited !== true) p.stock = Math.max(0, (parseFloat(p.stock)||0) - _rem);
     showLoading('Excluindo...');
     try {
