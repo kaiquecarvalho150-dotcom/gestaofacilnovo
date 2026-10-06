@@ -827,6 +827,7 @@ table th,table td{padding:7px 8px;font-size:11px}
 <div class="nav-item" onclick="showSection('motoboypay')"><span class="nav-ic"><i class="fa-solid fa-motorcycle"></i></span> Pagar Entregadores</div>
 <div class="nav-item" onclick="requireAuth('despesas')"><span class="nav-ic"><i class="fa-solid fa-file-invoice-dollar"></i></span> Despesas</div>
 <div class="nav-item" onclick="showSection('insumos')"><span class="nav-ic"><i class="fa-solid fa-carrot"></i></span> Insumos</div>
+<div class="nav-item" onclick="showSection('fichas')"><span class="nav-ic"><i class="fa-solid fa-clipboard-list"></i></span> Fichas Técnicas</div>
 <div class="nav-item" onclick="requireAuth('reports')"><span class="nav-ic"><i class="fa-solid fa-chart-bar"></i></span> Relatórios</div>
 <div class="nav-item" onclick="requireAuth('fiados')"><span class="nav-ic"><i class="fa-solid fa-hand-holding-dollar"></i></span> Fiados</div>
 <div class="nav-item" onclick="requireAuth('loyalty')"><span class="nav-ic"><i class="fa-solid fa-star"></i></span> Fidelidade</div>
@@ -1123,6 +1124,14 @@ table th,table td{padding:7px 8px;font-size:11px}
 <div style="font-size:15px;font-weight:700"><i class="fa-solid fa-carrot"></i> Insumos (Ingredientes)</div>
 </div>
 <div id="insumos-body"></div>
+</div>
+<!-- FICHAS TÉCNICAS (área fixa) -->
+<div id="section-fichas" class="section">
+<div class="flex items-center justify-between mb-4 flex-wrap gap-3">
+<div style="font-size:15px;font-weight:700"><i class="fa-solid fa-clipboard-list"></i> Fichas Técnicas</div>
+<button class="btn btn-primary" onclick="showFichaModal()"><i class="fa-solid fa-plus"></i> Nova Ficha Técnica</button>
+</div>
+<div id="fichas-body"></div>
 </div>
 <!-- DESPESAS (centralizado por fornecedor/consumidor) -->
 <div id="section-despesas" class="section">
@@ -1577,11 +1586,11 @@ function showSection(name) {
 document.querySelectorAll('.section').forEach(s => s.classList.remove('active'));
 document.getElementById('section-'+name)?.classList.add('active');
 document.querySelectorAll('.nav-item').forEach(n => n.classList.remove('active'));
-const labels = {home:'Dashboard',pos:'PDV — Caixa',stock:'Estoque',menu:'Cadastrar Cardápio',coupons:'Cupons de Desconto',orders:'Pedidos',chat:'Mensagens',motoboypay:'Pagamento de Entregadores',despesas:'Despesas',insumos:'Insumos',reports:'Relatórios',fiados:'Fiados',loyalty:'Fidelidade'};
+const labels = {home:'Dashboard',pos:'PDV — Caixa',stock:'Estoque',menu:'Cadastrar Cardápio',coupons:'Cupons de Desconto',orders:'Pedidos',chat:'Mensagens',motoboypay:'Pagamento de Entregadores',despesas:'Despesas',insumos:'Insumos',fichas:'Fichas Técnicas',reports:'Relatórios',fiados:'Fiados',loyalty:'Fidelidade'};
 document.getElementById('topbar-title').textContent = labels[name] || name;
 document.querySelectorAll('.nav-item').forEach(n => { if(n.textContent.trim().startsWith(labels[name]||name)) n.classList.add('active'); });
 closeSidebar();
-const renders = {home:renderHome,pos:renderPDV,stock:renderStock,menu:renderMenu,coupons:renderCoupons,despesas:renderDespesas,insumos:renderInsumos,chat:renderAdminChatList,fiados:renderFiadoClients,loyalty:renderLoyalty,motoboypay:renderMotoboyPayments};
+const renders = {home:renderHome,pos:renderPDV,stock:renderStock,menu:renderMenu,coupons:renderCoupons,despesas:renderDespesas,insumos:renderInsumos,fichas:renderFichas,chat:renderAdminChatList,fiados:renderFiadoClients,loyalty:renderLoyalty,motoboypay:renderMotoboyPayments};
 if (name !== 'home' && homeClockInterval) { clearInterval(homeClockInterval); homeClockInterval = null; }
 if (renders[name]) renders[name]();
 if (name === 'orders') { refreshOrdersData(); }
@@ -2858,7 +2867,7 @@ companyUnsubscribe = db.collection('companies').doc(currentCompanyId).onSnapshot
     const active = document.querySelector('.section.active');
     if (active) {
         const id = active.id.replace('section-','');
-        const renders = {home:renderHome,pos:renderPDV,stock:renderStock,menu:renderMenu,coupons:renderCoupons,despesas:renderDespesas,insumos:renderInsumos,fiados:renderFiadoClients,loyalty:renderLoyalty,motoboypay:renderMotoboyPayments};
+        const renders = {home:renderHome,pos:renderPDV,stock:renderStock,menu:renderMenu,coupons:renderCoupons,despesas:renderDespesas,insumos:renderInsumos,fichas:renderFichas,fiados:renderFiadoClients,loyalty:renderLoyalty,motoboypay:renderMotoboyPayments};
         if (renders[id]) { try { renders[id](); } catch(e){} }
     }
 }, error => { console.error('Erro no listener da empresa:', error); });
@@ -4788,6 +4797,28 @@ function updateComboCost(prefix) {
     const out = document.getElementById(prefix + '-combo-cost');
     if (!container || !out) return;
     const c = currentCompany;
+    // Ficha técnica escolhida como base de custo/venda do combo
+    const fichaSel = document.getElementById(prefix + '-combo-ficha');
+    const fichaId = fichaSel ? fichaSel.value : '';
+    const ficha = fichaId ? ((c.fichasTecnicas||[]).find(f => f.id === fichaId)) : null;
+    if (ficha) {
+        const fCost = computeFichaCost(ficha);
+        const fVenda = parseFloat(ficha.precoVenda) || 0;
+        const fLucro = fVenda - fCost;
+        const insumos = getInsumos();
+        const fRows = (ficha.itens||[]).map(it => { const ins = insumos.find(i=>i.id===it.insumoId); if(!ins) return ''; return `<div style="display:flex;justify-content:space-between;font-size:12px"><span>${it.qtd}${insumoUnitLabel(ins)} ${escHtml(ins.nome)}</span><strong>${fmt(computeFichaItemCost(ins, it.qtd))}</strong></div>`; }).join('');
+        out.innerHTML = `<div style="background:#f0fdf4;border:1px solid #bbf7d0;border-radius:8px;padding:10px 12px;margin-top:10px">
+            <div style="font-size:11px;font-weight:700;color:var(--success);text-transform:uppercase;margin-bottom:4px"><i class="fa-solid fa-clipboard-list"></i> Custo pela Ficha Técnica: ${escHtml(ficha.nome)}</div>
+            ${fRows}
+            <div style="display:flex;justify-content:space-between;margin-top:6px;padding-top:6px;border-top:1px dashed #86efac;font-weight:800;font-size:13px"><span>Custo Total</span><span style="color:var(--danger)">${fmt(fCost)}</span></div>
+        </div>
+        <div style="background:#eff6ff;border:1px solid #bfdbfe;border-radius:8px;padding:10px 12px;margin-top:10px">
+            <div style="font-size:11px;font-weight:700;color:#1d4ed8;text-transform:uppercase;margin-bottom:4px"><i class="fa-solid fa-tags"></i> Valor de venda (ficha técnica)</div>
+            <div style="display:flex;justify-content:space-between;font-size:13px"><span>Preço cadastrado na ficha</span><strong style="color:#1d4ed8">${fmt(fVenda)}</strong></div>
+            <div style="display:flex;justify-content:space-between;margin-top:6px;padding-top:6px;border-top:1px dashed #93c5fd;font-weight:800;font-size:13px"><span>Lucro estimado</span><span style="color:${fLucro>=0?'var(--success)':'var(--danger)'}">${fmt(fLucro)}</span></div>
+        </div>`;
+        return;
+    }
     let rowsHtml = '', totalCost = 0, vendaRowsHtml = '', totalVenda = 0, hasAny = false;
     container.querySelectorAll('.' + prefix + '-combo-row').forEach(row => {
         const sel = row.querySelector('.' + prefix + '-combo-prod');
@@ -5130,6 +5161,7 @@ showModal(`<i class="fa-solid fa-utensils"></i> ${item?'Editar Item':'Adicionar 
 <label style="font-size:12px;font-weight:600;color:var(--dark3);text-transform:uppercase;margin-bottom:8px;display:block">Itens que compõem o combo</label>
 <div id="mi-combo-lines">${comboLinesHtml}</div>
 <button type="button" class="btn btn-ghost btn-sm w-full mt-2" onclick="addComboLineRow('mi')"><i class="fa-solid fa-plus"></i> + Adicionar produto ao combo</button>
+<div class="form-group" style="margin-top:12px"><label style="font-size:12px;font-weight:600;color:var(--dark3);text-transform:uppercase">Usar custo de uma Ficha Técnica (opcional)</label><select id="mi-combo-ficha" class="form-control" onchange="updateComboCost('mi')">${comboFichaOptions(item?.comboFichaId)}</select><p style="font-size:11px;color:var(--gray);margin-top:4px">Se escolher uma ficha técnica, o custo e o valor de venda do combo serão calculados com base nela.</p></div>
 <div id="mi-combo-cost"></div>
 <p style="font-size:11px;color:var(--gray);margin-top:8px">Escolha cada produto do cardápio e a quantidade. O sistema calcula o custo estimado de cada item e o custo total do combo, para você definir um bom valor de venda.</p>
 </div>
@@ -5163,6 +5195,7 @@ const availableDays = miAllDays ? [] : [...document.querySelectorAll('#mi-days-w
 const variantData = collectVariantData('mi', price);
 const isCombo = document.getElementById('mi-iscombo')?.checked || false;
 const comboItems = isCombo ? collectComboLines('mi') : [];
+const comboFichaId = document.getElementById('mi-combo-ficha')?.value || '';
 if (isCombo && !comboItems.length) { showToast('Selecione ao menos um produto do combo e sua quantidade','warning'); return; }
 const desc = isCombo ? (comboItems.map(comboItemLabel).join('\n') + (customDesc?' — '+customDesc:'')) : customDesc;
 if (!name||!price) { showToast('Nome e valor são obrigatórios','warning'); return; }
@@ -5173,8 +5206,8 @@ return;
 }
 const c = currentCompany;
 c.menuItems = c.menuItems||[];
-if (iid) { const i=c.menuItems.find(i=>i.id===iid); if(i){i.name=name;i.price=price;i.category=cat;i.description=desc;i.customDesc=customDesc;i.isCombo=isCombo;i.comboItems=comboItems;i.image=img;i.stock=stock;i.minStock=minStock;i.cost=cost;i.stockUnlimited=stockType==='unlimited';i.sizes=variantData.sizes;i.hasBorda=variantData.hasBorda;i.bordaOptions=variantData.bordaOptions;i.flavors=variantData.flavors;i.hasChapa=variantData.hasChapa;i.chapaPrice=variantData.chapaPrice;i.availableDays=availableDays;} }
-else { c.menuItems.push({id:genId(),name,price,category:cat,description:desc,customDesc:customDesc,isCombo:isCombo,comboItems:comboItems,image:img,stock,minStock,availableDays,cost,createdAt:new Date().toISOString(),additionals:[],stockUnlimited:stockType==='unlimited',sizes:variantData.sizes,hasBorda:variantData.hasBorda,bordaOptions:variantData.bordaOptions,flavors:variantData.flavors,hasChapa:variantData.hasChapa,chapaPrice:variantData.chapaPrice}); }
+if (iid) { const i=c.menuItems.find(i=>i.id===iid); if(i){i.name=name;i.price=price;i.category=cat;i.description=desc;i.customDesc=customDesc;i.isCombo=isCombo;i.comboItems=comboItems;i.comboFichaId=comboFichaId;i.image=img;i.stock=stock;i.minStock=minStock;i.cost=cost;i.stockUnlimited=stockType==='unlimited';i.sizes=variantData.sizes;i.hasBorda=variantData.hasBorda;i.bordaOptions=variantData.bordaOptions;i.flavors=variantData.flavors;i.hasChapa=variantData.hasChapa;i.chapaPrice=variantData.chapaPrice;i.availableDays=availableDays;} }
+else { c.menuItems.push({id:genId(),name,price,category:cat,description:desc,customDesc:customDesc,isCombo:isCombo,comboItems:comboItems,comboFichaId:comboFichaId,image:img,stock,minStock,availableDays,cost,createdAt:new Date().toISOString(),additionals:[],stockUnlimited:stockType==='unlimited',sizes:variantData.sizes,hasBorda:variantData.hasBorda,bordaOptions:variantData.bordaOptions,flavors:variantData.flavors,hasChapa:variantData.hasChapa,chapaPrice:variantData.chapaPrice}); }
 showLoading('Salvando...');
 try { await db.collection('companies').doc(currentCompanyId).update({menuItems:c.menuItems}); hideLoading(); closeModal(); renderMenu(); renderPDV(); renderStock(); showToast(iid?'Item atualizado!':'Item adicionado!','success'); }
 catch(e) { hideLoading(); showToast('Erro: '+e.message,'danger'); }
@@ -9092,6 +9125,155 @@ function renderInsumos() {
         toggleInsumoTipoFields();
         ['ins-qtd','ins-valormedida','ins-porcao','ins-desperdicio'].forEach(id => document.getElementById(id)?.addEventListener('input', updateInsumoPreview));
     }, 50);
+}
+
+// ---------- FICHAS TÉCNICAS ----------
+// currentCompany.fichasTecnicas: [{id, nome, itens:[{insumoId, qtd}], precoVenda, createdAt}]
+function getFichas() { return (currentCompany && currentCompany.fichasTecnicas) || []; }
+function insumoUnitLabel(insumo) { return insumo && insumo.tipo === 'peso' ? 'g' : 'un'; }
+function computeFichaItemCost(insumo, qtd) {
+    if (!insumo) return 0;
+    return getInsumoEffectiveUnitCost(insumo) * (parseFloat(qtd) || 0);
+}
+function computeFichaCost(ficha) {
+    const insumos = getInsumos();
+    return (ficha.itens || []).reduce((sum, it) => {
+        const ins = insumos.find(i => i.id === it.insumoId);
+        if (!ins) return sum;
+        return sum + computeFichaItemCost(ins, it.qtd);
+    }, 0);
+}
+function comboFichaOptions(selectedId) {
+    const fichas = (currentCompany && currentCompany.fichasTecnicas) || [];
+    let h = '<option value="">Nenhuma (somar os produtos do combo)</option>';
+    fichas.forEach(f => { h += `<option value="${f.id}" ${f.id===selectedId?'selected':''}>${escHtml(f.nome)} — custo ${fmt(computeFichaCost(f))}</option>`; });
+    return h;
+}
+let _ftItens = [];
+let _ftEditingId = null;
+function showFichaModal(id) {
+    const ficha = id ? getFichas().find(f => f.id === id) : null;
+    _ftEditingId = id || null;
+    _ftItens = ficha ? JSON.parse(JSON.stringify(ficha.itens || [])) : [];
+    const insumos = getInsumos();
+    const insumosOpts = insumos.length ? insumos.map(i => `<option value="${i.id}">${escHtml(i.nome)} (${insumoUnitLabel(i)})</option>`).join('') : '<option value="">Nenhum insumo cadastrado</option>';
+    showModal(`<i class="fa-solid fa-clipboard-list"></i> ${ficha ? 'Editar Ficha Técnica' : 'Nova Ficha Técnica'}`,
+    `<div class="form-group"><label>Nome do produto *</label><input type="text" id="ft-nome" class="form-control" value="${ficha?escHtml(ficha.nome):''}" placeholder="Ex: X Burguer"></div>
+    <div style="background:#f8fafc;border:2px solid var(--border);border-radius:10px;padding:14px;margin-bottom:14px">
+        <label style="font-size:12px;font-weight:700;color:var(--dark3);text-transform:uppercase;margin-bottom:8px;display:block">Composição (insumos)</label>
+        ${insumos.length ? `<div class="flex items-center gap-2 mb-2 flex-wrap">
+            <select id="ft-insumo-select" class="form-control" style="flex:2;min-width:150px">${insumosOpts}</select>
+            <input type="number" id="ft-insumo-qty" class="form-control" step="0.01" min="0" placeholder="Qtd" style="width:90px">
+            <button type="button" class="btn btn-primary" onclick="ftAddInsumo()"><i class="fa-solid fa-plus"></i> Adicionar</button>
+        </div>` : '<div style="font-size:13px;color:var(--gray);margin-bottom:8px">Cadastre insumos na aba "Insumos" primeiro.</div>'}
+        <div id="ft-itens-list"></div>
+    </div>
+    <div class="form-group"><label>Preço de venda (R$)</label><input type="number" id="ft-preco" class="form-control" step="0.01" min="0" value="${ficha && ficha.precoVenda!=null ? ficha.precoVenda : ''}" placeholder="0,00" oninput="ftRecalc()"></div>
+    <div id="ft-resumo"></div>`,
+    `<button class="btn btn-ghost" onclick="closeModal()">Cancelar</button><button class="btn btn-primary" onclick="saveFicha()"><i class="fa-solid fa-save"></i> Salvar Ficha</button>`, true);
+    setTimeout(() => { ftRenderRows(); ftRecalc(); }, 30);
+}
+function ftAddInsumo() {
+    const sel = document.getElementById('ft-insumo-select');
+    const qty = parseFloat(document.getElementById('ft-insumo-qty')?.value) || 0;
+    if (!sel || !sel.value) { showToast('Selecione um insumo','warning'); return; }
+    if (qty <= 0) { showToast('Informe a quantidade usada','warning'); return; }
+    const existing = _ftItens.find(i => i.insumoId === sel.value);
+    if (existing) existing.qtd = (parseFloat(existing.qtd) || 0) + qty;
+    else _ftItens.push({ insumoId: sel.value, qtd: qty });
+    const q = document.getElementById('ft-insumo-qty'); if (q) q.value = '';
+    ftRenderRows(); ftRecalc();
+}
+function ftRemoveItem(idx) { _ftItens.splice(idx, 1); ftRenderRows(); ftRecalc(); }
+function ftUpdateQty(idx, val) { if (_ftItens[idx]) { _ftItens[idx].qtd = parseFloat(val) || 0; ftRecalc(); } }
+function ftRenderRows() {
+    const el = document.getElementById('ft-itens-list');
+    if (!el) return;
+    if (!_ftItens.length) { el.innerHTML = '<div style="font-size:12px;color:var(--gray);padding:6px 0">Nenhum insumo adicionado ainda.</div>'; return; }
+    const insumos = getInsumos();
+    el.innerHTML = _ftItens.map((it, idx) => {
+        const ins = insumos.find(i => i.id === it.insumoId);
+        const nome = ins ? ins.nome : '(insumo removido)';
+        const un = insumoUnitLabel(ins);
+        const cost = computeFichaItemCost(ins, it.qtd);
+        return `<div style="display:flex;align-items:center;gap:8px;padding:6px 0;border-bottom:1px solid #f1f5f9">
+            <div style="flex:1;min-width:0;font-size:13px;font-weight:600">${escHtml(nome)}</div>
+            <input type="number" class="form-control" style="width:88px" step="0.01" min="0" value="${it.qtd}" oninput="ftUpdateQty(${idx}, this.value)">
+            <div style="width:24px;font-size:11px;color:var(--gray)">${un}</div>
+            <div style="width:80px;text-align:right;font-weight:700;color:var(--primary);font-size:13px">${fmt(cost)}</div>
+            <button type="button" class="btn btn-sm btn-danger" onclick="ftRemoveItem(${idx})"><i class="fa-solid fa-times"></i></button>
+        </div>`;
+    }).join('');
+}
+function ftRecalc() {
+    const el = document.getElementById('ft-resumo');
+    if (!el) return;
+    const custo = computeFichaCost({ itens: _ftItens });
+    const preco = parseFloat(document.getElementById('ft-preco')?.value) || 0;
+    const lucro = preco - custo;
+    const margem = preco > 0 ? (lucro / preco) * 100 : 0;
+    el.innerHTML = `<div style="display:flex;gap:10px;flex-wrap:wrap">
+        <div style="flex:1;min-width:120px;background:#fef2f2;border:1px solid #fecaca;border-radius:10px;padding:10px 12px"><div style="font-size:11px;font-weight:700;color:var(--danger);text-transform:uppercase">Custo do produto</div><div style="font-size:18px;font-weight:900;color:var(--danger)">${fmt(custo)}</div></div>
+        <div style="flex:1;min-width:120px;background:#eff6ff;border:1px solid #bfdbfe;border-radius:10px;padding:10px 12px"><div style="font-size:11px;font-weight:700;color:#1d4ed8;text-transform:uppercase">Preço de venda</div><div style="font-size:18px;font-weight:900;color:#1d4ed8">${fmt(preco)}</div></div>
+        <div style="flex:1;min-width:120px;background:#f0fdf4;border:1px solid #bbf7d0;border-radius:10px;padding:10px 12px"><div style="font-size:11px;font-weight:700;color:var(--success);text-transform:uppercase">Lucro</div><div style="font-size:18px;font-weight:900;color:${lucro>=0?'var(--success)':'var(--danger)'}">${fmt(lucro)}</div><div style="font-size:11px;color:var(--gray)">Margem: ${margem.toFixed(1)}%</div></div>
+    </div>`;
+}
+async function saveFicha() {
+    const nome = document.getElementById('ft-nome')?.value.trim();
+    if (!nome) { showToast('Informe o nome do produto','warning'); return; }
+    if (!_ftItens.length) { showToast('Adicione ao menos um insumo','warning'); return; }
+    const precoVenda = parseFloat(document.getElementById('ft-preco')?.value) || 0;
+    const c = currentCompany;
+    c.fichasTecnicas = c.fichasTecnicas || [];
+    if (_ftEditingId) {
+        const f = c.fichasTecnicas.find(x => x.id === _ftEditingId);
+        if (f) Object.assign(f, { nome, itens: JSON.parse(JSON.stringify(_ftItens)), precoVenda });
+    } else {
+        c.fichasTecnicas.push({ id: genId(), nome, itens: JSON.parse(JSON.stringify(_ftItens)), precoVenda, createdAt: new Date().toISOString() });
+    }
+    showLoading('Salvando...');
+    try {
+        await db.collection('companies').doc(currentCompanyId).update({ fichasTecnicas: c.fichasTecnicas });
+        hideLoading(); closeModal(); renderFichas();
+        showToast('Ficha técnica salva!','success');
+    } catch(e) { hideLoading(); showToast('Erro: '+e.message,'danger'); }
+}
+async function deleteFicha(id) {
+    if (!confirm('Excluir esta ficha técnica?')) return;
+    const c = currentCompany;
+    c.fichasTecnicas = (c.fichasTecnicas || []).filter(f => f.id !== id);
+    showLoading('Excluindo...');
+    try {
+        await db.collection('companies').doc(currentCompanyId).update({ fichasTecnicas: c.fichasTecnicas });
+        hideLoading(); renderFichas();
+        showToast('Ficha excluída!','success');
+    } catch(e) { hideLoading(); showToast('Erro: '+e.message,'danger'); }
+}
+function renderFichas() {
+    const el = document.getElementById('fichas-body');
+    if (!el) return;
+    const fichas = getFichas();
+    if (!fichas.length) { el.innerHTML = '<div class="text-center" style="padding:50px;color:var(--gray)"><i class="fa-solid fa-clipboard-list" style="font-size:44px;display:block;margin-bottom:12px;color:var(--border)"></i><h3>Nenhuma ficha técnica cadastrada</h3><p style="font-size:13px;margin-top:6px">Clique em "Nova Ficha Técnica" para registrar o custo de um produto.</p></div>'; return; }
+    const insumos = getInsumos();
+    el.innerHTML = fichas.map(f => {
+        const custo = computeFichaCost(f);
+        const preco = parseFloat(f.precoVenda) || 0;
+        const lucro = preco - custo;
+        const margem = preco > 0 ? (lucro / preco) * 100 : 0;
+        const itensHtml = (f.itens||[]).map(it => { const ins = insumos.find(i => i.id === it.insumoId); if (!ins) return ''; return `<div style="display:flex;justify-content:space-between;font-size:12px;color:var(--dark3)"><span>${escHtml(ins.nome)} — ${it.qtd}${insumoUnitLabel(ins)}</span><span>${fmt(computeFichaItemCost(ins, it.qtd))}</span></div>`; }).join('');
+        return `<div style="background:#fff;border:1px solid var(--border);border-radius:12px;padding:16px;margin-bottom:14px">
+            <div class="flex items-center justify-between flex-wrap gap-2 mb-2">
+                <div style="font-size:16px;font-weight:800;color:var(--dark)">${escHtml(f.nome)}</div>
+                <div class="flex gap-1"><button class="btn btn-sm btn-ghost" onclick="showFichaModal('${f.id}')"><i class="fa-solid fa-edit"></i> Editar</button><button class="btn btn-sm btn-danger" onclick="deleteFicha('${f.id}')"><i class="fa-solid fa-trash"></i></button></div>
+            </div>
+            <div style="background:#f8fafc;border-radius:8px;padding:10px 12px;margin-bottom:10px">${itensHtml || '<div style="font-size:12px;color:var(--gray)">Sem itens</div>'}</div>
+            <div style="display:flex;gap:10px;flex-wrap:wrap">
+                <div style="flex:1;min-width:100px"><div style="font-size:10px;font-weight:700;color:var(--gray);text-transform:uppercase">Custo</div><div style="font-size:16px;font-weight:900;color:var(--danger)">${fmt(custo)}</div></div>
+                <div style="flex:1;min-width:100px"><div style="font-size:10px;font-weight:700;color:var(--gray);text-transform:uppercase">Venda</div><div style="font-size:16px;font-weight:900;color:#1d4ed8">${fmt(preco)}</div></div>
+                <div style="flex:1;min-width:100px"><div style="font-size:10px;font-weight:700;color:var(--gray);text-transform:uppercase">Lucro</div><div style="font-size:16px;font-weight:900;color:${lucro>=0?'var(--success)':'var(--danger)'}">${fmt(lucro)} <span style="font-size:11px;font-weight:600;color:var(--gray)">(${margem.toFixed(1)}%)</span></div></div>
+            </div>
+        </div>`;
+    }).join('');
 }
 
 // ---------- SELETOR DE INSUMOS POR PRODUTO (RECEITA) ----------
