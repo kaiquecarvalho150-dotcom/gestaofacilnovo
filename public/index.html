@@ -9356,7 +9356,7 @@ function renderFichas() {
     const fichas = getFichas();
     if (!fichas.length) { el.innerHTML = '<div class="text-center" style="padding:50px;color:var(--gray)"><i class="fa-solid fa-clipboard-list" style="font-size:44px;display:block;margin-bottom:12px;color:var(--border)"></i><h3>Nenhuma ficha técnica cadastrada</h3><p style="font-size:13px;margin-top:6px">Clique em "Nova Ficha Técnica" para registrar o custo de um produto.</p></div>'; return; }
     const insumos = getInsumos();
-    el.innerHTML = fichas.map(f => {
+    el.innerHTML = fichas.map((f, idx) => {
         const custo = computeFichaCost(f);
         const preco = parseFloat(f.precoVenda) || 0;
         const lucro = preco - custo;
@@ -9368,7 +9368,7 @@ function renderFichas() {
             : (f.itens||[]).map(it => { const ins = insumos.find(i => i.id === it.insumoId); if (!ins) return ''; return `<div style="display:flex;justify-content:space-between;font-size:12px;color:var(--dark3)"><span>${escHtml(ins.nome)} — ${it.qtd}${insumoUnitLabel(ins)}</span><span>${fmt(computeFichaItemCost(ins, it.qtd))}</span></div>`; }).join('');
         return `<div style="background:#fff;border:1px solid var(--border);border-radius:12px;padding:16px;margin-bottom:14px">
             <div class="flex items-center justify-between flex-wrap gap-2 mb-2">
-                <div style="font-size:16px;font-weight:800;color:var(--dark)">${escHtml(f.nome)} ${isBebida?'<span style="font-size:10px;background:#e0f2fe;color:#075985;padding:2px 8px;border-radius:10px;font-weight:800;vertical-align:middle">BEBIDA</span>':''}${isCombo?'<span style="font-size:10px;background:#ede9fe;color:#5b21b6;padding:2px 8px;border-radius:10px;font-weight:800;vertical-align:middle">COMBO</span>':''}</div>
+                <div style="font-size:16px;font-weight:800;color:var(--dark)"><span style="background:var(--primary);color:#fff;font-size:11px;font-weight:800;padding:2px 8px;border-radius:10px;cursor:pointer;margin-right:6px" title="Clique para reordenar" onclick="reorderFicha('${f.id}')">#${idx+1} ✏️</span>${escHtml(f.nome)} ${isBebida?'<span style="font-size:10px;background:#e0f2fe;color:#075985;padding:2px 8px;border-radius:10px;font-weight:800;vertical-align:middle">BEBIDA</span>':''}${isCombo?'<span style="font-size:10px;background:#ede9fe;color:#5b21b6;padding:2px 8px;border-radius:10px;font-weight:800;vertical-align:middle">COMBO</span>':''}</div>
                 <div class="flex gap-1"><button class="btn btn-sm btn-ghost" onclick="showFichaModal('${f.id}')"><i class="fa-solid fa-edit"></i> Editar</button><button class="btn btn-sm btn-danger" onclick="deleteFicha('${f.id}')"><i class="fa-solid fa-trash"></i></button></div>
             </div>
             <div style="background:#f8fafc;border-radius:8px;padding:10px 12px;margin-bottom:10px">${itensHtml || '<div style="font-size:12px;color:var(--gray)">Sem itens</div>'}</div>
@@ -9379,6 +9379,44 @@ function renderFichas() {
             </div>
         </div>`;
     }).join('');
+}
+function reorderFicha(iid) {
+    const fichas = getFichas();
+    const idx = fichas.findIndex(f => f.id === iid);
+    if (idx === -1) return;
+    const ficha = fichas[idx];
+    const total = fichas.length;
+    showModal(`<i class="fa-solid fa-arrow-up-1-9"></i> Reordenar — ${escHtml(ficha.nome)}`,
+        `<p style="margin-bottom:16px;font-size:14px;color:var(--dark3)">Posição atual: <strong>#${idx+1}</strong> de ${total}</p>
+        <div class="form-group"><label>Nova posição (#)</label>
+        <input type="number" id="ficha-reorder-newpos" class="form-control" value="${idx+1}" min="1" max="${total}" step="1">
+        <p style="font-size:12px;color:var(--gray);margin-top:6px">Digite o número da posição desejada (1 a ${total}). As demais fichas serão renumeradas automaticamente.</p></div>`,
+        `<button class="btn btn-ghost" onclick="closeModal()">Cancelar</button><button class="btn btn-primary" onclick="doReorderFicha('${iid}', ${idx})"><i class="fa-solid fa-check"></i> Reordenar</button>`,
+        false);
+    setTimeout(() => {
+        const inp = document.getElementById('ficha-reorder-newpos');
+        if (inp) { inp.focus(); inp.select(); }
+    }, 100);
+}
+function doReorderFicha(iid, oldIdx) {
+    const newPosInput = document.getElementById('ficha-reorder-newpos');
+    if (!newPosInput) return;
+    let newPos = parseInt(newPosInput.value) || (oldIdx + 1);
+    const c = currentCompany;
+    const fichas = c.fichasTecnicas || [];
+    const total = fichas.length;
+    newPos = Math.max(1, Math.min(total, newPos));
+    const newIdx = newPos - 1;
+    if (newIdx === oldIdx) { closeModal(); showToast('A ficha já está nessa posição.','info'); return; }
+    const [moved] = fichas.splice(oldIdx, 1);
+    fichas.splice(newIdx, 0, moved);
+    showLoading('Reordenando...');
+    db.collection('companies').doc(currentCompanyId).update({ fichasTecnicas: fichas })
+        .then(() => {
+            hideLoading(); closeModal(); renderFichas();
+            showToast(`"${moved.nome}" movida para #${newPos}!`,'success');
+        })
+        .catch(e => { hideLoading(); showToast('Erro: '+e.message,'danger'); });
 }
 
 // ---------- SELETOR DE INSUMOS POR PRODUTO (RECEITA) ----------
