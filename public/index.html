@@ -3223,16 +3223,59 @@ function normAcompOptions(product) {
         .map(a => ({ name: String(a.name), price: parseFloat(a.price) || 0 }));
 }
 function productHasAcomp(product) { return !!(product && product.hasAcompanhamento && normAcompOptions(product).length); }
+/* Escolha unica x multipla escolha (configurado pelo lojista).
+Produtos sem essa configuracao continuam como antes: multipla escolha, sem limite. */
+function acompIsMulti(product) { return !(product && product.acompanhamentoMulti === false); }
+function acompMaxCount(product) { return Math.max(0, parseInt(product && product.acompanhamentoMax) || 0); }
+function acompHintText(product) {
+    if (!acompIsMulti(product)) return 'Escolha 1 acompanhamento';
+    const max = acompMaxCount(product);
+    return max > 0 ? ('Escolha até ' + max + (max>1 ? ' acompanhamentos' : ' acompanhamento')) : 'Pode escolher vários acompanhamentos';
+}
+function acompLimitBlocked(product, willSelect) {
+    if (!product || !acompIsMulti(product)) return false;
+    const max = acompMaxCount(product);
+    if (max <= 0) return false;
+    return willSelect && document.querySelectorAll('.var-acomp-check:checked').length >= max;
+}
+function atualizarTravasAcomp() {
+    // Desabilita as opções quando o limite de acompanhamentos já foi atingido
+    const prod = __activeVariantProduct;
+    const multi = !prod || acompIsMulti(prod);
+    const max = prod ? acompMaxCount(prod) : 0;
+    const ativos = document.querySelectorAll('.var-acomp-check:checked').length;
+    document.querySelectorAll('.var-acomp-check').forEach(el => {
+        el.disabled = (multi && max > 0 && !el.checked && ativos >= max);
+        el.parentElement.parentElement.style.opacity = el.disabled ? '.45' : '';
+    });
+}
+function onAcompCheckChange(el) {
+    const multi = el.dataset.multi === '1';
+    const max = parseInt(el.dataset.max) || 0;
+    if (!multi) {
+        if (el.checked) document.querySelectorAll('.var-acomp-check').forEach(c => { if (c !== el) c.checked = false; });
+    } else if (max > 0) {
+        const ativos = document.querySelectorAll('.var-acomp-check:checked').length;
+        if (el.checked && ativos > max) {
+            el.checked = false;
+            showToast(`Você pode escolher no máximo ${max} acompanhamento${max>1?'s':''}`, 'warning');
+        }
+    }
+    atualizarTravasAcomp();
+    refreshVariantPrice();
+}
 function acompanhamentoRadiosHtml(product) {
     if (!productHasAcomp(product)) return '';
     const opts = normAcompOptions(product);
-    const rows = opts.map((a, i) => `<label style="display:flex;align-items:center;justify-content:space-between;padding:8px 0;border-bottom:1px solid #f1f5f9;cursor:pointer"><span style="display:flex;align-items:center;gap:10px;font-weight:600"><input type="checkbox" class="var-acomp-check" data-name="${escHtml(a.name).replace(/"/g,'&quot;')}" data-price="${a.price}" onchange="refreshVariantPrice()" style="width:17px;height:17px;cursor:pointer">${escHtml(a.name)}</span><span style="color:${a.price>0?'var(--primary)':'var(--gray)'};font-weight:700;white-space:nowrap">${a.price>0?('+ '+fmt(a.price)):'Grátis'}</span></label>`).join('');
+    const multi = acompIsMulti(product);
+    const max = acompMaxCount(product);
+    const rows = opts.map((a, i) => `<label style="display:flex;align-items:center;justify-content:space-between;padding:8px 0;border-bottom:1px solid #f1f5f9;cursor:pointer"><span style="display:flex;align-items:center;gap:10px;font-weight:600"><input type="checkbox" class="var-acomp-check" data-name="${escHtml(a.name).replace(/"/g,'&quot;')}" data-price="${a.price}" data-multi="${multi?1:0}" data-max="${max}" onchange="onAcompCheckChange(this)" style="width:17px;height:17px;cursor:pointer">${escHtml(a.name)}</span><span style="color:${a.price>0?'var(--primary)':'var(--gray)'};font-weight:700;white-space:nowrap">${a.price>0?('+ '+fmt(a.price)):'Grátis'}</span></label>`).join('');
     return `<div style="margin-bottom:14px;background:#f0fdf4;border:2px solid #bbf7d0;border-radius:10px;padding:12px">
         <div style="font-size:12px;font-weight:700;color:var(--gray);text-transform:uppercase;letter-spacing:.3px;margin-bottom:8px">Acompanhamentos <span style="font-weight:500;color:var(--gray);text-transform:none">(opcional)</span></div>
         <label style="display:flex;align-items:center;justify-content:space-between;padding:8px 0;border-bottom:1px solid #dcfce7;cursor:pointer"><span style="display:flex;align-items:center;gap:8px;font-weight:600"><input type="radio" name="var-acomp" value="0" checked class="var-acomp-radio" onchange="toggleAcompList()" style="width:16px;height:16px;cursor:pointer">Sem acompanhamento</span><span style="color:var(--gray)">Grátis</span></label>
         <label style="display:flex;align-items:center;justify-content:space-between;padding:8px 0;border-bottom:1px solid #dcfce7;cursor:pointer"><span style="display:flex;align-items:center;gap:8px;font-weight:600"><input type="radio" name="var-acomp" value="1" class="var-acomp-radio" onchange="toggleAcompList()" style="width:16px;height:16px;cursor:pointer">Com acompanhamento</span><span style="color:var(--primary);font-weight:700">escolha abaixo</span></label>
         <div id="var-acomp-list" style="display:none;margin-top:8px;background:#fff;border:1px solid var(--border);border-radius:8px;padding:4px 10px">
-            <div style="font-size:11px;color:var(--gray);font-weight:700;text-transform:uppercase;padding:6px 0">Escolha os acompanhamentos</div>
+            <div style="font-size:11px;color:var(--gray);font-weight:700;text-transform:uppercase;padding:6px 0">${acompHintText(product)}</div>
             ${rows}
         </div>
     </div>`;
@@ -3242,6 +3285,7 @@ function toggleAcompList() {
     const list = document.getElementById('var-acomp-list');
     if (list) list.style.display = on ? 'block' : 'none';
     if (!on) document.querySelectorAll('.var-acomp-check').forEach(c => { c.checked = false; });
+    atualizarTravasAcomp();
     refreshVariantPrice();
 }
 function getSelectedAcomp() {
@@ -4477,7 +4521,7 @@ async function doAddNewStockItem() {
     const name=document.getElementById('nsi-name').value.trim(); const price=parseFloat(document.getElementById('nsi-price').value)||0; const cost=parseFloat(document.getElementById('nsi-cost').value)||0; const cat=document.getElementById('nsi-cat').value.trim(); const isBeverage=document.getElementById('nsi-isbebida')?.checked!==false; const stockType=document.querySelector('input[name="nsi-stock-type"]:checked')?.value; const stock=parseInt(document.getElementById('nsi-stock').value)||0; const minStock=parseInt(document.getElementById('nsi-minstock').value)||5; const img=document.getElementById('nsi-img')?.value.trim()||''; const desc=document.getElementById('nsi-desc')?.value.trim()||''; const nsiAllDays = document.getElementById('nsi-alldays')?.checked; const availableDays = nsiAllDays ? [] : [...document.querySelectorAll('#nsi-days-wrap .nsi-day:checked')].map(cb=>parseInt(cb.value));
     if (!name||!price) { showToast('Nome e preço são obrigatórios','warning'); return; }
     const variantData = collectVariantData('nsi', price);
-    const c = currentCompany; c.menuItems = c.menuItems||[]; c.menuItems.push({id:genId(),name,price,cost,category:cat,stock:stockType==='unlimited'?999999:stock,minStock:stockType==='unlimited'?0:minStock,availableDays,image:img,description:desc,createdAt:new Date().toISOString(),additionals:[],stockUnlimited:stockType==='unlimited',isBeverage:isBeverage,sizes:variantData.sizes,hasBorda:variantData.hasBorda,bordaOptions:variantData.bordaOptions,flavors:variantData.flavors,hasChapa:variantData.hasChapa,chapaPrice:variantData.chapaPrice,hasAcompanhamento:variantData.hasAcompanhamento,acompanhamentoOptions:variantData.acompanhamentoOptions});
+    const c = currentCompany; c.menuItems = c.menuItems||[]; c.menuItems.push({id:genId(),name,price,cost,category:cat,stock:stockType==='unlimited'?999999:stock,minStock:stockType==='unlimited'?0:minStock,availableDays,image:img,description:desc,createdAt:new Date().toISOString(),additionals:[],stockUnlimited:stockType==='unlimited',isBeverage:isBeverage,sizes:variantData.sizes,hasBorda:variantData.hasBorda,bordaOptions:variantData.bordaOptions,flavors:variantData.flavors,hasChapa:variantData.hasChapa,chapaPrice:variantData.chapaPrice,hasAcompanhamento:variantData.hasAcompanhamento,acompanhamentoOptions:variantData.acompanhamentoOptions,acompanhamentoMulti:variantData.acompanhamentoMulti,acompanhamentoMax:variantData.acompanhamentoMax});
     showLoading('Salvando...'); try { await db.collection('companies').doc(currentCompanyId).update({menuItems:c.menuItems}); hideLoading(); closeModal(); renderStock(); renderMenu(); renderPDV(); showToast(`"${name}" cadastrado com sucesso!`,'success'); } catch(e) { hideLoading(); showToast('Erro: '+e.message,'danger'); }
 }
 function toggleStockEditInput(show) {
@@ -4487,7 +4531,7 @@ function toggleStockEditInput(show) {
 async function doAddStock() { const pid = document.getElementById('ast-prod').value; const qty = parseInt(document.getElementById('ast-qty').value)||0; const c = currentCompany; const p = c.menuItems.find(p=>p.id===pid); if(!p) return; p.stock = (p.stock||0) + qty; showLoading('Atualizando...'); try { await db.collection('companies').doc(currentCompanyId).update({ menuItems: c.menuItems }); hideLoading(); closeModal(); renderStock(); renderMenu(); renderPDV(); showToast(`+${qty} un de "${p.name}" adicionadas!`,'success'); } catch(e) { hideLoading(); showToast('Erro: '+e.message,'danger'); } }
 function showStockModal(pid) { const c = currentCompany; const p = c.menuItems.find(p=>p.id===pid); if(!p) return; const isUnlimited = p.stockUnlimited===true; showModal(`<i class="fa-solid fa-boxes-stacked"></i> Editar Item — ${p.name}`, `<div class="form-group"><label>Nome do Item *</label><input type="text" id="sk-name" class="form-control" placeholder="Nome do produto" value="${(p.name||'').replace(/"/g,'&quot;')}"></div><div class="form-row"><div class="form-group"><label>Preço de Venda (R$) *</label><input type="number" id="sk-price" class="form-control" step="0.01" min="0" value="${p.price||0}"></div><div class="form-group"><label>Custo (R$)</label><input type="number" id="sk-cost" class="form-control" step="0.01" min="0" value="${p.cost||0}"></div></div><div class="form-row"><div class="form-group"><label>Categoria</label><input type="text" id="sk-cat" class="form-control" list="pub-cats-datalist" placeholder="Ex: Bebida, Comida..." value="${(p.category||'').replace(/"/g,'&quot;')}"><p style="font-size:11px;color:var(--gray);margin-top:4px">Use o mesmo nome de uma categoria já existente para agrupar corretamente no cardápio online.</p>${categoryDatalistHtml()}</div><div class="form-group"><label>Estoque Mínimo</label><input type="number" id="sk-min" class="form-control" value="${p.minStock||5}" min="0"></div></div><div class="form-group"><label>Controle de Estoque</label><div style="background:#f8fafc;border:2px solid var(--border);border-radius:10px;padding:14px;margin-top:8px"><label style="display:flex;align-items:center;gap:10px;cursor:pointer;font-weight:700;color:#075985;margin-bottom:10px"><input type="checkbox" id="sk-isbebida" ${(isBebidaProduct(p) || p.isBeverage===true)?'checked':''} style="width:18px;height:18px;cursor:pointer"> É bebida (aparece no controle de estoque)</label><label style="display:flex;align-items:center;gap:10px;cursor:pointer;margin-bottom:10px"><input type="radio" name="sk-stock-type" value="limited" ${!isUnlimited?'checked':''} onchange="toggleStockEditInput(true)" style="width:18px;height:18px;cursor:pointer"><div><div style="font-weight:700;color:var(--dark)">Quantidade Limitada</div><div style="font-size:12px;color:var(--gray)">Controlar estoque (recomendado para bebidas)</div></div></label><label style="display:flex;align-items:center;gap:10px;cursor:pointer"><input type="radio" name="sk-stock-type" value="unlimited" ${isUnlimited?'checked':''} onchange="toggleStockEditInput(false)" style="width:18px;height:18px;cursor:pointer"><div><div style="font-weight:700;color:var(--dark)">Estoque Ilimitado</div><div style="font-size:12px;color:var(--gray)">Sem controle de quantidade</div></div></label></div></div><div id="sk-stock-limited-wrap" style="${isUnlimited?'display:none':''}"><div class="form-group"><label>Quantidade em Estoque</label><input type="number" id="sk-qty" class="form-control" value="${p.stock||0}" min="0"></div></div><div class="form-group"><label>Disponibilidade por dia da semana</label><div style="background:#eff6ff;border:2px solid #bfdbfe;border-radius:10px;padding:12px;margin-top:8px"><label style="display:flex;align-items:center;gap:8px;cursor:pointer;font-weight:700;color:var(--dark);margin-bottom:8px"><input type="checkbox" id="sk-alldays" ${(!p.availableDays || !p.availableDays.length)?'checked':''} onchange="togglePubDays('sk')" style="width:17px;height:17px;cursor:pointer"> Disponível todos os dias</label><div id="sk-days-wrap" style="display:${(!p.availableDays || !p.availableDays.length)?'none':'flex'};flex-wrap:wrap;gap:6px">${WEEKDAY_NAMES.map((n,d)=>`<label style="display:flex;align-items:center;gap:5px;background:#fff;border:1px solid var(--border);border-radius:8px;padding:6px 10px;font-size:12px;cursor:pointer"><input type="checkbox" class="sk-day" value="${d}" ${(p.availableDays||[]).includes(d)?'checked':''} style="width:15px;height:15px;cursor:pointer"> ${n}</label>`).join('')}</div><p style="font-size:11px;color:var(--gray);margin-top:6px">Se marcar dias específicos, o item só fica disponível para compra nesses dias.</p></div></div><div class="form-group"><label>Imagem (URL)</label><input type="text" id="sk-img" class="form-control" placeholder="https://..." value="${(p.image||'').replace(/"/g,'&quot;')}"></div><p style="font-size:11px;color:var(--gray);margin-top:-8px;margin-bottom:12px"><i class="fa-solid fa-circle-info"></i> Use uma imagem <strong>quadrada (proporção 1:1)</strong> hospedada em link externo — ela aparece em destaque no cardápio online.</p><div class="form-group"><label>Descrição</label><textarea id="sk-desc" class="form-control" rows="2">${p.description||''}</textarea></div>${variantOptionsEditorHtml('sk', p)}`, `<button class="btn btn-ghost" onclick="closeModal()">Cancelar</button><button class="btn btn-primary" onclick="saveStock('${pid}')"><i class="fa-solid fa-save"></i> Salvar</button>`, false); }
 async function deleteStockProduct(pid) { const c = currentCompany; const p = (c.menuItems||[]).find(p=>p.id===pid); if(!p) return; if (!confirm(`Excluir "${p.name}" do estoque e do cadastro?`)) return; c.menuItems = c.menuItems.filter(p=>p.id!==pid); showLoading('Excluindo...'); try { await db.collection('companies').doc(currentCompanyId).update({menuItems:c.menuItems}); hideLoading(); renderStock(); renderMenu(); renderPDV(); showToast('Produto excluído!','success'); } catch(e) { hideLoading(); showToast('Erro: '+e.message,'danger'); } }
-async function saveStock(pid) { const c = currentCompany; const p = c.menuItems.find(p=>p.id===pid); if(!p) return; const name=document.getElementById('sk-name')?.value.trim(); const price=parseFloat(document.getElementById('sk-price')?.value)||0; if (!name||!price) { showToast('Nome e preço são obrigatórios','warning'); return; } const isBeverage=document.getElementById('sk-isbebida')?.checked===true; const stockType=document.querySelector('input[name="sk-stock-type"]:checked')?.value; p.name = name; p.price = price; p.cost = parseFloat(document.getElementById('sk-cost')?.value)||0; p.category = document.getElementById('sk-cat')?.value.trim()||''; p.image = document.getElementById('sk-img')?.value.trim()||''; p.description = document.getElementById('sk-desc')?.value.trim()||''; p.stock = stockType==='unlimited'?999999:(parseInt(document.getElementById('sk-qty').value)||0); p.minStock = stockType==='unlimited'?0:(parseInt(document.getElementById('sk-min').value)||5); p.stockUnlimited = stockType==='unlimited'; p.isBeverage = isBeverage; const skAllDays = document.getElementById('sk-alldays')?.checked; p.availableDays = skAllDays ? [] : [...document.querySelectorAll('#sk-days-wrap .sk-day:checked')].map(cb=>parseInt(cb.value)); const variantData = collectVariantData('sk', price); p.sizes = variantData.sizes; p.hasBorda = variantData.hasBorda; p.bordaOptions = variantData.bordaOptions; p.flavors = variantData.flavors; p.hasChapa = variantData.hasChapa; p.chapaPrice = variantData.chapaPrice; p.hasAcompanhamento = variantData.hasAcompanhamento; p.acompanhamentoOptions = variantData.acompanhamentoOptions; showLoading('Salvando...'); try { await db.collection('companies').doc(currentCompanyId).update({ menuItems: c.menuItems }); hideLoading(); closeModal(); renderStock(); renderMenu(); renderPDV(); showToast('Item atualizado!','success'); } catch(e) { hideLoading(); showToast('Erro: '+e.message,'danger'); } }
+async function saveStock(pid) { const c = currentCompany; const p = c.menuItems.find(p=>p.id===pid); if(!p) return; const name=document.getElementById('sk-name')?.value.trim(); const price=parseFloat(document.getElementById('sk-price')?.value)||0; if (!name||!price) { showToast('Nome e preço são obrigatórios','warning'); return; } const isBeverage=document.getElementById('sk-isbebida')?.checked===true; const stockType=document.querySelector('input[name="sk-stock-type"]:checked')?.value; p.name = name; p.price = price; p.cost = parseFloat(document.getElementById('sk-cost')?.value)||0; p.category = document.getElementById('sk-cat')?.value.trim()||''; p.image = document.getElementById('sk-img')?.value.trim()||''; p.description = document.getElementById('sk-desc')?.value.trim()||''; p.stock = stockType==='unlimited'?999999:(parseInt(document.getElementById('sk-qty').value)||0); p.minStock = stockType==='unlimited'?0:(parseInt(document.getElementById('sk-min').value)||5); p.stockUnlimited = stockType==='unlimited'; p.isBeverage = isBeverage; const skAllDays = document.getElementById('sk-alldays')?.checked; p.availableDays = skAllDays ? [] : [...document.querySelectorAll('#sk-days-wrap .sk-day:checked')].map(cb=>parseInt(cb.value)); const variantData = collectVariantData('sk', price); p.sizes = variantData.sizes; p.hasBorda = variantData.hasBorda; p.bordaOptions = variantData.bordaOptions; p.flavors = variantData.flavors; p.hasChapa = variantData.hasChapa; p.chapaPrice = variantData.chapaPrice; p.hasAcompanhamento = variantData.hasAcompanhamento; p.acompanhamentoOptions = variantData.acompanhamentoOptions; p.acompanhamentoMulti = variantData.acompanhamentoMulti; p.acompanhamentoMax = variantData.acompanhamentoMax; showLoading('Salvando...'); try { await db.collection('companies').doc(currentCompanyId).update({ menuItems: c.menuItems }); hideLoading(); closeModal(); renderStock(); renderMenu(); renderPDV(); showToast('Item atualizado!','success'); } catch(e) { hideLoading(); showToast('Erro: '+e.message,'danger'); } }
 
 // ============================================================
 // MENU (CARDÁPIO)
@@ -5395,6 +5439,7 @@ function addVariantRow(prefix, kind) {
     else if (kind==='acomp') { const w=document.getElementById(prefix+'-acomp-list'); if(!w) return; const d=document.createElement('div'); d.innerHTML=acompRowHtml(prefix,null); w.appendChild(d.firstElementChild); }
 }
 function toggleAcompOptions(prefix, show) { const el=document.getElementById(prefix+'-acomp-wrap'); if(el) el.style.display = show ? '' : 'none'; }
+function toggleAcompMulti(prefix, show) { const el=document.getElementById(prefix+'-acomp-max-wrap'); if(el) el.style.display = show ? '' : 'none'; }
 function toggleBordaOptions(prefix, show) { const el=document.getElementById(prefix+'-borda-wrap'); if(el) el.style.display = show ? '' : 'none'; }
 function toggleChapaOptions(prefix, show) { const el=document.getElementById(prefix+'-chapa-wrap'); if(el) el.style.display = show ? '' : 'none'; }
 function variantOptionsEditorHtml(prefix, item) {
@@ -5407,6 +5452,8 @@ function variantOptionsEditorHtml(prefix, item) {
     const chapaPrice = (item && item.hasChapa) ? (parseFloat(item.chapaPrice)||0) : 0;
     const hasAcomp = item ? !!item.hasAcompanhamento : false;
     const acompOptions = normAcompOptions(item);
+    const acompMulti = item ? (item.acompanhamentoMulti !== false) : true;
+    const acompMax = (item && item.acompanhamentoMax) ? (parseInt(item.acompanhamentoMax)||0) : 0;
     return `
     <div class="form-group" style="background:#f8fafc;border:2px solid var(--border);border-radius:10px;padding:14px;margin-top:8px">
         <label style="font-weight:800;color:var(--dark);text-transform:uppercase;font-size:12px;letter-spacing:.3px"><i class="fa-solid fa-ruler-combined"></i> Tamanhos</label>
@@ -5450,6 +5497,16 @@ function variantOptionsEditorHtml(prefix, item) {
             <div style="font-size:11px;color:var(--gray);font-weight:700;text-transform:uppercase;margin-bottom:6px">Acompanhamentos e valores</div>
             <div id="${prefix}-acomp-list">${(acompOptions.length?acompOptions:[null]).map(a=>acompRowHtml(prefix,a)).join('')}</div>
             <button type="button" class="btn btn-ghost btn-sm mt-2" onclick="addVariantRow('${prefix}','acomp')"><i class="fa-solid fa-plus"></i> Adicionar Acompanhamento</button>
+            <div style="margin-top:12px;border-top:1px dashed var(--border);padding-top:10px">
+                <div style="font-size:11px;color:var(--gray);font-weight:700;text-transform:uppercase;margin-bottom:8px">Forma de escolha do cliente</div>
+                <label style="display:flex;align-items:flex-start;gap:10px;cursor:pointer;margin-bottom:8px"><input type="radio" name="${prefix}-acomp-multi" value="no" ${!acompMulti?'checked':''} onchange="toggleAcompMulti('${prefix}',false)" style="width:18px;height:18px;cursor:pointer;margin-top:2px"><div><div style="font-weight:700;color:var(--dark)">Não é múltipla escolha (escolha única)</div><div style="font-size:11px;color:var(--gray)">O cliente marca 1 acompanhamento. Ao marcar outro, o anterior é desmarcado automaticamente.</div></div></label>
+                <label style="display:flex;align-items:flex-start;gap:10px;cursor:pointer"><input type="radio" name="${prefix}-acomp-multi" value="yes" ${acompMulti?'checked':''} onchange="toggleAcompMulti('${prefix}',true)" style="width:18px;height:18px;cursor:pointer;margin-top:2px"><div><div style="font-weight:700;color:var(--dark)">Sim, é múltipla escolha</div><div style="font-size:11px;color:var(--gray)">O cliente pode marcar vários acompanhamentos (respeitando o limite abaixo).</div></div></label>
+                <div id="${prefix}-acomp-max-wrap" style="${acompMulti?'':'display:none'};margin-top:10px">
+                    <label>Quantos acompanhamentos o cliente pode marcar no máximo</label>
+                    <input type="number" id="${prefix}-acomp-max" class="form-control" min="0" step="1" value="${acompMax>0?acompMax:''}" placeholder="Ex: 2 — deixe 0 ou vazio para sem limite" style="margin-top:6px">
+                    <p style="font-size:11px;color:var(--gray);margin-top:4px">0 ou vazio = sem limite de acompanhamentos.</p>
+                </div>
+            </div>
         </div>
     </div>
     <div class="form-group" style="background:#f8fafc;border:2px solid var(--border);border-radius:10px;padding:14px;margin-top:8px">
@@ -5489,7 +5546,11 @@ function collectVariantData(prefix, basePrice) {
     const acompNames = [...document.querySelectorAll('.'+prefix+'-acomp-name')];
     const acompPrices = [...document.querySelectorAll('.'+prefix+'-acomp-price')];
     const acompanhamentoOptions = hasAcompanhamento ? acompNames.map((inp,i)=>{ const nm=inp.value.trim(); const pr=parseFloat(acompPrices[i]?.value)||0; return nm?{name:nm,price:pr}:null; }).filter(Boolean) : [];
-    return { sizes, hasBorda, bordaOptions, flavors, hasChapa, chapaPrice, hasAcompanhamento, acompanhamentoOptions };
+    const acompMultiSel = document.querySelector(`input[name="${prefix}-acomp-multi"]:checked`)?.value === 'yes';
+    const acompMaxRaw = parseInt(document.getElementById(prefix+'-acomp-max')?.value)||0;
+    const acompanhamentoMulti = hasAcompanhamento ? !!acompMultiSel : true;
+    const acompanhamentoMax = hasAcompanhamento ? (acompMultiSel ? Math.max(0, acompMaxRaw) : 1) : 0;
+    return { sizes, hasBorda, bordaOptions, flavors, hasChapa, chapaPrice, hasAcompanhamento, acompanhamentoOptions, acompanhamentoMulti, acompanhamentoMax };
 }
 function showMenuItemModal(iid) {
 const c = currentCompany;
@@ -5554,8 +5615,8 @@ return;
 }
 const c = currentCompany;
 c.menuItems = c.menuItems||[];
-if (iid) { const i=c.menuItems.find(i=>i.id===iid); if(i){i.name=name;i.price=price;i.category=cat;i.description=desc;i.customDesc=customDesc;i.isCombo=isCombo;i.comboItems=comboItems;i.comboFichaId=comboFichaId;i.image=img;i.stock=stock;i.minStock=minStock;i.cost=cost;i.stockUnlimited=stockType==='unlimited';i.sizes=variantData.sizes;i.hasBorda=variantData.hasBorda;i.bordaOptions=variantData.bordaOptions;i.flavors=variantData.flavors;i.hasChapa=variantData.hasChapa;i.chapaPrice=variantData.chapaPrice;i.hasAcompanhamento=variantData.hasAcompanhamento;i.acompanhamentoOptions=variantData.acompanhamentoOptions;i.availableDays=availableDays;} }
-else { c.menuItems.push({id:genId(),name,price,category:cat,description:desc,customDesc:customDesc,isCombo:isCombo,comboItems:comboItems,comboFichaId:comboFichaId,image:img,stock,minStock,availableDays,cost,createdAt:new Date().toISOString(),additionals:[],stockUnlimited:stockType==='unlimited',sizes:variantData.sizes,hasBorda:variantData.hasBorda,bordaOptions:variantData.bordaOptions,flavors:variantData.flavors,hasChapa:variantData.hasChapa,chapaPrice:variantData.chapaPrice,hasAcompanhamento:variantData.hasAcompanhamento,acompanhamentoOptions:variantData.acompanhamentoOptions}); }
+if (iid) { const i=c.menuItems.find(i=>i.id===iid); if(i){i.name=name;i.price=price;i.category=cat;i.description=desc;i.customDesc=customDesc;i.isCombo=isCombo;i.comboItems=comboItems;i.comboFichaId=comboFichaId;i.image=img;i.stock=stock;i.minStock=minStock;i.cost=cost;i.stockUnlimited=stockType==='unlimited';i.sizes=variantData.sizes;i.hasBorda=variantData.hasBorda;i.bordaOptions=variantData.bordaOptions;i.flavors=variantData.flavors;i.hasChapa=variantData.hasChapa;i.chapaPrice=variantData.chapaPrice;i.hasAcompanhamento=variantData.hasAcompanhamento;i.acompanhamentoOptions=variantData.acompanhamentoOptions;i.acompanhamentoMulti=variantData.acompanhamentoMulti;i.acompanhamentoMax=variantData.acompanhamentoMax;i.availableDays=availableDays;} }
+else { c.menuItems.push({id:genId(),name,price,category:cat,description:desc,customDesc:customDesc,isCombo:isCombo,comboItems:comboItems,comboFichaId:comboFichaId,image:img,stock,minStock,availableDays,cost,createdAt:new Date().toISOString(),additionals:[],stockUnlimited:stockType==='unlimited',sizes:variantData.sizes,hasBorda:variantData.hasBorda,bordaOptions:variantData.bordaOptions,flavors:variantData.flavors,hasChapa:variantData.hasChapa,chapaPrice:variantData.chapaPrice,hasAcompanhamento:variantData.hasAcompanhamento,acompanhamentoOptions:variantData.acompanhamentoOptions,acompanhamentoMulti:variantData.acompanhamentoMulti,acompanhamentoMax:variantData.acompanhamentoMax}); }
 showLoading('Salvando...');
 try { await db.collection('companies').doc(currentCompanyId).update({menuItems:c.menuItems}); hideLoading(); closeModal(); renderMenu(); renderPDV(); renderStock(); showToast(iid?'Item atualizado!':'Item adicionado!','success'); }
 catch(e) { hideLoading(); showToast('Erro: '+e.message,'danger'); }
