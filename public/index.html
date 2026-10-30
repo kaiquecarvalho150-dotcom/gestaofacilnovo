@@ -3853,15 +3853,14 @@ function buildOSHtml(data, copyLabel) {
     const timeStr = dateValid ? dateObj.toLocaleTimeString('pt-BR',{hour:'2-digit',minute:'2-digit',second:'2-digit'}) : '';
     const itemsRows = (data.items||[]).map(item => {
         let baseName = String((item && item.name) || (item && item.id) || 'Item').trim();
-        let additionalsText = '';
+        let addNames = [];
         const match = baseName.match(/^(.+?)\s*\(\+(.+?)\)$/);
         if (match) {
             baseName = match[1].trim();
-            const adds = match[2].split(',').map(a => a.trim());
-            additionalsText = '+' + adds.join(', +');
+            addNames = match[2].split(',').map(a => a.trim().replace(/^\+/,'').trim()).filter(Boolean);
         }
-        if (item.additionals && item.additionals.length && !additionalsText) {
-            additionalsText = item.additionals.map(a => ((a.qty&&a.qty>1)? a.qty+'x ' : '') + a.name).join(', ');
+        if (item.additionals && item.additionals.length && !addNames.length) {
+            addNames = item.additionals.map(a => ((a.qty&&a.qty>1)? a.qty+'x ' : '') + a.name).map(a => String(a).replace(/^\+/,'').trim()).filter(Boolean);
         }
         // Se for um combo, mostra igual à tela: cada lanche em sua própria linha com os seus adicionais
         // (1º X Tudo: Bacon, +Mussarela, +Sem Presunto / 2º X Tudo: Calabresa, +Mussarela, +Sem Mostarda, +Sem Milho)
@@ -3882,28 +3881,39 @@ function buildOSHtml(data, copyLabel) {
                 }).join('');
             }
         }
-        const addDesc = (additionalsText && !perLane)
-            ? `<tr><td colspan="3" style="font-size:10.5px;color:#000;padding-left:2px;font-weight:900;white-space:normal;overflow-wrap:break-word">${additionalsText}</td></tr>`
+        // Sem a etiqueta "Acompanhamento:": imprime so o que o cliente escolheu, ex.: (+BATATA FRITA G)
+        const variantText = (function(){ const vm = baseName.match(/^(.*?)\s*\(([^()]*)\)\s*$/); if (vm) { baseName = vm[1].trim(); return vm[2].trim(); } return ''; })();
+        const variantParts = []; const acompNames = [];
+        if (variantText) {
+            variantText.split(/\s+-\s+/).forEach(function(seg){
+                const t = String(seg||'').trim(); if (!t) return;
+                const am = t.match(/^acompanhamentos?\s*:\s*(.*)$/i);
+                if (am) {
+                    am[1].split(/\s*,\s*/).forEach(function(n){ const v = String(n).trim().replace(/^\+/,'').trim(); if (v) acompNames.push(v); });
+                    return;
+                }
+                if (/^sem\s+acompanhamento$/i.test(t)) return;
+                variantParts.push(t);
+            });
+        }
+        const variantRow = variantParts.length
+            ? `<tr><td colspan="3" style="font-size:10px;padding:0 0 1px;font-weight:900;white-space:normal;overflow-wrap:break-word">(${variantParts.join(' - ')})</td></tr>`
             : '';
-        // Variacoes do produto (tamanho, na chapa, acompanhamentos) vao em linha propria,
-        // para o nome do item ocupar a largura toda do papel e nada ser cortado na impressao.
-        let variantText = '';
-        const vm = baseName.match(/^(.*?)\s*\(([^()]*)\)\s*$/);
-        if (vm) { baseName = vm[1].trim(); variantText = vm[2].trim(); }
-        const variantRow = variantText
-            ? `<tr><td colspan="3" style="font-size:10px;padding:0 0 1px;font-weight:900;white-space:normal;overflow-wrap:break-word">(${variantText})</td></tr>`
+        const acompRow = acompNames.length
+            ? `<tr><td colspan="3" style="font-size:10px;padding:0 0 1px;font-weight:900;white-space:normal;overflow-wrap:break-word">(+${acompNames.join(', +')})</td></tr>`
             : '';
+        const addDesc = (addNames.length && !perLane)
+            ? `<tr><td colspan="3" style="font-size:10px;color:#000;padding:0 0 1px;font-weight:900;white-space:normal;overflow-wrap:break-word">(+${addNames.join(', +')})</td></tr>`
+            : '';
+        // Linha dos valores: unitario a esquerda e total a direita, sempre dentro da largura do papel
+        const priceRow = `<tr><td colspan="3" style="padding:1px 0 2px"><div style="display:flex;justify-content:space-between;align-items:baseline;font-size:10.5px;font-weight:900"><span style="white-space:nowrap">${fmtPrint(item.price)}</span><span style="white-space:nowrap">${fmtPrint(item.price*item.qty)}</span></div></td></tr>`;
         if (menuMatch) {
             // Combo: o nome em linha própria (não quebra mais com os preços) e os preços à direita logo abaixo
             return `<tr><td colspan="3" style="padding:4px 0 0;font-size:12px;font-weight:900;white-space:normal;overflow-wrap:break-word">${item.qty}x ${baseName}</td></tr>`
-                 + variantRow
-                 + `<tr><td colspan="3" style="text-align:right;padding:0 0 2px;font-size:10px;font-weight:900;white-space:nowrap">${fmtPrint(item.price)} · ${fmtPrint(item.price*item.qty)}</td></tr>`
-                 + comboLines + perLane + addDesc;
+                 + variantRow + acompRow + comboLines + perLane + addDesc + priceRow;
         }
         return `<tr><td colspan="3" style="padding:4px 0 0;font-size:12px;font-weight:900;white-space:normal;overflow-wrap:break-word">${item.qty}x ${baseName}</td></tr>`
-             + variantRow
-             + `<tr><td colspan="3" style="text-align:right;padding:0 0 2px;font-size:10px;font-weight:900;white-space:nowrap">${fmtPrint(item.price)} · ${fmtPrint(item.price*item.qty)}</td></tr>`
-             + `${comboLines}${perLane}${addDesc}`;
+             + variantRow + acompRow + comboLines + perLane + addDesc + priceRow;
     }).join('');
     const subtotal = data.subtotal ?? data.total; const delivery = data.deliveryTotal || 0; const discount = data.discountTotal || 0;
     const isDelivery = data.source === 'pub_menu' || !!data.address || !!data.phone;
@@ -3921,7 +3931,7 @@ function buildOSHtml(data, copyLabel) {
     const trocoBlockHtml = (data.troco > 0)
         ? `<div class="troco-box"><span class="troco-val">TROCO: ${fmtPrint(data.troco)}</span></div>`
         : (isCashPaymentPrint ? `<div class="troco-box"><span class="troco-val" style="font-size:12px">NÃO PRECISA DE TROCO</span></div>` : '');
-    const html = `<!DOCTYPE html><html lang="pt-BR"><head><meta charset="UTF-8"><title>OS ${data.orderNumber}</title><style>* { margin:0; padding:0; box-sizing:border-box; } html, body { width: 48mm; max-width: 48mm; } body { font-family: 'Courier New', Courier, monospace; font-size: 12px; color: #000; background: #fff; margin: 0 auto; padding: 1mm 0.6mm 1mm; line-height: 1.25; word-wrap: break-word; overflow-wrap: break-word; -webkit-print-color-adjust: exact; print-color-adjust: exact; } .center { text-align: center; } .right { text-align: right; } .bold { font-weight: 900; } .big { font-size: 15px; } .small { font-size: 10.5px; } .dashed { border-top: 1px dashed #000; margin: 3px 0; } .solid { border-top: 2px solid #000; margin: 3px 0; } table { width: 100%; border-collapse: collapse; table-layout: auto; } td { vertical-align: top; font-size: 11.5px; font-weight: 900; overflow-wrap: break-word; } .row-total td { font-size: 15px; font-weight: 900; } .row-delivery td { color: #000; font-weight: 900; } .troco-box { border: 2px dashed #000; padding: 6px 6px; margin-top: 5px; text-align: center; background: #fff; } .info-row { font-size: 11.5px; margin: 2px 0; font-weight: 900; overflow-wrap: break-word; } .online-badge { background: #fff; color: #000; border: 2px solid #000; padding: 4px 6px; font-size: 13px; font-weight: 900; display: inline-block; margin-bottom: 5px; letter-spacing: .5px; } .company-info { font-size: 10.5px; font-weight: 900; margin: 2px 0; overflow-wrap: break-word; } .date-time { font-size: 12px; font-weight: 900; margin: 3px 0; } .pay-section { font-size: 14px; font-weight: 900; margin: 4px 0; color: #000; overflow-wrap: break-word; } .pay-label { font-size: 14px; font-weight: 900; } .troco-val { font-size: 16px; font-weight: 900; } @media print { html, body { width: 48mm !important; max-width: 48mm !important; margin: 0; } @page { size: 58mm auto; margin: 0; } .no-print, .print-btn, button { display: none !important; } } .print-btn { display: block; width: 100%; margin-top: 10px; padding: 10px; background: #000; color: #fff; border: none; font-size: 14px; font-weight: 900; cursor: pointer; } </style></head><body>${copyLabelHtml}${logoUrl ? `<div class="center" style="margin-bottom:5px"><img src="${String(logoUrl).replace(/"/g,'&quot;')}" style="max-width:46mm;max-height:12mm;object-fit:contain" onerror="this.style.display='none'"></div>` : ''}<div class="center bold big" style="font-size:15px">${c.companyName||'ESTABELECIMENTO'}</div>${c.cnpj ? `<div class="company-info"><span style="font-size:9.5px">CNPJ:</span> ${c.cnpj}</div>` : ''}${c.address ? `<div class="company-info">${c.address}</div>` : ''}${c.phone ? `<div class="company-info">Tel: ${c.phone}</div>` : ''}<div class="solid"></div><div class="center bold date-time" style="font-size:13.5px">${data.orderNumber}</div><div class="center date-time" style="font-size:12px">${dateStr} ${timeStr}</div><div class="dashed"></div>${customerName ? `<div class="info-row"><span class="bold">Cliente:</span> ${customerName}</div>` : ''}${deliveryInfoBlock}<div class="dashed"></div><div class="bold" style="margin-bottom:3px;font-size:13.5px">ITENS DO PEDIDO</div><table><thead><tr><td class="bold" style="font-size:11px">Produto</td><td class="bold right" style="font-size:9.5px">Unit. · Total</td></tr></thead><tbody>${itemsRows}</tbody></table><div class="dashed"></div><table><tr><td class="bold" style="font-size:13px">Subtotal:</td><td class="right" style="font-size:13px;white-space:nowrap">${fmtPrint(subtotal)}</td></tr>${discount > 0 ? `<tr class="row-delivery"><td style="font-size:11px"><i>Desconto${data.couponCode?' ('+data.couponCode+')':''}:</i></td><td class="right" style="font-size:11px;white-space:nowrap"><i>- ${fmtPrint(discount)}</i></td></tr>` : ''}${delivery > 0 ? `<tr class="row-delivery"><td style="font-size:10.5px"><i>Taxa de Entrega:</i></td><td class="right" style="font-size:10.5px;white-space:nowrap"><i>${fmtPrint(delivery)}</i></td></tr>` : ''}<tr class="row-total"><td class="bold">TOTAL:</td><td class="right" style="white-space:nowrap">${fmtPrint(data.total)}</td></tr></table><div class="dashed"></div><div class="pay-section"><span class="pay-label">Pagamento:</span> ${payNames[data.paymentMethod]||data.paymentMethod}</div>${data.valorPago && data.valorPago > data.total ? `<div class="pay-section"><span class="pay-label">Recebido:</span> ${fmtPrint(data.valorPago)}</div>` : ''}${trocoBlockHtml}<div class="solid"></div><div class="center bold" style="margin-top:3px;font-size:13px">Obrigado pela preferência!</div><div class="center small" style="margin-top:1px;font-size:12px;font-weight:900">Gestão Fácil</div><button class="print-btn no-print" onclick="window.print()">🖨️ IMPRIMIR</button><script>var __osPrinted=false;function __osDoPrint(){if(__osPrinted)return;__osPrinted=true;try{window.focus();}catch(e){}setTimeout(function(){try{window.print();}catch(e){}},150);}window.addEventListener('load',function(){setTimeout(__osDoPrint,400);});setTimeout(function(){var ims=document.querySelectorAll('img');for(var i=0;i<ims.length;i++){ims[i].style.display='none';}},2000);setTimeout(__osDoPrint,2600);<\/script></body></html>`;
+    const html = `<!DOCTYPE html><html lang="pt-BR"><head><meta charset="UTF-8"><title>OS ${data.orderNumber}</title><style>* { margin:0; padding:0; box-sizing:border-box; } html, body { width: 48mm; max-width: 48mm; } body { font-family: 'Courier New', Courier, monospace; font-size: 12px; color: #000; background: #fff; margin: 0 auto; padding: 1mm 0.6mm 1mm; line-height: 1.25; word-wrap: break-word; overflow-wrap: break-word; -webkit-print-color-adjust: exact; print-color-adjust: exact; } .center { text-align: center; } .right { text-align: right; } .bold { font-weight: 900; } .big { font-size: 15px; } .small { font-size: 10.5px; } .dashed { border-top: 1px dashed #000; margin: 3px 0; } .solid { border-top: 2px solid #000; margin: 3px 0; } table { width: 100%; border-collapse: collapse; table-layout: auto; } td { vertical-align: top; font-size: 11.5px; font-weight: 900; overflow-wrap: break-word; } .row-total td { font-size: 15px; font-weight: 900; } .row-delivery td { color: #000; font-weight: 900; } .troco-box { border: 2px dashed #000; padding: 6px 6px; margin-top: 5px; text-align: center; background: #fff; } .info-row { font-size: 11.5px; margin: 2px 0; font-weight: 900; overflow-wrap: break-word; } .online-badge { background: #fff; color: #000; border: 2px solid #000; padding: 4px 6px; font-size: 13px; font-weight: 900; display: inline-block; margin-bottom: 5px; letter-spacing: .5px; } .company-info { font-size: 10.5px; font-weight: 900; margin: 2px 0; overflow-wrap: break-word; } .date-time { font-size: 12px; font-weight: 900; margin: 3px 0; } .pay-section { font-size: 14px; font-weight: 900; margin: 4px 0; color: #000; overflow-wrap: break-word; } .pay-label { font-size: 14px; font-weight: 900; } .troco-val { font-size: 16px; font-weight: 900; } @media print { html, body { width: 48mm !important; max-width: 48mm !important; margin: 0; } @page { size: 58mm auto; margin: 0; } .no-print, .print-btn, button { display: none !important; } } .print-btn { display: block; width: 100%; margin-top: 10px; padding: 10px; background: #000; color: #fff; border: none; font-size: 14px; font-weight: 900; cursor: pointer; } </style></head><body>${copyLabelHtml}${logoUrl ? `<div class="center" style="margin-bottom:5px"><img src="${String(logoUrl).replace(/"/g,'&quot;')}" style="max-width:46mm;max-height:12mm;object-fit:contain" onerror="this.style.display='none'"></div>` : ''}<div class="center bold big" style="font-size:15px">${c.companyName||'ESTABELECIMENTO'}</div>${c.cnpj ? `<div class="company-info"><span style="font-size:9.5px">CNPJ:</span> ${c.cnpj}</div>` : ''}${c.address ? `<div class="company-info">${c.address}</div>` : ''}${c.phone ? `<div class="company-info">Tel: ${c.phone}</div>` : ''}<div class="solid"></div><div class="center bold date-time" style="font-size:13.5px">${data.orderNumber}</div><div class="center date-time" style="font-size:12px">${dateStr} ${timeStr}</div><div class="dashed"></div>${customerName ? `<div class="info-row"><span class="bold">Cliente:</span> ${customerName}</div>` : ''}${deliveryInfoBlock}<div class="dashed"></div><div class="bold" style="margin-bottom:3px;font-size:13.5px">ITENS DO PEDIDO</div><table><thead><tr><td colspan="3" style="font-size:10.5px;font-weight:900"><div style="display:flex;justify-content:space-between"><span>Produto</span><span>Unit. · Total</span></div></td></tr></thead><tbody>${itemsRows}</tbody></table><div class="dashed"></div><table><tr><td class="bold" style="font-size:13px">Subtotal:</td><td class="right" style="font-size:13px;white-space:nowrap">${fmtPrint(subtotal)}</td></tr>${discount > 0 ? `<tr class="row-delivery"><td style="font-size:11px"><i>Desconto${data.couponCode?' ('+data.couponCode+')':''}:</i></td><td class="right" style="font-size:11px;white-space:nowrap"><i>- ${fmtPrint(discount)}</i></td></tr>` : ''}${delivery > 0 ? `<tr class="row-delivery"><td style="font-size:10.5px"><i>Taxa de Entrega:</i></td><td class="right" style="font-size:10.5px;white-space:nowrap"><i>${fmtPrint(delivery)}</i></td></tr>` : ''}<tr class="row-total"><td class="bold">TOTAL:</td><td class="right" style="white-space:nowrap">${fmtPrint(data.total)}</td></tr></table><div class="dashed"></div><div class="pay-section"><span class="pay-label">Pagamento:</span> ${payNames[data.paymentMethod]||data.paymentMethod}</div>${data.valorPago && data.valorPago > data.total ? `<div class="pay-section"><span class="pay-label">Recebido:</span> ${fmtPrint(data.valorPago)}</div>` : ''}${trocoBlockHtml}<div class="solid"></div><div class="center bold" style="margin-top:3px;font-size:13px">Obrigado pela preferência!</div><div class="center small" style="margin-top:1px;font-size:12px;font-weight:900">Gestão Fácil</div><button class="print-btn no-print" onclick="window.print()">🖨️ IMPRIMIR</button><script>var __osPrinted=false;function __osDoPrint(){if(__osPrinted)return;__osPrinted=true;try{window.focus();}catch(e){}setTimeout(function(){try{window.print();}catch(e){}},150);}window.addEventListener('load',function(){setTimeout(__osDoPrint,400);});setTimeout(function(){var ims=document.querySelectorAll('img');for(var i=0;i<ims.length;i++){ims[i].style.display='none';}},2000);setTimeout(__osDoPrint,2600);<\/script></body></html>`;
     return html;
 }
 function printOS(data) {
