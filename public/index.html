@@ -5821,6 +5821,74 @@ async function blockCategory(cat, mode) {
 // ============================================================
 // ORDERS
 // ============================================================
+/* Monta as linhas do item do pedido no MESMO formato da impressão da OS.
+   Ex.: 1x DOG FAMILIA
+        (+BATATA FRITA P, +BATATA FRITA M, +BATATA FRITA G)
+        1º HOT DOG MUSSARELA: +BACON, +SEM MOSTARDA
+        2º HOT DOG MUSSARELA: +SALSICHA, +SEM CORTAR NO MEIO */
+function orderItemDetailLines(item) {
+    let baseName = String((item && item.name) || (item && item.id) || 'Item').trim();
+    let addNames = [];
+    const match = baseName.match(/^(.+?)\s*\(\+(.+?)\)$/);
+    if (match) {
+        baseName = match[1].trim();
+        addNames = match[2].split(',').map(a => a.trim().replace(/^\+/,'').trim()).filter(Boolean);
+    }
+    if (item && item.additionals && item.additionals.length && !addNames.length) {
+        addNames = item.additionals.map(a => ((a.qty && a.qty > 1) ? a.qty+'x ' : '') + a.name).map(a => String(a).replace(/^\+/,'').trim()).filter(Boolean);
+    }
+    // IMPORTANTE: o nome precisa ficar limpo (sem o parenteses de variacoes/acompanhamentos)
+    // ANTES de procurar o combo, senao o combo nao e encontrado e os adicionais por lanche
+    // nao aparecem (sai tudo numa linha so).
+    let variantText = '';
+    const vm = baseName.match(/^(.*?)\s*\(([^()]*)\)\s*$/);
+    if (vm) { baseName = vm[1].trim(); variantText = vm[2].trim(); }
+    const variantParts = []; const acompNames = [];
+    if (variantText) {
+        variantText.split(/\s+-\s+/).forEach(function(seg){
+            const t = String(seg||'').trim(); if (!t) return;
+            const am = t.match(/^acompanhamentos?\s*:\s*(.*)$/i);
+            if (am) {
+                am[1].split(/\s*,\s*/).forEach(function(n){ const v = String(n).trim().replace(/^\+/,'').trim(); if (v) acompNames.push(v); });
+                return;
+            }
+            if (/^sem\s+acompanhamento$/i.test(t)) return;
+            variantParts.push(t);
+        });
+    }
+    const lines = [];
+    if (variantParts.length) lines.push('(' + variantParts.join(' - ') + ')');
+    if (acompNames.length) lines.push('(+' + acompNames.join(', +') + ')');
+    // Se for um combo, cada lanche em sua propria linha com os seus adicionais,
+    // na mesma ordem em que o cliente enviou o pedido.
+    const menuItemsAll = ((currentCompany && currentCompany.menuItems) || []);
+    const menuMatch = menuItemsAll.find(mi => (mi.name||'').trim() === baseName && mi.isCombo);
+    const laneArr = lanesArr(item && item.addPerLanes);
+    let perLane = false;
+    if (menuMatch && menuMatch.comboItems && menuMatch.comboItems.length) {
+        if (laneArr && laneArr.length) {
+            const lanesRows = (comboLanesData(item, menuItemsAll) || []);
+            if (lanesRows.length) {
+                perLane = true;
+                lanesRows.forEach(r => {
+                    if (r.type === 'drink') {
+                        lines.push(r.qty + 'x ' + r.name);
+                    } else {
+                        lines.push(r.num + 'º ' + r.name + ': ' + (r.adds.length ? r.adds.map(a => '+' + String(((a.qty && a.qty>1) ? a.qty+'x ' : '') + a.name).replace(/^\+/,'').trim()).join(', ') : 'SEM ADICIONAL'));
+                    }
+                });
+            }
+        } else {
+            perLane = true;
+            menuMatch.comboItems.forEach(ci => {
+                const cc = parseComboItem(ci);
+                if (cc && cc.name) lines.push((cc.qty||1) + 'x ' + cc.name);
+            });
+        }
+    }
+    if (!perLane && addNames.length) lines.push('(+' + addNames.join(', +') + ')');
+    return { baseName: baseName, lines: lines };
+}
 function renderOrdersFromData(orders) {
     const pending = orders.filter(o => o.orderStatus === 'novo').length;
     document.getElementById('nb-orders').textContent = pending;
@@ -5880,36 +5948,23 @@ function renderOrdersFromData(orders) {
         
         const paymentButton = '';
         
-        // Formatar itens com adicionais de forma limpa
+        // Formatar itens IGUAL À IMPRESSÃO DA OS: nome do item na 1ª linha e cada
+        // lanche do combo (com os adicionais de cada um) em sua própria linha,
+        // na mesma ordem em que o cliente enviou o pedido.
         const itemsHtml = o.items.map(i => {
-    let baseName = i.name;
-    let additionalsText = '';
-    const match = i.name.match(/^(.+?)\s*\(\+(.+?)\)$/);
-    if (match) {
-        baseName = match[1].trim();
-        additionalsText = '+' + match[2].split(',').map(a => a.trim()).join(', +');
-    }
-    if (i.additionals && i.additionals.length && !additionalsText) {
-        additionalsText = i.additionals.map(a => '+' + ((a.qty&&a.qty>1)? a.qty+'x ' : '') + a.name).join(', ');
-    }
-    const comboMatch2 = ((currentCompany && currentCompany.menuItems) || []).find(mi => (mi.name||'').trim() === baseName && mi.isCombo);
-    let perLaneText = '';
-    const lanesArrI = lanesArr(i.addPerLanes);
-    if (comboMatch2 && lanesArrI && lanesArrI.length) {
-        const lanes2 = comboLancheList(comboMatch2, ((currentCompany && currentCompany.menuItems) || []));
-        perLaneText = lanesArrI.map((nl, k) => {
-            const l2 = lanes2[k] || { name: '' };
-            const txt = nl.length ? nl.map(a => ((a.qty&&a.qty>1)? a.qty+'x ' : '') + a.name).join(', + ') : 'sem adicional';
-            return `${k+1}º ${l2.name}: ${txt}`;
-        }).join('<br>');
-    }
+    const det = orderItemDetailLines(i);
+    const detailHtml = det.lines.length
+        ? det.lines.map(l => `<div style="font-size:12px;color:#555;margin-top:3px;font-weight:700;overflow-wrap:break-word">${escHtml(l)}</div>`).join('')
+        : '';
     return `
     <div style="margin-bottom:8px;padding-bottom:8px;border-bottom:1px solid #f1f5f9">
-        <div style="display:flex;justify-content:space-between;align-items:center">
-            <span style="font-weight:900;font-size:14px">${i.qty}x ${baseName}</span>
-            <span style="font-weight:700">${fmt(i.price * i.qty)}</span>
+        <div style="display:flex;justify-content:space-between;align-items:flex-start;gap:10px">
+            <div style="flex:1;min-width:0">
+                <div style="font-weight:900;font-size:14px">${i.qty}x ${escHtml(det.baseName)}</div>
+                ${detailHtml}
+            </div>
+            <span style="font-weight:700;white-space:nowrap">${fmt(i.price * i.qty)}</span>
         </div>
-        ${perLaneText ? `<div style="font-size:12px;color:#555;margin-top:4px;font-weight:700">${perLaneText}</div>` : (additionalsText ? `<div style="font-size:12px;color:#555;margin-top:4px;font-weight:700">${additionalsText}</div>` : '')}
     </div>`;
 }).join('');
         
