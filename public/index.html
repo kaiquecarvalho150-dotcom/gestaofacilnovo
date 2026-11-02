@@ -3233,36 +3233,57 @@ function acompMaxCount(product) { return Math.max(0, parseInt(product && product
 function acompHintText(product) {
     if (!acompIsMulti(product)) return 'Escolha 1 acompanhamento';
     const max = acompMaxCount(product);
-    return max > 0 ? ('Escolha até ' + max + (max>1 ? ' acompanhamentos' : ' acompanhamento')) : 'Pode escolher vários acompanhamentos';
+    return max > 0 ? ('Escolha até ' + max + (max>1 ? ' acompanhamentos' : ' acompanhamento') + ' (pode repetir o mesmo)') : 'Pode escolher vários acompanhamentos';
 }
-function acompLimitBlocked(product, willSelect) {
-    if (!product || !acompIsMulti(product)) return false;
-    const max = acompMaxCount(product);
-    if (max <= 0) return false;
-    return willSelect && document.querySelectorAll('.var-acomp-check:checked').length >= max;
+/* Soma das quantidades escolhidas (o limite do lojista conta unidades, não opções) */
+function acompQtyTotal() {
+    return [...document.querySelectorAll('.var-acomp-qty')].reduce((t, el) => t + (parseInt(el.dataset.qty) || 0), 0);
 }
+/* Habilita/desabilita os botões conforme o limite e a forma de escolha */
 function atualizarTravasAcomp() {
-    // Desabilita as opções quando o limite de acompanhamentos já foi atingido
-    const prod = __activeVariantProduct;
-    const multi = !prod || acompIsMulti(prod);
-    const max = prod ? acompMaxCount(prod) : 0;
-    const ativos = document.querySelectorAll('.var-acomp-check:checked').length;
-    document.querySelectorAll('.var-acomp-check').forEach(el => {
-        el.disabled = (multi && max > 0 && !el.checked && ativos >= max);
-        el.parentElement.parentElement.style.opacity = el.disabled ? '.45' : '';
+    const list = document.getElementById('var-acomp-list');
+    const multi = list ? (list.dataset.multi === '1') : true;
+    const max = list ? (parseInt(list.dataset.max) || 0) : 0;
+    const total = acompQtyTotal();
+    document.querySelectorAll('.acomp-row').forEach(row => {
+        const qtyEl = row.querySelector('.var-acomp-qty');
+        const cur = parseInt(qtyEl && qtyEl.dataset.qty) || 0;
+        const plus = row.querySelector('.acomp-plus');
+        const minus = row.querySelector('.acomp-minus');
+        const bloqueado = multi
+            ? (max > 0 && total >= max && cur === 0)
+            : (cur === 0 && total > 0);
+        if (plus) { plus.disabled = bloqueado; plus.style.opacity = bloqueado ? '.35' : '1'; plus.style.cursor = bloqueado ? 'not-allowed' : 'pointer'; }
+        if (minus) { minus.disabled = cur <= 0; minus.style.opacity = cur <= 0 ? '.35' : '1'; minus.style.cursor = cur <= 0 ? 'not-allowed' : 'pointer'; }
+        row.style.opacity = (bloqueado && cur === 0) ? '.55' : '';
     });
+    const cnt = document.getElementById('var-acomp-count');
+    if (cnt) cnt.textContent = max > 0 ? (total + ' de ' + max) : String(total);
 }
-function onAcompCheckChange(el) {
-    const multi = el.dataset.multi === '1';
-    const max = parseInt(el.dataset.max) || 0;
-    if (!multi) {
-        if (el.checked) document.querySelectorAll('.var-acomp-check').forEach(c => { if (c !== el) c.checked = false; });
-    } else if (max > 0) {
-        const ativos = document.querySelectorAll('.var-acomp-check:checked').length;
-        if (el.checked && ativos > max) {
-            el.checked = false;
-            showToast(`Você pode escolher no máximo ${max} acompanhamento${max>1?'s':''}`, 'warning');
+/* + / - de um acompanhamento: respeita escolha única e o limite total */
+function acompStep(btn, delta) {
+    const row = btn.closest('.acomp-row');
+    if (!row) return;
+    const qtyEl = row.querySelector('.var-acomp-qty');
+    const list = document.getElementById('var-acomp-list');
+    const multi = list ? (list.dataset.multi === '1') : true;
+    const max = list ? (parseInt(list.dataset.max) || 0) : 0;
+    let cur = parseInt(qtyEl.dataset.qty) || 0;
+    if (delta > 0) {
+        if (!multi) {
+            // escolha única: só 1 no total, e é sempre o último clicado
+            document.querySelectorAll('.var-acomp-qty').forEach(el => { el.dataset.qty = 0; el.textContent = '0'; });
+            qtyEl.dataset.qty = 1; qtyEl.textContent = '1';
+        } else {
+            if (max > 0 && acompQtyTotal() >= max) {
+                showToast('Limite de ' + max + ' acompanhamento' + (max>1?'s':'') + ' atingido', 'warning');
+                return;
+            }
+            qtyEl.dataset.qty = cur + 1; qtyEl.textContent = String(cur + 1);
         }
+    } else {
+        if (cur <= 0) return;
+        qtyEl.dataset.qty = cur - 1; qtyEl.textContent = String(cur - 1);
     }
     atualizarTravasAcomp();
     refreshVariantPrice();
@@ -3272,13 +3293,21 @@ function acompanhamentoRadiosHtml(product) {
     const opts = normAcompOptions(product);
     const multi = acompIsMulti(product);
     const max = acompMaxCount(product);
-    const rows = opts.map((a, i) => `<label style="display:flex;align-items:center;justify-content:space-between;padding:8px 0;border-bottom:1px solid #f1f5f9;cursor:pointer"><span style="display:flex;align-items:center;gap:10px;font-weight:600"><input type="checkbox" class="var-acomp-check" data-name="${escHtml(a.name).replace(/"/g,'&quot;')}" data-price="${a.price}" data-multi="${multi?1:0}" data-max="${max}" onchange="onAcompCheckChange(this)" style="width:17px;height:17px;cursor:pointer">${escHtml(a.name)}</span><span style="color:${a.price>0?'var(--primary)':'var(--gray)'};font-weight:700;white-space:nowrap">${a.price>0?('+ '+fmt(a.price)):'Grátis'}</span></label>`).join('');
+    const rows = opts.map((a, i) => `<div class="acomp-row" data-name="${escHtml(a.name).replace(/"/g,'&quot;')}" data-price="${a.price}" style="display:flex;align-items:center;justify-content:space-between;gap:8px;padding:7px 0;border-bottom:1px solid #f1f5f9">
+        <span style="font-weight:600;flex:1;min-width:0">${escHtml(a.name)}</span>
+        <span style="color:${a.price>0?'var(--primary)':'var(--gray)'};font-weight:700;white-space:nowrap;font-size:12px">${a.price>0?('+ '+fmt(a.price)):'Grátis'}</span>
+        <span style="display:inline-flex;align-items:center;gap:2px;border:1px solid var(--border);border-radius:8px;background:#fff;padding:1px">
+            <button type="button" class="acomp-minus" onclick="acompStep(this,-1)" style="width:24px;height:24px;border:none;background:transparent;font-size:15px;font-weight:900;line-height:1;cursor:pointer;color:var(--gray)">−</button>
+            <span class="var-acomp-qty" data-qty="0" style="min-width:18px;text-align:center;font-weight:900;font-size:13px">0</span>
+            <button type="button" class="acomp-plus" onclick="acompStep(this,1)" style="width:24px;height:24px;border:none;background:transparent;font-size:15px;font-weight:900;line-height:1;cursor:pointer;color:var(--primary)">+</button>
+        </span>
+    </div>`).join('');
     return `<div style="margin-bottom:14px;background:#f0fdf4;border:2px solid #bbf7d0;border-radius:10px;padding:12px">
         <div style="font-size:12px;font-weight:700;color:var(--gray);text-transform:uppercase;letter-spacing:.3px;margin-bottom:8px">Acompanhamentos <span style="font-weight:500;color:var(--gray);text-transform:none">(opcional)</span></div>
         <label style="display:flex;align-items:center;justify-content:space-between;padding:8px 0;border-bottom:1px solid #dcfce7;cursor:pointer"><span style="display:flex;align-items:center;gap:8px;font-weight:600"><input type="radio" name="var-acomp" value="0" checked class="var-acomp-radio" onchange="toggleAcompList()" style="width:16px;height:16px;cursor:pointer">Sem acompanhamento</span><span style="color:var(--gray)">Grátis</span></label>
         <label style="display:flex;align-items:center;justify-content:space-between;padding:8px 0;border-bottom:1px solid #dcfce7;cursor:pointer"><span style="display:flex;align-items:center;gap:8px;font-weight:600"><input type="radio" name="var-acomp" value="1" class="var-acomp-radio" onchange="toggleAcompList()" style="width:16px;height:16px;cursor:pointer">Com acompanhamento</span><span style="color:var(--primary);font-weight:700">escolha abaixo</span></label>
-        <div id="var-acomp-list" style="display:none;margin-top:8px;background:#fff;border:1px solid var(--border);border-radius:8px;padding:4px 10px">
-            <div style="font-size:11px;color:var(--gray);font-weight:700;text-transform:uppercase;padding:6px 0">${acompHintText(product)}</div>
+        <div id="var-acomp-list" data-multi="${multi?1:0}" data-max="${max}" style="display:none;margin-top:8px;background:#fff;border:1px solid var(--border);border-radius:8px;padding:4px 10px">
+            <div style="font-size:11px;color:var(--gray);font-weight:700;text-transform:uppercase;padding:6px 0;display:flex;justify-content:space-between;gap:8px"><span>${acompHintText(product)}</span><span id="var-acomp-count" style="color:var(--primary);white-space:nowrap">0</span></div>
             ${rows}
         </div>
     </div>`;
@@ -3287,14 +3316,18 @@ function toggleAcompList() {
     const on = document.querySelector('.var-acomp-radio:checked')?.value === '1';
     const list = document.getElementById('var-acomp-list');
     if (list) list.style.display = on ? 'block' : 'none';
-    if (!on) document.querySelectorAll('.var-acomp-check').forEach(c => { c.checked = false; });
+    if (!on) document.querySelectorAll('.var-acomp-qty').forEach(el => { el.dataset.qty = 0; el.textContent = '0'; });
     atualizarTravasAcomp();
     refreshVariantPrice();
 }
 function getSelectedAcomp() {
     const on = document.querySelector('.var-acomp-radio:checked')?.value === '1';
     if (!on) return [];
-    return [...document.querySelectorAll('.var-acomp-check:checked')].map(el => ({ name: el.dataset.name, price: parseFloat(el.dataset.price) || 0 }));
+    return [...document.querySelectorAll('.acomp-row')].map(row => {
+        const q = parseInt(row.querySelector('.var-acomp-qty')?.dataset.qty) || 0;
+        if (q <= 0) return null;
+        return { name: row.dataset.name, price: parseFloat(row.dataset.price) || 0, qty: q };
+    }).filter(Boolean);
 }
 let __activeVariantProduct = null;
 function variantPickerHtml(product, presetFlavorIdx) {
@@ -3405,7 +3438,7 @@ function getSelectedVariantInfo(product) {
     const chapaOn = hasChapa && chapaIdx===1;
     const chapaPrice = chapaOn ? (parseFloat(product.chapaPrice)||0) : 0;
     const acompSel = getSelectedAcomp();
-    const acompPrice = acompSel.reduce((s,a)=> s + (parseFloat(a.price)||0), 0);
+    const acompPrice = acompSel.reduce((s,a)=> s + (parseFloat(a.price)||0) * (parseInt(a.qty)||1), 0);
     const hasAcomp = productHasAcomp(product);
     const price = (size?.price??product.price) + (borda?.price||0) + chapaPrice + acompPrice;
     const labelParts = [];
@@ -3413,8 +3446,8 @@ function getSelectedVariantInfo(product) {
     if (flavorName && flavorSelectVisible) labelParts.push(flavorName);
     if (borda) labelParts.push('Borda de '+borda.name); else if (hasBorda) labelParts.push('Sem borda');
     if (hasChapa) labelParts.push(chapaOn ? 'Na chapa' : 'Sem chapa');
-    if (hasAcomp) labelParts.push(acompSel.length ? ('Acompanhamento: ' + acompSel.map(a=>a.name).join(', ')) : 'Sem acompanhamento');
-    return { price, label: labelParts.join(' - '), sizeName: size?.name||'', bordaName: borda?borda.name:(hasBorda?'Sem borda':''), flavor: flavorName, chapa: chapaOn ? 'chapa' : '', acomp: acompSel.map(a=>a.name).sort().join(', '), acompList: acompSel };
+    if (hasAcomp) labelParts.push(acompSel.length ? ('Acompanhamento: ' + acompSel.map(a=>((parseInt(a.qty)||1)>1 ? (parseInt(a.qty)||1)+'x ' : '')+a.name).join(', ')) : 'Sem acompanhamento');
+    return { price, label: labelParts.join(' - '), sizeName: size?.name||'', bordaName: borda?borda.name:(hasBorda?'Sem borda':''), flavor: flavorName, chapa: chapaOn ? 'chapa' : '', acomp: acompSel.map(a=>((parseInt(a.qty)||1)>1 ? (parseInt(a.qty)||1)+'x ' : '')+a.name).sort().join(', '), acompList: acompSel };
 }
 function getInitialVariantPrice(product, presetFlavorIdx) {
     const flavors = normFlavors(product.flavors);
@@ -3621,7 +3654,7 @@ function confirmAddToCartWithAdditionals(itemId, basePrice) {
     const selected = selColl.additionals;
     const addPerLanes = firestoreSafeLanes(selColl.addPerLanes);
     const addPrice = selected.filter(a=>!a.isFree).reduce((s,a)=>s+a.price*(a.qty||1), 0);
-    if (productHasAcomp(product) && document.querySelector('.var-acomp-radio:checked')?.value === '1' && !document.querySelectorAll('.var-acomp-check:checked').length) { showToast('Escolha ao menos um acompanhamento ou selecione "Sem acompanhamento"','warning'); return; }
+    if (productHasAcomp(product) && document.querySelector('.var-acomp-radio:checked')?.value === '1' && (acompQtyTotal() === 0)) { showToast('Escolha ao menos um acompanhamento ou selecione "Sem acompanhamento"','warning'); return; }
     const variantInfo = productHasVariants(product) ? getSelectedVariantInfo(product) : { price: basePrice, label:'' };
     const totalPrice = variantInfo.price + addPrice;
     const nameParts = [product.name];
@@ -5554,9 +5587,9 @@ function variantOptionsEditorHtml(prefix, item) {
                 <label style="display:flex;align-items:flex-start;gap:10px;cursor:pointer;margin-bottom:8px"><input type="radio" name="${prefix}-acomp-multi" value="no" ${!acompMulti?'checked':''} onchange="toggleAcompMulti('${prefix}',false)" style="width:18px;height:18px;cursor:pointer;margin-top:2px"><div><div style="font-weight:700;color:var(--dark)">Não é múltipla escolha (escolha única)</div><div style="font-size:11px;color:var(--gray)">O cliente marca 1 acompanhamento. Ao marcar outro, o anterior é desmarcado automaticamente.</div></div></label>
                 <label style="display:flex;align-items:flex-start;gap:10px;cursor:pointer"><input type="radio" name="${prefix}-acomp-multi" value="yes" ${acompMulti?'checked':''} onchange="toggleAcompMulti('${prefix}',true)" style="width:18px;height:18px;cursor:pointer;margin-top:2px"><div><div style="font-weight:700;color:var(--dark)">Sim, é múltipla escolha</div><div style="font-size:11px;color:var(--gray)">O cliente pode marcar vários acompanhamentos (respeitando o limite abaixo).</div></div></label>
                 <div id="${prefix}-acomp-max-wrap" style="${acompMulti?'':'display:none'};margin-top:10px">
-                    <label>Quantos acompanhamentos o cliente pode marcar no máximo</label>
+                    <label>Quantos acompanhamentos o cliente pode adicionar no máximo (somando as quantidades)</label>
                     <input type="number" id="${prefix}-acomp-max" class="form-control" min="0" step="1" value="${acompMax>0?acompMax:''}" placeholder="Ex: 2 — deixe 0 ou vazio para sem limite" style="margin-top:6px">
-                    <p style="font-size:11px;color:var(--gray);margin-top:4px">0 ou vazio = sem limite de acompanhamentos.</p>
+                    <p style="font-size:11px;color:var(--gray);margin-top:4px">Ex.: limite 3 → o cliente pode levar 3 BATATA G, ou 2 BATATA G + 1 BATATA P, ou 1 de cada, sempre somando 3 no máximo. 0 ou vazio = sem limite.</p>
                 </div>
             </div>
             <div style="margin-top:12px;border-top:1px dashed var(--border);padding-top:10px">
@@ -8147,7 +8180,7 @@ const selColl = collectSelectedAdditionals('.pub-add-check', pubLanches);
 const selected = selColl.additionals;
 const addPerLanes = firestoreSafeLanes(selColl.addPerLanes);
 const addPrice = selected.filter(a=>!a.isFree).reduce((s, a) => s + a.price * (a.qty||1), 0);
-if (productHasAcomp(p) && document.querySelector('.var-acomp-radio:checked')?.value === '1' && !document.querySelectorAll('.var-acomp-check:checked').length) { showToast('Escolha ao menos um acompanhamento ou selecione "Sem acompanhamento"','warning'); return; }
+if (productHasAcomp(p) && document.querySelector('.var-acomp-radio:checked')?.value === '1' && (acompQtyTotal() === 0)) { showToast('Escolha ao menos um acompanhamento ou selecione "Sem acompanhamento"','warning'); return; }
 const variantInfo = productHasVariants(p) ? getSelectedVariantInfo(p) : { price: basePrice, label:'' };
 const nameParts = [p.name];
 if (variantInfo.label) nameParts.push(`(${variantInfo.label})`);
