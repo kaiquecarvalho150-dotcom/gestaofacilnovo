@@ -3557,6 +3557,9 @@ function comboLanesData(item, menuItems) {
     let baseName = item.name;
     const m = baseName.match(/^(.+?)\s*\(\+(.+?)\)$/);
     if (m) baseName = m[1].trim();
+    // remove o parenteses de variacoes/acompanhamentos: "DOG FAMILIA (Acompanhamento: 3x BATATA P)"
+    const mv = baseName.match(/^(.*?)\s*\(([^()]*)\)\s*$/);
+    if (mv) baseName = mv[1].trim();
     const combo = (menuItems || []).find(mi => (mi.name || '').trim() === baseName && mi.isCombo);
     const laneArr = lanesArr(item.addPerLanes);
     if (!combo || !combo.comboItems || !combo.comboItems.length || !(laneArr && laneArr.length)) return null;
@@ -3898,27 +3901,12 @@ function buildOSHtml(data, copyLabel) {
         if (item.additionals && item.additionals.length && !addNames.length) {
             addNames = item.additionals.map(a => ((a.qty&&a.qty>1)? a.qty+'x ' : '') + a.name).map(a => String(a).replace(/^\+/,'').trim()).filter(Boolean);
         }
-        // Se for um combo, mostra igual à tela: cada lanche em sua própria linha com os seus adicionais
-        // (1º X Tudo: Bacon, +Mussarela, +Sem Presunto / 2º X Tudo: Calabresa, +Mussarela, +Sem Mostarda, +Sem Milho)
-        let comboLines = '';
-        let perLane = '';
-        const menuMatch = ((currentCompany && currentCompany.menuItems) || []).find(mi => (mi.name||'').trim() === baseName && mi.isCombo);
-        const laneArr = lanesArr(item.addPerLanes);
-        if (menuMatch && menuMatch.comboItems && menuMatch.comboItems.length) {
-            if (laneArr && laneArr.length) {
-                perLane = (comboLanesData(item, ((currentCompany && currentCompany.menuItems) || [])) || []).map(r => r.type === 'drink'
-                    ? `<tr><td colspan="3" style="padding:0 4px;font-size:11.5px;color:#000;font-weight:900">${r.qty}x ${escHtml(r.name)}</td></tr>`
-                    : `<tr><td colspan="3" style="padding:0 4px;font-size:11.5px;color:#000;font-weight:900">${r.num}º ${escHtml(r.name)}: ${r.adds.length ? r.adds.map(a => ((a.qty&&a.qty>1)? a.qty+'x ' : '') + a.name).join(', + ') : 'sem adicional'}</td></tr>`
-                ).join('');
-            } else {
-                comboLines = menuMatch.comboItems.map(ci => {
-                    const cc = parseComboItem(ci);
-                    return (cc && cc.name) ? `<tr><td colspan="3" style="padding:0 4px;font-size:11.5px;color:#000;font-weight:900">${cc.qty}x ${escHtml(cc.name)}</td></tr>` : '';
-                }).join('');
-            }
-        }
-        // Sem a etiqueta "Acompanhamento:": imprime so o que o cliente escolheu, ex.: (+BATATA FRITA G)
-        const variantText = (function(){ const vm = baseName.match(/^(.*?)\s*\(([^()]*)\)\s*$/); if (vm) { baseName = vm[1].trim(); return vm[2].trim(); } return ''; })();
+        // IMPORTANTE: o nome precisa ficar limpo (sem o parenteses de variacoes/acompanhamentos)
+        // ANTES de procurar o combo, senao o combo nao e encontrado e os adicionais por lanche
+        // nao aparecem (sai tudo numa linha so).
+        let variantText = '';
+        const vm = baseName.match(/^(.*?)\s*\(([^()]*)\)\s*$/);
+        if (vm) { baseName = vm[1].trim(); variantText = vm[2].trim(); }
         const variantParts = []; const acompNames = [];
         if (variantText) {
             variantText.split(/\s+-\s+/).forEach(function(seg){
@@ -3932,23 +3920,40 @@ function buildOSHtml(data, copyLabel) {
                 variantParts.push(t);
             });
         }
+        // Linhas de variacao e de acompanhamentos (ex.: (NA CHAPA) / (+3 BATATA FRITA P))
         const variantRow = variantParts.length
-            ? `<tr><td colspan="3" style="font-size:11px;padding:0 0 1px;font-weight:900;white-space:normal;overflow-wrap:break-word">(${variantParts.join(' - ')})</td></tr>`
+            ? `<tr><td colspan="3" style="font-size:10px;padding:0 0 1px;font-weight:900;white-space:normal;overflow-wrap:break-word">(${variantParts.join(' - ')})</td></tr>`
             : '';
         const acompRow = acompNames.length
-            ? `<tr><td colspan="3" style="font-size:11px;padding:0 0 1px;font-weight:900;white-space:normal;overflow-wrap:break-word">(+${acompNames.join(', +')})</td></tr>`
+            ? `<tr><td colspan="3" style="font-size:10px;padding:0 0 1px;font-weight:900;white-space:normal;overflow-wrap:break-word">(+${acompNames.join(', +')})</td></tr>`
             : '';
+        // Se for um combo, mostra igual à tela: cada lanche em sua própria linha com os seus adicionais
+        // (1º HOT DOG: +BACON / 2º HOT DOG: +CALABRESA, +HAMBURGUER / 3º HOT DOG: SEM ADICIONAL)
+        let comboLines = '';
+        let perLane = '';
+        const menuItemsAll = ((currentCompany && currentCompany.menuItems) || []);
+        const menuMatch = menuItemsAll.find(mi => (mi.name||'').trim() === baseName && mi.isCombo);
+        const laneArr = lanesArr(item.addPerLanes);
+        if (menuMatch && menuMatch.comboItems && menuMatch.comboItems.length) {
+            if (laneArr && laneArr.length) {
+                const lanesRows = (comboLanesData(item, menuItemsAll) || []);
+                perLane = lanesRows.map(r => r.type === 'drink'
+                    ? `<tr><td colspan="3" style="padding:0 4px;font-size:10.5px;color:#000;font-weight:900">${r.qty}x ${escHtml(r.name)}</td></tr>`
+                    : `<tr><td colspan="3" style="padding:0 4px;font-size:10.5px;color:#000;font-weight:900">${r.num}º ${escHtml(r.name)}: ${r.adds.length ? r.adds.map(a => '+' + String(((a.qty&&a.qty>1)? a.qty+'x ' : '') + a.name).replace(/^\+/,'').trim()).join(', ') : 'SEM ADICIONAL'}</td></tr>`
+                ).join('');
+            } else {
+                comboLines = menuMatch.comboItems.map(ci => {
+                    const cc = parseComboItem(ci);
+                    return (cc && cc.name) ? `<tr><td colspan="3" style="padding:0 4px;font-size:10.5px;color:#000;font-weight:900">${cc.qty}x ${escHtml(cc.name)}</td></tr>` : '';
+                }).join('');
+            }
+        }
         const addDesc = (addNames.length && !perLane)
-            ? `<tr><td colspan="3" style="font-size:11px;color:#000;padding:0 0 1px;font-weight:900;white-space:normal;overflow-wrap:break-word">(+${addNames.join(', +')})</td></tr>`
+            ? `<tr><td colspan="3" style="font-size:10px;color:#000;padding:0 0 1px;font-weight:900;white-space:normal;overflow-wrap:break-word">(+${addNames.join(', +')})</td></tr>`
             : '';
         // Linha dos valores: unitario a esquerda e total a direita, sempre dentro da largura do papel
-        const priceRow = `<tr><td colspan="3" style="padding:1px 0 2px"><div style="display:flex;justify-content:space-between;align-items:baseline;font-size:11.5px;font-weight:900"><span style="white-space:nowrap">${fmtPrint(item.price)}</span><span style="white-space:nowrap">${fmtPrint(item.price*item.qty)}</span></div></td></tr>`;
-        if (menuMatch) {
-            // Combo: o nome em linha própria (não quebra mais com os preços) e os preços à direita logo abaixo
-            return `<tr><td colspan="3" style="padding:4px 0 0;font-size:13px;font-weight:900;white-space:normal;overflow-wrap:break-word">${item.qty}x ${baseName}</td></tr>`
-                 + variantRow + acompRow + comboLines + perLane + addDesc + priceRow;
-        }
-        return `<tr><td colspan="3" style="padding:4px 0 0;font-size:13px;font-weight:900;white-space:normal;overflow-wrap:break-word">${item.qty}x ${baseName}</td></tr>`
+        const priceRow = `<tr><td colspan="3" style="padding:1px 0 2px"><div style="display:flex;justify-content:space-between;align-items:baseline;font-size:10.5px;font-weight:900"><span style="white-space:nowrap">${fmtPrint(item.price)}</span><span style="white-space:nowrap">${fmtPrint(item.price*item.qty)}</span></div></td></tr>`;
+        return `<tr><td colspan="3" style="padding:4px 0 0;font-size:12px;font-weight:900;white-space:normal;overflow-wrap:break-word">${item.qty}x ${baseName}</td></tr>`
              + variantRow + acompRow + comboLines + perLane + addDesc + priceRow;
     }).join('');
     const subtotal = data.subtotal ?? data.total; const delivery = data.deliveryTotal || 0; const discount = data.discountTotal || 0;
