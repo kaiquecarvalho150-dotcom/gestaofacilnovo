@@ -980,6 +980,7 @@ table th,table td{padding:7px 8px;font-size:11px}
 <div class="menu-link-url"><span id="menu-link-text">Carregando...</span><button class="btn btn-sm" style="background:rgba(255,255,255,.2);color:#fff;flex-shrink:0" onclick="copyMenuLink()"><i class="fa-solid fa-copy"></i> Copiar</button></div>
 <button class="btn btn-sm" style="background:rgba(255,255,255,.2);color:#fff;margin-top:10px" onclick="showBusinessHoursModal()"><i class="fa-solid fa-clock"></i> Horário de Funcionamento</button>
 <button class="btn btn-sm" style="background:rgba(255,255,255,.2);color:#fff;margin-top:10px;margin-left:8px" onclick="showPubPixModal()"><i class="fa-brands fa-pix" style="color:#32bcad"></i> Configurar PIX</button>
+<button class="btn btn-sm" style="background:rgba(255,255,255,.2);color:#fff;margin-top:10px;margin-left:8px" onclick="showPubPhotosModal()"><i class="fa-solid fa-images"></i> Fotos do Cardápio <span id="pub-photos-state-btn" style="font-weight:900"></span></button>
 </div>
 </div>
 <div class="flex items-center justify-between mb-4 flex-wrap gap-3">
@@ -4273,6 +4274,49 @@ function showPubPixModal() {
     <div class="form-group"><label>Titular (opcional)</label><input type="text" id="px-owner" class="form-control" value="${pixOwner}" placeholder="Nome de quem recebe"></div>`,
     `<button class="btn btn-ghost" onclick="closeModal()">Cancelar</button><button class="btn btn-primary" onclick="savePubPix()"><i class="fa-solid fa-save"></i> Salvar PIX</button>`, false);
 }
+/* ============================================================
+   FOTOS DO CARDÁPIO ONLINE (por empresa)
+   Padrão: COM fotos. Cada empresa liga/desliga por si mesma.
+   Desligar apenas OCULTA as imagens no cardápio online — nenhuma
+   foto é apagada. Ao religar, as fotos que já existiam voltam.
+   ============================================================ */
+function pubShowPhotosEnabled(company) {
+    const c = company || currentCompany || {};
+    return c.pubShowPhotos !== false; // undefined/null = ligado (padrão com fotos)
+}
+function refreshPubPhotosStateBtn() {
+    const el = document.getElementById('pub-photos-state-btn');
+    if (el) el.textContent = pubShowPhotosEnabled() ? '\u2022 Ativadas' : '\u2022 Desativadas';
+}
+function showPubPhotosModal() {
+    const on = pubShowPhotosEnabled();
+    showModal('<i class="fa-solid fa-images" style="color:#7c3aed"></i> Fotos do Cardápio Online',
+    `<p style="color:var(--gray);margin-bottom:16px;font-size:13px">Escolha como o cardápio online desta empresa aparece para os clientes. Esta configuração vale <b>somente para esta empresa</b>.</p>
+    <label style="display:flex;align-items:center;justify-content:space-between;gap:12px;background:#f8fafc;border:2px solid var(--border);border-radius:12px;padding:14px;cursor:pointer">
+        <div>
+            <div style="font-weight:800;color:var(--dark)">Mostrar fotos dos produtos</div>
+            <div style="font-size:12px;color:var(--gray);margin-top:2px">Desligado: o cardápio funciona normalmente, só sem as imagens.</div>
+        </div>
+        <input type="checkbox" id="pub-photos-toggle" ${on?'checked':''} style="width:22px;height:22px;cursor:pointer;flex-shrink:0">
+    </label>
+    <div style="margin-top:14px;background:#eff6ff;border:1px solid #bfdbfe;border-radius:10px;padding:12px;font-size:12px;color:#1e40af">
+        <i class="fa-solid fa-circle-info"></i> As fotos já cadastradas <b>não são apagadas</b>. Ao desligar, elas apenas ficam ocultas no cardápio online e voltam automaticamente se você ligar de novo.
+    </div>`,
+    `<button class="btn btn-ghost" onclick="closeModal()">Cancelar</button><button class="btn btn-primary" onclick="savePubPhotosSetting()"><i class="fa-solid fa-save"></i> Salvar</button>`, false);
+}
+async function savePubPhotosSetting() {
+    const toggle = document.getElementById('pub-photos-toggle');
+    const showPhotos = toggle ? toggle.checked === true : true;
+    const c = currentCompany;
+    showLoading('Salvando...');
+    try {
+        await db.collection('companies').doc(currentCompanyId).update({ pubShowPhotos: showPhotos });
+        if (c) c.pubShowPhotos = showPhotos;
+        hideLoading(); closeModal(); refreshPubPhotosStateBtn();
+        showToast(showPhotos ? 'Fotos do cardápio ATIVADAS!' : 'Fotos do cardápio DESATIVADAS (as fotos continuam salvas).', showPhotos ? 'success' : 'warning');
+        if (pubCompany && pubCompanyId === currentCompanyId) { pubCompany.pubShowPhotos = showPhotos; }
+    } catch(e) { hideLoading(); showToast('Erro: '+e.message,'danger'); }
+}
 async function savePubPix() {
     const key = document.getElementById('px-key').value.trim();
     const owner = document.getElementById('px-owner').value.trim();
@@ -4654,6 +4698,8 @@ function doReorderCategory(oldCatIdx) {
 }
 function renderMenu() {
 const c = currentCompany; if(!c) return;
+// Atualiza o rótulo do botão de Fotos do Cardápio (Ativadas / Desativadas)
+try { refreshPubPhotosStateBtn(); } catch(e) {}
 const url = window.location.origin + window.location.pathname + '?cardapio='+currentCompanyId;
 document.getElementById('menu-link-text').textContent = url;
 const items = c.menuItems||[];
@@ -8172,15 +8218,17 @@ click: blocked ? blockedClick : ((isBebida && !hasVariants) ? `quickAddPubCart('
 const pubCatTableHtml = (catItems) => {
 const rows = catItems.flatMap(getPubRows);
 if (!rows.length) return '';
+// Se a empresa desativou as fotos, o quadro é montado sem a coluna da imagem.
+const showPhotos = pubShowPhotosEnabled(pubCompany);
 const maxCols = Math.min(4, Math.max(...rows.map(r=>r.sizes.length), 1));
 const headerSizes = (rows.find(r=>r.sizes.length===maxCols) || rows[0]).sizes;
-const colsTemplate = `92px minmax(0,2fr) repeat(${maxCols}, minmax(70px,1fr))`;
+const colsTemplate = showPhotos ? `92px minmax(0,2fr) repeat(${maxCols}, minmax(70px,1fr))` : `minmax(0,2fr) repeat(${maxCols}, minmax(70px,1fr))`;
 const headerRow = `<div style="display:contents">
-<div></div><div></div>
+${showPhotos ? '<div></div>' : ''}<div></div>
 ${Array.from({length:maxCols}).map((_,j)=>`<div style="text-align:center">${headerSizes[j]?`<span style="display:inline-block;background:#cdeef2;color:var(--dark);font-weight:800;font-size:12px;padding:4px 10px;border-radius:14px;white-space:nowrap">${escHtml(headerSizes[j].name)}</span>`:''}</div>`).join('')}
 </div>`;
 const itemRows = rows.map(r => `<div style="display:contents" onclick="${r.click}">
-<div style="${r.oos?'opacity:.5':'cursor:pointer'}">${r.image ? `<img src="${r.image}" style="width:88px;height:88px;object-fit:cover;border-radius:10px;border:1px solid var(--border);display:block">` : `<div style="width:88px;height:88px;border-radius:10px;border:2px dashed var(--border);display:flex;align-items:center;justify-content:center;color:var(--gray);font-size:11px;text-align:center;font-weight:700">imagem</div>`}</div>
+${showPhotos ? `<div style="${r.oos?'opacity:.5':'cursor:pointer'}">${r.image ? `<img src="${r.image}" style="width:88px;height:88px;object-fit:cover;border-radius:10px;border:1px solid var(--border);display:block">` : `<div style="width:88px;height:88px;border-radius:10px;border:2px dashed var(--border);display:flex;align-items:center;justify-content:center;color:var(--gray);font-size:11px;text-align:center;font-weight:700">imagem</div>`}</div>` : ''}
 <div style="${r.oos?'opacity:.5':'cursor:pointer'}"><div style="font-weight:800;font-size:14px;color:var(--dark)">#${r.num} - ${escHtml(r.name)}</div>${r.desc?`<div style="font-size:11px;color:var(--gray);margin-top:2px;white-space:pre-line">${escHtml(r.desc)}</div>`:''}${r.oos?`<div style="color:${r.statusColor};font-size:11px;font-weight:700;margin-top:2px">${r.statusLabel}</div>`:''}</div>
 ${Array.from({length:maxCols}).map((_,j)=>`<div style="text-align:center;${r.oos?'opacity:.5':'cursor:pointer'}">${r.sizes[j]?`<span style="font-weight:800;font-size:15px;color:var(--dark)">${fmt(r.sizes[j].price)}</span>`:''}</div>`).join('')}
 </div>`).join('');
